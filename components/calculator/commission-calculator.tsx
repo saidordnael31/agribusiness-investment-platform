@@ -31,12 +31,13 @@ export function CommissionCalculator() {
   }, [])
 
   const handleLogout = () => {
-    localStorage.removeItem("user")
+    localStorage.clear()
+    sessionStorage.clear()
     toast({
       title: "Logout realizado",
       description: "Você foi desconectado com sucesso.",
     })
-    router.push("/")
+    window.location.href = "/"
   }
 
   const handleBackToDashboard = () => {

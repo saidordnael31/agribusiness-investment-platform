@@ -56,12 +56,17 @@ export function Navbar() {
   }, [])
 
   const handleLogout = () => {
-    localStorage.removeItem("user")
+    localStorage.clear() // Limpa todo o localStorage
+    sessionStorage.clear() // Limpa também o sessionStorage
+    setUser(null) // Limpa o estado local
+
     toast({
       title: "Logout realizado",
       description: "Você foi desconectado com sucesso.",
     })
-    router.push("/")
+
+    // Força o redirecionamento e recarregamento da página
+    window.location.href = "/"
   }
 
   const isActive = (path: string) => pathname === path
