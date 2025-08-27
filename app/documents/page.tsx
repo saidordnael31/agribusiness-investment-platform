@@ -4,14 +4,16 @@ import type React from "react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Download, Shield, TrendingUp, Users, Building, Upload, Plus } from "lucide-react"
+import { FileText, Download, Shield, TrendingUp, Building, Upload, Plus, UserCheck, Briefcase } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 
 interface UserData {
   name: string
   email: string
-  type: string
+  user_type: string
+  role?: string
+  office_id?: string
 }
 
 export default function DocumentsPage() {
@@ -27,9 +29,14 @@ export default function DocumentsPage() {
     }
   }, [])
 
-  const isAdmin = user?.type === "admin"
-  const isDistributor = user?.type === "distributor"
-  const canAccessDistributorDocs = isAdmin || isDistributor
+  const isAdmin = user?.user_type === "admin"
+  const isOffice = user?.user_type === "distributor" && user?.role === "office"
+  const isAdvisor = user?.user_type === "distributor" && user?.role === "advisor"
+  const isInvestor = user?.user_type === "investor"
+
+  const canAccessDistributorDocs = isAdmin || isOffice || isAdvisor
+  const canAccessOfficeDocs = isAdmin || isOffice
+  const canAccessAdvisorDocs = isAdmin || isOffice || isAdvisor
 
   const handleDownload = (fileName: string) => {
     toast({
@@ -56,6 +63,19 @@ export default function DocumentsPage() {
           Acesse todos os documentos oficiais, relatórios de auditoria e lâminas de investimento do Clube de
           Investimentos Privado Agroderi.
         </p>
+        {user && (
+          <div className="mt-4 p-3 bg-muted rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              Logado como: <span className="font-medium text-foreground">{user.name}</span> -
+              <span className="font-medium text-primary ml-1">
+                {isAdmin && "Administrador"}
+                {isOffice && "Escritório"}
+                {isAdvisor && "Assessor"}
+                {isInvestor && "Investidor"}
+              </span>
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Admin Upload Section */}
@@ -321,26 +341,98 @@ export default function DocumentsPage() {
         </div>
       </section>
 
-      {canAccessDistributorDocs && (
-        <section>
+      {/* Documentos para Escritórios */}
+      {canAccessOfficeDocs && (
+        <section className="mb-12">
           <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
-            <Users className="h-6 w-6 text-primary" />
-            Documentos para Distribuidores
+            <Briefcase className="h-6 w-6 text-primary" />
+            Documentos para Escritórios
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Manual do Distribuidor
+                  Manual do Escritório
                 </CardTitle>
-                <CardDescription>Guia completo para distribuidores</CardDescription>
+                <CardDescription>Guia completo para gestão de escritórios</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Manual_Distribuidor_Agroderi.pdf")}
+                  onClick={() => handleDownload("Manual_Escritorio_Agroderi.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Contratos de Parceria
+                </CardTitle>
+                <CardDescription>Modelos de contratos para assessores</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Contratos_Parceria_Agroderi.zip")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Relatórios Gerenciais
+                </CardTitle>
+                <CardDescription>Templates para relatórios de performance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Templates_Relatorios_Agroderi.zip")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* Documentos para Assessores */}
+      {canAccessAdvisorDocs && (
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
+            <UserCheck className="h-6 w-6 text-primary" />
+            Documentos para Assessores
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Manual do Assessor
+                </CardTitle>
+                <CardDescription>Guia completo para assessores</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Manual_Assessor_Agroderi.pdf")}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -381,6 +473,46 @@ export default function DocumentsPage() {
                   variant="outline"
                   className="w-full bg-transparent"
                   onClick={() => handleDownload("Material_Vendas_Agroderi.zip")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Scripts de Vendas
+                </CardTitle>
+                <CardDescription>Roteiros para abordagem de clientes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Scripts_Vendas_Agroderi.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Treinamentos
+                </CardTitle>
+                <CardDescription>Materiais de capacitação e treinamento</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Treinamentos_Agroderi.zip")}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP
