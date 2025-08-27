@@ -132,8 +132,7 @@ export function WithdrawFlow() {
                 <div>
                   <p className="text-sm font-medium text-amber-800">Prazo de Liquidação</p>
                   <p className="text-sm text-amber-600">
-                    Seu resgate será processado em até 2 dias úteis (D+2). O valor será creditado em sua conta
-                    cadastrada.
+                    O resgate será processado em até 2 dias úteis (D+2) conforme termos contratuais do clube.
                   </p>
                 </div>
               </div>
@@ -266,7 +265,7 @@ export function WithdrawFlow() {
                 <div>
                   <p className="text-sm font-medium text-amber-800">Prazo de Liquidação</p>
                   <p className="text-sm text-amber-600">
-                    O resgate será processado em até 2 dias úteis (D+2) conforme regulamentação do fundo.
+                    O resgate será processado em até 2 dias úteis (D+2) conforme termos contratuais do clube.
                   </p>
                 </div>
               </div>

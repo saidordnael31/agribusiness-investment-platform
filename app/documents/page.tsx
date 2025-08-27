@@ -30,13 +30,17 @@ export default function DocumentsPage() {
   }, [])
 
   const isAdmin = user?.user_type === "admin"
-  const isOffice = user?.user_type === "distributor" && user?.role === "office"
-  const isAdvisor = user?.user_type === "distributor" && user?.role === "advisor"
+  const isOffice = user?.user_type === "distributor" && user?.role === "escritorio"
+  const isManager = user?.user_type === "distributor" && user?.role === "gestor"
+  const isLeader = user?.user_type === "distributor" && user?.role === "lider"
+  const isAdvisor = user?.user_type === "distributor" && user?.role === "assessor"
   const isInvestor = user?.user_type === "investor"
 
-  const canAccessDistributorDocs = isAdmin || isOffice || isAdvisor
+  const canAccessDistributorDocs = isAdmin || isOffice || isManager || isLeader || isAdvisor
   const canAccessOfficeDocs = isAdmin || isOffice
-  const canAccessAdvisorDocs = isAdmin || isOffice || isAdvisor
+  const canAccessManagerDocs = isAdmin || isOffice || isManager
+  const canAccessLeaderDocs = isAdmin || isOffice || isManager || isLeader
+  const canAccessAdvisorDocs = isAdmin || isOffice || isManager || isLeader || isAdvisor
 
   const handleDownload = (fileName: string) => {
     toast({
@@ -70,6 +74,8 @@ export default function DocumentsPage() {
               <span className="font-medium text-primary ml-1">
                 {isAdmin && "Administrador"}
                 {isOffice && "Escritório"}
+                {isManager && "Gestor"}
+                {isLeader && "Líder"}
                 {isAdvisor && "Assessor"}
                 {isInvestor && "Investidor"}
               </span>
@@ -412,8 +418,150 @@ export default function DocumentsPage() {
         </section>
       )}
 
+      {/* Documentos para Gestores */}
+      {canAccessManagerDocs && !isOffice && (
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
+            <Building className="h-6 w-6 text-primary" />
+            Documentos para Gestores
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Manual do Gestor
+                </CardTitle>
+                <CardDescription>Guia para gestão de equipes e metas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Manual_Gestor_Akintec.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Relatórios de Performance
+                </CardTitle>
+                <CardDescription>Templates para acompanhamento de equipes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Relatorios_Performance_Gestor.zip")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Estrutura de Comissões
+                </CardTitle>
+                <CardDescription>Tabela detalhada de comissões por hierarquia</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Estrutura_Comissoes_Akintec.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* Documentos para Líderes */}
+      {canAccessLeaderDocs && !isOffice && !isManager && (
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
+            <UserCheck className="h-6 w-6 text-primary" />
+            Documentos para Líderes
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Manual de Liderança
+                </CardTitle>
+                <CardDescription>Guia para liderança de assessores</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Manual_Lideranca_Akintec.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Metas e Incentivos
+                </CardTitle>
+                <CardDescription>Sistema de metas para equipes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Metas_Incentivos_Lider.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Treinamento de Equipes
+                </CardTitle>
+                <CardDescription>Materiais para capacitação de assessores</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Treinamento_Equipes_Lider.zip")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
       {/* Documentos para Assessores */}
-      {canAccessAdvisorDocs && (
+      {canAccessAdvisorDocs && !isOffice && !isManager && !isLeader && (
         <section className="mb-12">
           <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
             <UserCheck className="h-6 w-6 text-primary" />
@@ -426,13 +574,13 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Manual do Assessor
                 </CardTitle>
-                <CardDescription>Guia completo para assessores</CardDescription>
+                <CardDescription>Guia completo para assessores Akintec</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Manual_Assessor_Agroderi.pdf")}
+                  onClick={() => handleDownload("Manual_Assessor_Akintec.pdf")}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF

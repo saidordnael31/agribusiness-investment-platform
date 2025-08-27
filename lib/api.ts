@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+const API_BASE_URL = "/api"
 
 interface ApiResponse<T> {
   success: boolean
@@ -30,10 +30,10 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        return { success: false, error: data.message || "Erro na requisição" }
+        return { success: false, error: data.error || "Erro na requisição" }
       }
 
-      return { success: true, data }
+      return { success: true, data: data.data }
     } catch (error) {
       console.error("API Error:", error)
       return { success: false, error: "Erro de conexão com o servidor" }

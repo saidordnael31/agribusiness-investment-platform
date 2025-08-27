@@ -19,14 +19,14 @@ export default function HomePage() {
             internacionais.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register?type=investor">
+            <Link href="/login">
               <Button size="lg" className="w-full sm:w-auto">
-                Sou Investidor
+                Fazer Login
               </Button>
             </Link>
-            <Link href="/register?type=distributor">
+            <Link href="/register">
               <Button size="lg" variant="secondary" className="w-full sm:w-auto">
-                Sou Distribuidor
+                Cadastrar-se como Distribuidor
               </Button>
             </Link>
           </div>
@@ -42,9 +42,7 @@ export default function HomePage() {
               <CardHeader>
                 <Shield className="h-12 w-12 text-primary mb-4" />
                 <CardTitle>Estrutura Privada Auditada</CardTitle>
-                <CardDescription>
-                  Transparência e controles de governança com auditoria independente CLA Global
-                </CardDescription>
+                <CardDescription>Transparência e controles de governança com auditoria independente</CardDescription>
               </CardHeader>
             </Card>
             <Card>

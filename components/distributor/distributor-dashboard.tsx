@@ -57,22 +57,22 @@ export function DistributorDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 md:py-8">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-foreground mb-2">Dashboard do Distribuidor</h2>
+        <div className="mb-6 md:mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Dashboard do Distribuidor</h2>
           <p className="text-muted-foreground">Acompanhe suas vendas, comissões e performance</p>
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Captado</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-primary">
+              <div className="text-xl md:text-2xl font-bold text-primary">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
@@ -87,7 +87,7 @@ export function DistributorDashboard() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-secondary">
+              <div className="text-xl md:text-2xl font-bold text-secondary">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
@@ -103,7 +103,7 @@ export function DistributorDashboard() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-accent">{distributorData.clientsCount}</div>
+              <div className="text-xl md:text-2xl font-bold text-accent">{distributorData.clientsCount}</div>
               <p className="text-xs text-muted-foreground">Investidores cadastrados</p>
             </CardContent>
           </Card>
@@ -114,7 +114,7 @@ export function DistributorDashboard() {
               <Trophy className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">#{distributorData.ranking.position}</div>
+              <div className="text-xl md:text-2xl font-bold">#{distributorData.ranking.position}</div>
               <p className="text-xs text-muted-foreground">
                 de {distributorData.ranking.totalDistributors} distribuidores
               </p>
@@ -123,19 +123,19 @@ export function DistributorDashboard() {
         </div>
 
         {/* Commission Breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card>
             <CardHeader>
               <CardTitle>Divisão de Comissões</CardTitle>
               <CardDescription>Distribuição mensal das comissões</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
                 <div>
                   <h4 className="font-semibold text-primary">Assessor (70%)</h4>
                   <p className="text-sm text-muted-foreground">Sua parte da comissão</p>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <p className="font-bold text-primary">
                     {new Intl.NumberFormat("pt-BR", {
                       style: "currency",
@@ -145,12 +145,12 @@ export function DistributorDashboard() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
                 <div>
                   <h4 className="font-semibold text-secondary">Escritório (30%)</h4>
                   <p className="text-sm text-muted-foreground">Parte do escritório</p>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <p className="font-bold text-secondary">
                     {new Intl.NumberFormat("pt-BR", {
                       style: "currency",
@@ -161,14 +161,14 @@ export function DistributorDashboard() {
               </div>
 
               {distributorData.performanceBonus.additionalRate > 0 && (
-                <div className="flex items-center justify-between p-4 border border-accent/20 bg-accent/5 rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-accent/20 bg-accent/5 rounded-lg space-y-2 sm:space-y-0">
                   <div>
                     <h4 className="font-semibold text-accent">Bônus Performance</h4>
                     <p className="text-sm text-muted-foreground">
                       +{distributorData.performanceBonus.additionalRate}% adicional
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     <Badge variant="secondary">Ativo</Badge>
                   </div>
                 </div>
@@ -183,7 +183,7 @@ export function DistributorDashboard() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
                   <span className="text-sm font-medium">Meta 1: R$ 500 mil</span>
                   <Badge variant={distributorData.performanceBonus.meta1Achieved ? "default" : "secondary"}>
                     {distributorData.performanceBonus.meta1Achieved ? "Atingida" : "Pendente"}
@@ -194,7 +194,7 @@ export function DistributorDashboard() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
                   <span className="text-sm font-medium">Meta 2: R$ 1 milhão</span>
                   <Badge variant={distributorData.performanceBonus.meta2Achieved ? "default" : "secondary"}>
                     {distributorData.performanceBonus.meta2Achieved ? "Atingida" : "Pendente"}
@@ -219,7 +219,7 @@ export function DistributorDashboard() {
         </div>
 
         {/* Sales Chart */}
-        <Card className="mb-8">
+        <Card className="mb-6 md:mb-8">
           <CardHeader>
             <CardTitle>Evolução de Vendas</CardTitle>
             <CardDescription>Captação mensal nos últimos 6 meses</CardDescription>
@@ -232,8 +232,12 @@ export function DistributorDashboard() {
         {/* Tabs Section */}
         <Tabs defaultValue="simulator" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="simulator">Simulador de Comissões</TabsTrigger>
-            <TabsTrigger value="clients">Clientes</TabsTrigger>
+            <TabsTrigger value="simulator" className="text-sm">
+              Simulador de Comissões
+            </TabsTrigger>
+            <TabsTrigger value="clients" className="text-sm">
+              Clientes
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="simulator">

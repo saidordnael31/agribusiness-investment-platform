@@ -70,6 +70,15 @@ export default function MarketComparison() {
       trend: "stable",
       description: "Certificado de Depósito Interbancário",
     },
+    {
+      name: "Clube XP Agro",
+      type: "Clube Privado",
+      rate: 1.8,
+      liquidity: "D+30",
+      risk: "Médio",
+      trend: "stable",
+      description: "Clube de investimento em agronegócio",
+    },
   ]
 
   const getTrendIcon = (trend: string) => {

@@ -18,7 +18,7 @@ function RegisterFormContent() {
     password: "",
     confirmPassword: "",
     type: "",
-    role: "", // Mudando de hierarchyLevel para role para seguir estrutura Akintec
+    role: "",
     parentId: "",
     cpfCnpj: "",
     phone: "",
@@ -54,10 +54,7 @@ function RegisterFormContent() {
 
     if (!domain) return false
 
-    // Verificar se é domínio pessoal
     const isPersonal = personalDomains.includes(domain)
-
-    // Verificar se não é domínio corporativo (contém empresa, escritório, etc.)
     const corporateKeywords = ["empresa", "escritorio", "consultoria", "investimentos", "financeira", "capital"]
     const isCorporate = corporateKeywords.some((keyword) => domain.includes(keyword))
 
@@ -86,9 +83,6 @@ function RegisterFormContent() {
         break
       case "assessor":
         parentRole = "lider"
-        break
-      case "investidor":
-        parentRole = "assessor"
         break
     }
 
@@ -139,16 +133,6 @@ function RegisterFormContent() {
       return
     }
 
-    if (formData.role === "investidor" && formData.type !== "investor") {
-      toast({
-        title: "Erro no cadastro",
-        description: "Investidores devem ser cadastrados por assessores ou escritórios.",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-      return
-    }
-
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -174,13 +158,7 @@ function RegisterFormContent() {
         description: `Bem-vindo à plataforma Agroderi, ${formData.name}!`,
       })
 
-      let redirectPath = "/investor"
-      if (formData.role === "escritorio") redirectPath = "/distributor"
-      else if (formData.role === "gestor") redirectPath = "/distributor"
-      else if (formData.role === "lider") redirectPath = "/distributor"
-      else if (formData.role === "assessor") redirectPath = "/distributor"
-
-      router.push(redirectPath)
+      router.push("/distributor")
     } catch (error: any) {
       toast({
         title: "Erro no cadastro",
@@ -198,7 +176,6 @@ function RegisterFormContent() {
       gestor: "Gestor",
       lider: "Líder",
       assessor: "Assessor",
-      investidor: "Investidor",
     }
     return labels[role as keyof typeof labels] || role
   }
@@ -208,63 +185,73 @@ function RegisterFormContent() {
       gestor: "Escritório Responsável",
       lider: "Gestor Responsável",
       assessor: "Líder Responsável",
-      investidor: "Assessor Responsável",
     }
     return labels[role as keyof typeof labels] || "Responsável"
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">Nome Completo</Label>
-        <Input
-          id="name"
-          placeholder="Seu nome completo"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="email">Email Pessoal</Label>
-        <Input
-          id="email"
-          type="email"
-          placeholder="seu@gmail.com"
-          value={formData.email}
-          onChange={(e) => handleEmailChange(e.target.value)}
-          required
-          className={emailError ? "border-destructive" : ""}
-        />
-        {emailError && (
-          <div className="flex items-center gap-2 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4" />
-            {emailError}
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Apenas emails pessoais são aceitos (Gmail, Yahoo, Outlook, etc.)
+    <div className="space-y-6">
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="flex items-center gap-2 text-amber-800">
+          <AlertTriangle className="h-5 w-5" />
+          <h3 className="font-semibold">Cadastro de Investidores</h3>
+        </div>
+        <p className="text-sm text-amber-700 mt-2">
+          Investidores não podem se cadastrar diretamente. Apenas assessores e escritórios podem cadastrar investidores
+          através do dashboard.
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="type">Tipo de Usuário</Label>
-        <Select
-          value={formData.type || defaultType}
-          onValueChange={(value) => setFormData({ ...formData, type: value, role: "", parentId: "" })}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione o tipo de usuário" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="investor">Investidor</SelectItem>
-            <SelectItem value="distributor">Distribuidor/Assessor</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Nome Completo</Label>
+          <Input
+            id="name"
+            placeholder="Seu nome completo"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required
+          />
+        </div>
 
-      {formData.type === "distributor" && (
+        <div className="space-y-2">
+          <Label htmlFor="email">Email Pessoal</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="seu@gmail.com"
+            value={formData.email}
+            onChange={(e) => handleEmailChange(e.target.value)}
+            required
+            className={emailError ? "border-destructive" : ""}
+          />
+          {emailError && (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              {emailError}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Apenas emails pessoais são aceitos (Gmail, Yahoo, Outlook, etc.)
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="type">Tipo de Usuário</Label>
+          <Select
+            value="distributor"
+            onValueChange={(value) => setFormData({ ...formData, type: value, role: "", parentId: "" })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Distribuidor/Assessor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="distributor">Distribuidor/Assessor</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Investidores são cadastrados pelos assessores no dashboard</p>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="role">Nível Hierárquico</Label>
           <Select
@@ -282,106 +269,89 @@ function RegisterFormContent() {
             </SelectContent>
           </Select>
         </div>
-      )}
 
-      {formData.type === "investor" && (
+        {formData.role && formData.role !== "escritorio" && (
+          <div className="space-y-2">
+            <Label htmlFor="parentId">{getParentLabel(formData.role)}</Label>
+            <Select value={formData.parentId} onValueChange={(value) => setFormData({ ...formData, parentId: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder={`Selecione ${getParentLabel(formData.role).toLowerCase()}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {parentOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.name} ({getRoleLabel(option.role)})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="space-y-2">
-          <Label htmlFor="role">Perfil</Label>
-          <Select
-            value={formData.role}
-            onValueChange={(value) => setFormData({ ...formData, role: value, parentId: "" })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o perfil" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="investidor">Investidor</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {formData.role && formData.role !== "escritorio" && (
-        <div className="space-y-2">
-          <Label htmlFor="parentId">{getParentLabel(formData.role)}</Label>
-          <Select value={formData.parentId} onValueChange={(value) => setFormData({ ...formData, parentId: value })}>
-            <SelectTrigger>
-              <SelectValue placeholder={`Selecione ${getParentLabel(formData.role).toLowerCase()}`} />
-            </SelectTrigger>
-            <SelectContent>
-              {parentOptions.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.name} ({getRoleLabel(option.role)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="cpfCnpj">{formData.role === "escritorio" ? "CNPJ" : "CPF"}</Label>
-        <Input
-          id="cpfCnpj"
-          placeholder={formData.role === "escritorio" ? "00.000.000/0001-00" : "000.000.000-00"}
-          value={formData.cpfCnpj}
-          onChange={(e) => setFormData({ ...formData, cpfCnpj: e.target.value })}
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="phone">Telefone</Label>
-        <Input
-          id="phone"
-          placeholder="(11) 99999-9999"
-          value={formData.phone}
-          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-          required
-        />
-      </div>
-
-      {(formData.role === "assessor" || formData.role === "escritorio") && (
-        <div className="space-y-2">
-          <Label htmlFor="notes">Observações</Label>
+          <Label htmlFor="cpfCnpj">{formData.role === "escritorio" ? "CNPJ" : "CPF"}</Label>
           <Input
-            id="notes"
-            placeholder="Notas sobre perfil, potencial, observações..."
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            id="cpfCnpj"
+            placeholder={formData.role === "escritorio" ? "00.000.000/0001-00" : "000.000.000-00"}
+            value={formData.cpfCnpj}
+            onChange={(e) => setFormData({ ...formData, cpfCnpj: e.target.value })}
+            required
           />
-          <p className="text-xs text-muted-foreground">Visível para follow-up e gestão de relacionamento</p>
         </div>
-      )}
 
-      <div className="space-y-2">
-        <Label htmlFor="password">Senha</Label>
-        <Input
-          id="password"
-          type="password"
-          placeholder="••••••••"
-          value={formData.password}
-          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          required
-        />
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="phone">Telefone</Label>
+          <Input
+            id="phone"
+            placeholder="(11) 99999-9999"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            required
+          />
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-        <Input
-          id="confirmPassword"
-          type="password"
-          placeholder="••••••••"
-          value={formData.confirmPassword}
-          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-          required
-        />
-      </div>
+        {(formData.role === "assessor" || formData.role === "escritorio") && (
+          <div className="space-y-2">
+            <Label htmlFor="notes">Observações</Label>
+            <Input
+              id="notes"
+              placeholder="Notas sobre perfil, potencial, observações..."
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">Visível para follow-up e gestão de relacionamento</p>
+          </div>
+        )}
 
-      <Button type="submit" className="w-full" disabled={isLoading || !!emailError}>
-        {isLoading ? "Cadastrando..." : "Criar Conta"}
-      </Button>
-    </form>
+        <div className="space-y-2">
+          <Label htmlFor="password">Senha</Label>
+          <Input
+            id="password"
+            type="password"
+            placeholder="••••••••"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            placeholder="••••••••"
+            value={formData.confirmPassword}
+            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+            required
+          />
+        </div>
+
+        <Button type="submit" className="w-full" disabled={isLoading || !!emailError}>
+          {isLoading ? "Cadastrando..." : "Criar Conta"}
+        </Button>
+      </form>
+    </div>
   )
 }
 
