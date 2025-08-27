@@ -1,13 +1,13 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 export function LoginForm() {
   const [email, setEmail] = useState("")
@@ -15,50 +15,52 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = createClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulate authentication
-    setTimeout(() => {
-      if (email && password) {
-        let userType = "investor"
-        let userName = email.split("@")[0]
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-        if (email.includes("distributor") || email.includes("assessor")) {
-          userType = "distributor"
-          userName = "Distribuidor Demo"
-        } else if (email.includes("investidor")) {
-          userName = "Investidor Demo"
-        }
+      if (authError) throw authError
 
-        // Store user info in localStorage (in a real app, use proper auth)
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            email,
-            type: userType,
-            name: userName,
-          }),
-        )
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authData.user.id)
+        .single()
 
-        toast({
-          title: "Login realizado com sucesso!",
-          description: `Bem-vindo à plataforma Agroderi, ${userName}!`,
-        })
+      if (profileError) throw profileError
 
-        // Redirect based on user type
-        router.push(userType === "distributor" ? "/distributor" : "/investor")
-      } else {
-        toast({
-          title: "Erro no login",
-          description: "Por favor, preencha todos os campos.",
-          variant: "destructive",
-        })
+      toast({
+        title: "Login realizado com sucesso!",
+        description: `Bem-vindo à plataforma Agroderi, ${profile.name}!`,
+      })
+
+      let redirectPath = "/investor"
+
+      if (profile.user_type === "distributor") {
+        redirectPath = "/distributor"
+      } else if (profile.user_type === "admin") {
+        redirectPath = "/admin"
       }
+
+      router.push(redirectPath)
+    } catch (error: any) {
+      console.error("Login error:", error)
+      toast({
+        title: "Erro no login",
+        description: error.message || "Credenciais inválidas. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   return (

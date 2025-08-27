@@ -11,6 +11,9 @@ import { BonificationManager } from "./bonification-manager"
 import { UserManager } from "./user-manager"
 import { ReportsManager } from "./reports-manager"
 import { AdminSettings } from "./admin-settings"
+import { HierarchyManager } from "./hierarchy-manager"
+import { RecurrenceCalculator } from "./recurrence-calculator"
+import { NotificationSystem } from "./notification-system"
 
 interface UserData {
   name: string
@@ -135,8 +138,11 @@ export function AdminDashboard() {
 
       {/* Main Content */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="hierarchy">Hierarquia</TabsTrigger>
+          <TabsTrigger value="recurrence">Recorrência</TabsTrigger>
+          <TabsTrigger value="notifications">Notificações</TabsTrigger>
           <TabsTrigger value="settings">Configurações</TabsTrigger>
           <TabsTrigger value="promotions">Promoções</TabsTrigger>
           <TabsTrigger value="bonifications">Bonificações</TabsTrigger>
@@ -249,6 +255,18 @@ export function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="hierarchy">
+          <HierarchyManager />
+        </TabsContent>
+
+        <TabsContent value="recurrence">
+          <RecurrenceCalculator />
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <NotificationSystem />
         </TabsContent>
 
         <TabsContent value="settings">

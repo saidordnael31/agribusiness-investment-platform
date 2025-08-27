@@ -1,13 +1,14 @@
 "use client"
 
 import type React from "react"
-import { Suspense, useState } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 function RegisterFormContent() {
   const [formData, setFormData] = useState({
@@ -16,14 +17,36 @@ function RegisterFormContent() {
     password: "",
     confirmPassword: "",
     type: "",
+    hierarchyLevel: "",
+    officeId: "",
     cpfCnpj: "",
     phone: "",
   })
+  const [offices, setOffices] = useState<Array<{ id: string; name: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const searchParams = useSearchParams()
   const defaultType = searchParams.get("type") || ""
+  const supabase = createClient()
+
+  useEffect(() => {
+    if (formData.type === "distributor" && formData.hierarchyLevel === "advisor") {
+      loadOffices()
+    }
+  }, [formData.type, formData.hierarchyLevel])
+
+  const loadOffices = async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name")
+      .eq("user_type", "distributor")
+      .eq("hierarchy_level", "office")
+
+    if (data) {
+      setOffices(data)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,27 +62,51 @@ function RegisterFormContent() {
       return
     }
 
-    // Simulate registration
-    setTimeout(() => {
-      // Store user info in localStorage (in a real app, use proper auth)
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          email: formData.email,
-          type: formData.type,
-          name: formData.name,
-        }),
-      )
+    if (formData.type === "distributor" && formData.hierarchyLevel === "advisor" && !formData.officeId) {
+      toast({
+        title: "Erro no cadastro",
+        description: "Assessores devem selecionar um escritório responsável.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+          data: {
+            name: formData.name,
+            user_type: formData.type,
+            hierarchy_level: formData.hierarchyLevel,
+            office_id: formData.officeId || null,
+            cpf_cnpj: formData.cpfCnpj,
+            phone: formData.phone,
+          },
+        },
+      })
+
+      if (authError) throw authError
 
       toast({
         title: "Cadastro realizado com sucesso!",
         description: `Bem-vindo à plataforma Agroderi, ${formData.name}!`,
       })
 
-      // Redirect based on user type
-      router.push(formData.type === "distributor" ? "/distributor" : "/investor")
+      const redirectPath = formData.type === "distributor" ? "/distributor" : "/investor"
+      router.push(redirectPath)
+    } catch (error: any) {
+      toast({
+        title: "Erro no cadastro",
+        description: error.message || "Ocorreu um erro durante o cadastro.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -91,7 +138,7 @@ function RegisterFormContent() {
         <Label htmlFor="type">Tipo de Usuário</Label>
         <Select
           value={formData.type || defaultType}
-          onValueChange={(value) => setFormData({ ...formData, type: value })}
+          onValueChange={(value) => setFormData({ ...formData, type: value, hierarchyLevel: "", officeId: "" })}
         >
           <SelectTrigger>
             <SelectValue placeholder="Selecione o tipo de usuário" />
@@ -102,6 +149,42 @@ function RegisterFormContent() {
           </SelectContent>
         </Select>
       </div>
+
+      {formData.type === "distributor" && (
+        <div className="space-y-2">
+          <Label htmlFor="hierarchyLevel">Nível Hierárquico</Label>
+          <Select
+            value={formData.hierarchyLevel}
+            onValueChange={(value) => setFormData({ ...formData, hierarchyLevel: value, officeId: "" })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o nível hierárquico" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="office">Escritório (Responsável)</SelectItem>
+              <SelectItem value="advisor">Assessor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {formData.type === "distributor" && formData.hierarchyLevel === "advisor" && (
+        <div className="space-y-2">
+          <Label htmlFor="officeId">Escritório Responsável</Label>
+          <Select value={formData.officeId} onValueChange={(value) => setFormData({ ...formData, officeId: value })}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o escritório responsável" />
+            </SelectTrigger>
+            <SelectContent>
+              {offices.map((office) => (
+                <SelectItem key={office.id} value={office.id}>
+                  {office.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="cpfCnpj">CPF/CNPJ</Label>
