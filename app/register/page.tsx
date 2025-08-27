@@ -10,7 +10,7 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <Link href="/" className="flex items-center justify-center space-x-2 mb-4">
             <TrendingUp className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">Agroderi Platform</h1>
+            <h1 className="text-2xl font-bold text-foreground">Akintec Platform</h1>
           </Link>
         </div>
 

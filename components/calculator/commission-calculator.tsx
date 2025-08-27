@@ -82,14 +82,14 @@ export function CommissionCalculator() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">Calculadora Avançada de Comissões</h2>
           <p className="text-muted-foreground">
-            Simule diferentes cenários de captação e calcule suas comissões no Clube Agroderi
+            Simule diferentes cenários de captação e calcule suas comissões na plataforma
           </p>
         </div>
 
         {/* Commission Structure Overview */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Estrutura de Comissões Clube Agroderi</CardTitle>
+            <CardTitle>Estrutura de Comissões</CardTitle>
             <CardDescription>Entenda como funcionam as comissões e bônus</CardDescription>
           </CardHeader>
           <CardContent>

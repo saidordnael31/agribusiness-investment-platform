@@ -22,12 +22,11 @@ export function LoginForm() {
     setIsLoading(true)
 
     try {
-      // Credenciais de demonstração para testes
       const demoCredentials = {
-        "investidor@agroderi.com": { type: "investor", name: "João Silva" },
-        "distributor@agroderi.com": { type: "distributor", name: "Maria Santos", office_id: null, role: "office" },
-        "assessor@agroderi.com": { type: "distributor", name: "Pedro Costa", office_id: "office-1", role: "advisor" },
-        "admin@agroderi.com": { type: "admin", name: "Administrador" },
+        "investidor@akintec.com": { type: "investor", name: "João Silva" },
+        "distributor@akintec.com": { type: "distributor", name: "Maria Santos", office_id: null, role: "office" },
+        "assessor@akintec.com": { type: "distributor", name: "Pedro Costa", office_id: "office-1", role: "advisor" },
+        "admin@akintec.com": { type: "admin", name: "Administrador" },
       }
 
       // Verificar se é credencial de demonstração
@@ -49,7 +48,7 @@ export function LoginForm() {
 
         toast({
           title: "Login realizado com sucesso!",
-          description: `Bem-vindo à plataforma Agroderi, ${userInfo.name}!`,
+          description: `Bem-vindo à plataforma Akintec, ${userInfo.name}!`,
         })
 
         let redirectPath = "/investor"
@@ -81,7 +80,7 @@ export function LoginForm() {
 
       toast({
         title: "Login realizado com sucesso!",
-        description: `Bem-vindo à plataforma Agroderi, ${profile.name}!`,
+        description: `Bem-vindo à plataforma Akintec, ${profile.name}!`,
       })
 
       let redirectPath = "/investor"

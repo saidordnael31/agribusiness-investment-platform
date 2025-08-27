@@ -78,7 +78,7 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
             <TrendingUp className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-card-foreground">Agroderi Platform</span>
+            <span className="text-xl font-bold text-card-foreground">Akintec Platform</span>
           </Link>
 
           {/* Desktop Navigation */}
