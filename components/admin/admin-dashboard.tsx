@@ -14,6 +14,7 @@ import { AdminSettings } from "./admin-settings"
 import { HierarchyManager } from "./hierarchy-manager"
 import { RecurrenceCalculator } from "./recurrence-calculator"
 import { NotificationSystem } from "./notification-system"
+import AkintecManager from "./akintec-manager"
 
 interface UserData {
   name: string
@@ -138,8 +139,9 @@ export function AdminDashboard() {
 
       {/* Main Content */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="grid w-full grid-cols-10">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="akintec">Akintec</TabsTrigger>
           <TabsTrigger value="hierarchy">Hierarquia</TabsTrigger>
           <TabsTrigger value="recurrence">Recorrência</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
@@ -255,6 +257,10 @@ export function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="akintec">
+          <AkintecManager />
         </TabsContent>
 
         <TabsContent value="hierarchy">

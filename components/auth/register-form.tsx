@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
+import { AlertTriangle } from "lucide-react"
 
 function RegisterFormContent() {
   const [formData, setFormData] = useState({
@@ -17,13 +18,15 @@ function RegisterFormContent() {
     password: "",
     confirmPassword: "",
     type: "",
-    hierarchyLevel: "",
-    officeId: "",
+    role: "", // Mudando de hierarchyLevel para role para seguir estrutura Akintec
+    parentId: "",
     cpfCnpj: "",
     phone: "",
+    notes: "",
   })
-  const [offices, setOffices] = useState<Array<{ id: string; name: string }>>([])
+  const [parentOptions, setParentOptions] = useState<Array<{ id: string; name: string; role: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [emailError, setEmailError] = useState("")
   const router = useRouter()
   const { toast } = useToast()
   const searchParams = useSearchParams()
@@ -31,26 +34,90 @@ function RegisterFormContent() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (formData.type === "distributor" && formData.hierarchyLevel === "advisor") {
-      loadOffices()
+    if (formData.role && formData.role !== "escritorio") {
+      loadParentOptions()
     }
-  }, [formData.type, formData.hierarchyLevel])
+  }, [formData.role])
 
-  const loadOffices = async () => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, name")
-      .eq("user_type", "distributor")
-      .eq("hierarchy_level", "office")
+  const validatePersonalEmail = (email: string) => {
+    const personalDomains = [
+      "gmail.com",
+      "yahoo.com",
+      "outlook.com",
+      "hotmail.com",
+      "icloud.com",
+      "uol.com.br",
+      "terra.com.br",
+      "bol.com.br",
+    ]
+    const domain = email.split("@")[1]?.toLowerCase()
 
-    if (data) {
-      setOffices(data)
+    if (!domain) return false
+
+    // Verificar se é domínio pessoal
+    const isPersonal = personalDomains.includes(domain)
+
+    // Verificar se não é domínio corporativo (contém empresa, escritório, etc.)
+    const corporateKeywords = ["empresa", "escritorio", "consultoria", "investimentos", "financeira", "capital"]
+    const isCorporate = corporateKeywords.some((keyword) => domain.includes(keyword))
+
+    return isPersonal && !isCorporate
+  }
+
+  const handleEmailChange = (email: string) => {
+    setFormData({ ...formData, email })
+
+    if (email && !validatePersonalEmail(email)) {
+      setEmailError("Use apenas email pessoal (Gmail, Yahoo, Outlook, etc.). Emails corporativos não são aceitos.")
+    } else {
+      setEmailError("")
+    }
+  }
+
+  const loadParentOptions = async () => {
+    let parentRole = ""
+
+    switch (formData.role) {
+      case "gestor":
+        parentRole = "escritorio"
+        break
+      case "lider":
+        parentRole = "gestor"
+        break
+      case "assessor":
+        parentRole = "lider"
+        break
+      case "investidor":
+        parentRole = "assessor"
+        break
+    }
+
+    if (parentRole) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, name, role")
+        .eq("role", parentRole)
+        .eq("is_active", true)
+
+      if (data) {
+        setParentOptions(data)
+      }
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+
+    if (emailError) {
+      toast({
+        title: "Erro no cadastro",
+        description: "Corrija o email antes de continuar.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+      return
+    }
 
     if (formData.password !== formData.confirmPassword) {
       toast({
@@ -62,10 +129,20 @@ function RegisterFormContent() {
       return
     }
 
-    if (formData.type === "distributor" && formData.hierarchyLevel === "advisor" && !formData.officeId) {
+    if (formData.role !== "escritorio" && !formData.parentId) {
       toast({
         title: "Erro no cadastro",
-        description: "Assessores devem selecionar um escritório responsável.",
+        description: "Selecione o responsável hierárquico.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+      return
+    }
+
+    if (formData.role === "investidor" && formData.type !== "investor") {
+      toast({
+        title: "Erro no cadastro",
+        description: "Investidores devem ser cadastrados por assessores ou escritórios.",
         variant: "destructive",
       })
       setIsLoading(false)
@@ -81,10 +158,11 @@ function RegisterFormContent() {
           data: {
             name: formData.name,
             user_type: formData.type,
-            hierarchy_level: formData.hierarchyLevel,
-            office_id: formData.officeId || null,
+            role: formData.role,
+            parent_id: formData.parentId || null,
             cpf_cnpj: formData.cpfCnpj,
             phone: formData.phone,
+            notes: formData.notes,
           },
         },
       })
@@ -96,7 +174,12 @@ function RegisterFormContent() {
         description: `Bem-vindo à plataforma Agroderi, ${formData.name}!`,
       })
 
-      const redirectPath = formData.type === "distributor" ? "/distributor" : "/investor"
+      let redirectPath = "/investor"
+      if (formData.role === "escritorio") redirectPath = "/distributor"
+      else if (formData.role === "gestor") redirectPath = "/distributor"
+      else if (formData.role === "lider") redirectPath = "/distributor"
+      else if (formData.role === "assessor") redirectPath = "/distributor"
+
       router.push(redirectPath)
     } catch (error: any) {
       toast({
@@ -107,6 +190,27 @@ function RegisterFormContent() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const getRoleLabel = (role: string) => {
+    const labels = {
+      escritorio: "Escritório (CNPJ)",
+      gestor: "Gestor",
+      lider: "Líder",
+      assessor: "Assessor",
+      investidor: "Investidor",
+    }
+    return labels[role as keyof typeof labels] || role
+  }
+
+  const getParentLabel = (role: string) => {
+    const labels = {
+      gestor: "Escritório Responsável",
+      lider: "Gestor Responsável",
+      assessor: "Líder Responsável",
+      investidor: "Assessor Responsável",
+    }
+    return labels[role as keyof typeof labels] || "Responsável"
   }
 
   return (
@@ -123,22 +227,32 @@ function RegisterFormContent() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Email Pessoal</Label>
         <Input
           id="email"
           type="email"
-          placeholder="seu@email.com"
+          placeholder="seu@gmail.com"
           value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          onChange={(e) => handleEmailChange(e.target.value)}
           required
+          className={emailError ? "border-destructive" : ""}
         />
+        {emailError && (
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            {emailError}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Apenas emails pessoais são aceitos (Gmail, Yahoo, Outlook, etc.)
+        </p>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="type">Tipo de Usuário</Label>
         <Select
           value={formData.type || defaultType}
-          onValueChange={(value) => setFormData({ ...formData, type: value, hierarchyLevel: "", officeId: "" })}
+          onValueChange={(value) => setFormData({ ...formData, type: value, role: "", parentId: "" })}
         >
           <SelectTrigger>
             <SelectValue placeholder="Selecione o tipo de usuário" />
@@ -152,33 +266,52 @@ function RegisterFormContent() {
 
       {formData.type === "distributor" && (
         <div className="space-y-2">
-          <Label htmlFor="hierarchyLevel">Nível Hierárquico</Label>
+          <Label htmlFor="role">Nível Hierárquico</Label>
           <Select
-            value={formData.hierarchyLevel}
-            onValueChange={(value) => setFormData({ ...formData, hierarchyLevel: value, officeId: "" })}
+            value={formData.role}
+            onValueChange={(value) => setFormData({ ...formData, role: value, parentId: "" })}
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecione o nível hierárquico" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="office">Escritório (Responsável)</SelectItem>
-              <SelectItem value="advisor">Assessor</SelectItem>
+              <SelectItem value="escritorio">Escritório (CNPJ)</SelectItem>
+              <SelectItem value="gestor">Gestor</SelectItem>
+              <SelectItem value="lider">Líder</SelectItem>
+              <SelectItem value="assessor">Assessor</SelectItem>
             </SelectContent>
           </Select>
         </div>
       )}
 
-      {formData.type === "distributor" && formData.hierarchyLevel === "advisor" && (
+      {formData.type === "investor" && (
         <div className="space-y-2">
-          <Label htmlFor="officeId">Escritório Responsável</Label>
-          <Select value={formData.officeId} onValueChange={(value) => setFormData({ ...formData, officeId: value })}>
+          <Label htmlFor="role">Perfil</Label>
+          <Select
+            value={formData.role}
+            onValueChange={(value) => setFormData({ ...formData, role: value, parentId: "" })}
+          >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o escritório responsável" />
+              <SelectValue placeholder="Selecione o perfil" />
             </SelectTrigger>
             <SelectContent>
-              {offices.map((office) => (
-                <SelectItem key={office.id} value={office.id}>
-                  {office.name}
+              <SelectItem value="investidor">Investidor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {formData.role && formData.role !== "escritorio" && (
+        <div className="space-y-2">
+          <Label htmlFor="parentId">{getParentLabel(formData.role)}</Label>
+          <Select value={formData.parentId} onValueChange={(value) => setFormData({ ...formData, parentId: value })}>
+            <SelectTrigger>
+              <SelectValue placeholder={`Selecione ${getParentLabel(formData.role).toLowerCase()}`} />
+            </SelectTrigger>
+            <SelectContent>
+              {parentOptions.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.name} ({getRoleLabel(option.role)})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -187,10 +320,10 @@ function RegisterFormContent() {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="cpfCnpj">CPF/CNPJ</Label>
+        <Label htmlFor="cpfCnpj">{formData.role === "escritorio" ? "CNPJ" : "CPF"}</Label>
         <Input
           id="cpfCnpj"
-          placeholder="000.000.000-00"
+          placeholder={formData.role === "escritorio" ? "00.000.000/0001-00" : "000.000.000-00"}
           value={formData.cpfCnpj}
           onChange={(e) => setFormData({ ...formData, cpfCnpj: e.target.value })}
           required
@@ -207,6 +340,19 @@ function RegisterFormContent() {
           required
         />
       </div>
+
+      {(formData.role === "assessor" || formData.role === "escritorio") && (
+        <div className="space-y-2">
+          <Label htmlFor="notes">Observações</Label>
+          <Input
+            id="notes"
+            placeholder="Notas sobre perfil, potencial, observações..."
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">Visível para follow-up e gestão de relacionamento</p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="password">Senha</Label>
@@ -232,7 +378,7 @@ function RegisterFormContent() {
         />
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      <Button type="submit" className="w-full" disabled={isLoading || !!emailError}>
         {isLoading ? "Cadastrando..." : "Criar Conta"}
       </Button>
     </form>
