@@ -1,19 +1,52 @@
 "use client"
 
+import type React from "react"
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { FileText, Download, Shield, TrendingUp, Users, Building, Upload, Plus } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
+
+interface UserData {
+  name: string
+  email: string
+  type: string
+}
 
 export default function DocumentsPage() {
-  const [userType, setUserType] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("userType") || "investor"
-    }
-    return "investor"
-  })
+  const [user, setUser] = useState<UserData | null>(null)
+  const { toast } = useToast()
 
-  const isAdmin = userType === "admin"
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userStr = localStorage.getItem("user")
+      if (userStr) {
+        setUser(JSON.parse(userStr))
+      }
+    }
+  }, [])
+
+  const isAdmin = user?.type === "admin"
+  const isDistributor = user?.type === "distributor"
+  const canAccessDistributorDocs = isAdmin || isDistributor
+
+  const handleDownload = (fileName: string) => {
+    toast({
+      title: "Download iniciado",
+      description: `Baixando ${fileName}...`,
+    })
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files && files.length > 0) {
+      toast({
+        title: "Upload realizado",
+        description: `${files.length} arquivo(s) enviado(s) com sucesso.`,
+      })
+    }
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -45,7 +78,19 @@ export default function DocumentsPage() {
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mb-2">Arraste arquivos aqui ou clique para selecionar</p>
-                  <Button variant="outline">Selecionar Arquivos</Button>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.zip"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload">
+                    <Button variant="outline" asChild>
+                      <span>Selecionar Arquivos</span>
+                    </Button>
+                  </label>
                 </div>
                 <div className="text-xs text-muted-foreground">Formatos aceitos: PDF, ZIP (máx. 50MB)</div>
               </CardContent>
@@ -93,7 +138,11 @@ export default function DocumentsPage() {
               <CardDescription>Documento oficial do clube de investimentos</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Regulamento_Clube_Agroderi.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
               </Button>
@@ -109,7 +158,11 @@ export default function DocumentsPage() {
               <CardDescription>Diretrizes e critérios de investimento</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Politica_Investimentos_Agroderi.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
               </Button>
@@ -125,7 +178,11 @@ export default function DocumentsPage() {
               <CardDescription>Princípios e condutas da gestão</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Codigo_Etica_Agroderi.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
               </Button>
@@ -155,7 +212,11 @@ export default function DocumentsPage() {
                 <span>Status:</span>
                 <span className="font-medium text-green-600">Aprovado</span>
               </div>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Auditoria_Independente_2024.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download Relatório
               </Button>
@@ -176,7 +237,11 @@ export default function DocumentsPage() {
                 <span>Status:</span>
                 <span className="font-medium text-green-600">Aprovado</span>
               </div>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Auditoria_Independente_2023.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download Relatório
               </Button>
@@ -212,7 +277,11 @@ export default function DocumentsPage() {
                   <span className="font-medium">D+2</span>
                 </div>
               </div>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Lamina_Cota_Senior_Agroderi.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download Lâmina
               </Button>
@@ -239,7 +308,11 @@ export default function DocumentsPage() {
                   <span className="font-medium">D+2</span>
                 </div>
               </div>
-              <Button variant="outline" className="w-full bg-transparent">
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Lamina_Cota_Subordinada_Agroderi.pdf")}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Download Lâmina
               </Button>
@@ -248,62 +321,75 @@ export default function DocumentsPage() {
         </div>
       </section>
 
-      {/* Documentos para Distribuidores */}
-      <section>
-        <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
-          <Users className="h-6 w-6 text-primary" />
-          Documentos para Distribuidores
-        </h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Manual do Distribuidor
-              </CardTitle>
-              <CardDescription>Guia completo para distribuidores</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" className="w-full bg-transparent">
-                <Download className="h-4 w-4 mr-2" />
-                Download PDF
-              </Button>
-            </CardContent>
-          </Card>
+      {canAccessDistributorDocs && (
+        <section>
+          <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
+            <Users className="h-6 w-6 text-primary" />
+            Documentos para Distribuidores
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Manual do Distribuidor
+                </CardTitle>
+                <CardDescription>Guia completo para distribuidores</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Manual_Distribuidor_Agroderi.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Tabela de Comissões
-              </CardTitle>
-              <CardDescription>Estrutura detalhada de comissões</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" className="w-full bg-transparent">
-                <Download className="h-4 w-4 mr-2" />
-                Download PDF
-              </Button>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Tabela de Comissões
+                </CardTitle>
+                <CardDescription>Estrutura detalhada de comissões</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Tabela_Comissoes_Agroderi.pdf")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Material de Vendas
-              </CardTitle>
-              <CardDescription>Apresentações e materiais promocionais</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" className="w-full bg-transparent">
-                <Download className="h-4 w-4 mr-2" />
-                Download ZIP
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Material de Vendas
+                </CardTitle>
+                <CardDescription>Apresentações e materiais promocionais</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => handleDownload("Material_Vendas_Agroderi.zip")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download ZIP
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
     </div>
   )
 }
