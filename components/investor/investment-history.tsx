@@ -65,7 +65,7 @@ export function InvestmentHistory() {
           <Calendar className="h-5 w-5" />
           Histórico de Investimentos
         </CardTitle>
-        <CardDescription>Acompanhe todas as suas movimentações no FIDC Agroderi</CardDescription>
+        <CardDescription>Acompanhe todas as suas movimentações no Clube de Investimentos Privado</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">

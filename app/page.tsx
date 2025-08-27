@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, Shield, Calculator } from "lucide-react"
+import { Disclaimers } from "@/components/compliance/disclaimers"
 
 export default function HomePage() {
   return (
@@ -9,10 +10,13 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="py-20 px-4">
         <div className="container mx-auto text-center">
-          <h2 className="text-4xl font-bold text-foreground mb-6 text-balance">FIDC Agroderi</h2>
+          <h2 className="text-4xl font-bold text-foreground mb-6 text-balance">
+            Clube de Investimentos Privado do Agronegócio
+          </h2>
           <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto text-pretty">
-            Oportunidade Premium para Investidores Qualificados. Um fundo de investimento em direitos creditórios que
-            financia a antecipação de recebíveis da agricultura familiar brasileira.
+            Oportunidade Premium para Investidores Qualificados. Um veículo privado de antecipação de recebíveis que
+            financia a agricultura familiar brasileira, com revenda garantida para compradores AAA nacionais e
+            internacionais.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register?type=investor">
@@ -37,9 +41,9 @@ export default function HomePage() {
             <Card>
               <CardHeader>
                 <Shield className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Regulado pela CVM</CardTitle>
+                <CardTitle>Estrutura Privada Auditada</CardTitle>
                 <CardDescription>
-                  Segurança e conformidade com as exigências da Comissão de Valores Mobiliários
+                  Transparência e controles de governança com auditoria independente CLA Global
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -115,6 +119,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <Disclaimers variant="footer" />
 
       {/* Footer */}
       <footer className="bg-card border-t border-border py-8 px-4">

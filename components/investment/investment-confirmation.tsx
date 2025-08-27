@@ -17,16 +17,17 @@ interface InvestmentConfirmationProps {
 export function InvestmentConfirmation({ investmentData, onConfirm, onBack }: InvestmentConfirmationProps) {
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [riskAccepted, setRiskAccepted] = useState(false)
+  const [complianceAccepted, setComplianceAccepted] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
   const handleConfirm = () => {
-    if (!termsAccepted || !riskAccepted) return
+    if (!termsAccepted || !riskAccepted || !complianceAccepted) return
 
     setIsProcessing(true)
     onConfirm()
   }
 
-  const isValid = termsAccepted && riskAccepted
+  const isValid = termsAccepted && riskAccepted && complianceAccepted
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -136,7 +137,8 @@ export function InvestmentConfirmation({ investmentData, onConfirm, onBack }: In
                 Li e aceito os termos e condições
               </label>
               <p className="text-xs text-muted-foreground">
-                Declaro ter lido e compreendido o regulamento do FIDC Agroderi e suas condições de investimento.
+                Declaro ter lido e compreendido os termos do Clube de Investimentos Privado e suas condições de
+                participação.
               </p>
             </div>
           </div>
@@ -152,6 +154,22 @@ export function InvestmentConfirmation({ investmentData, onConfirm, onBack }: In
               </label>
               <p className="text-xs text-muted-foreground">
                 Compreendo que rentabilidade passada não garante rentabilidade futura e que posso ter perdas.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start space-x-2">
+            <Checkbox id="compliance" checked={complianceAccepted} onCheckedChange={setComplianceAccepted} />
+            <div className="grid gap-1.5 leading-none">
+              <label
+                htmlFor="compliance"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Declaro ter ciência de que não se trata de produto regulado pela CVM
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Ao prosseguir, reconheço que participo de um Clube de Investimentos Privado, sem garantia de retorno,
+                ciente dos riscos envolvidos.
               </p>
             </div>
           </div>

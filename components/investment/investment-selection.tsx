@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Shield, TrendingUp, Calculator, AlertCircle } from "lucide-react"
 import type { InvestmentData } from "./investment-flow"
+import { Disclaimers } from "@/components/compliance/disclaimers"
 
 interface InvestmentSelectionProps {
   onNext: (data: InvestmentData) => void
@@ -50,7 +51,9 @@ export function InvestmentSelection({ onNext }: InvestmentSelectionProps) {
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="text-center">
         <h2 className="text-3xl font-bold text-foreground mb-4">Escolha seu Investimento</h2>
-        <p className="text-muted-foreground">Selecione a cota e o valor que deseja investir no FIDC Agroderi</p>
+        <p className="text-muted-foreground">
+          Selecione a cota e o valor que deseja investir no Clube de Investimentos Privado
+        </p>
       </div>
 
       {/* Quota Selection */}
@@ -188,23 +191,7 @@ export function InvestmentSelection({ onNext }: InvestmentSelectionProps) {
       </Card>
 
       {/* Important Information */}
-      <Card className="border-amber-200 bg-amber-50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-800">
-            <AlertCircle className="h-5 w-5" />
-            Informações Importantes
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-amber-800">
-          <ul className="space-y-2 text-sm">
-            <li>• Fundo regulado pela CVM com auditoria independente</li>
-            <li>• Rentabilidade passada não garante rentabilidade futura</li>
-            <li>• Liquidez: resgate em até 2 dias úteis (D+2)</li>
-            <li>• Investimento mínimo: R$ 5.000</li>
-            <li>• Destinado exclusivamente a investidores qualificados</li>
-          </ul>
-        </CardContent>
-      </Card>
+      <Disclaimers />
 
       {/* Next Button */}
       <div className="text-center">

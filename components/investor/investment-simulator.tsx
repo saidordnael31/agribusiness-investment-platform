@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Calculator, Gift, TrendingUp } from "lucide-react"
+import { Disclaimers } from "@/components/compliance/disclaimers"
 
 interface Bonification {
   id: string
@@ -134,7 +135,9 @@ export function InvestmentSimulator() {
           <Calculator className="h-5 w-5" />
           Simulador de Investimentos
         </CardTitle>
-        <CardDescription>Simule os retornos do seu investimento no FIDC Agroderi com bonificações</CardDescription>
+        <CardDescription>
+          Simule os retornos do seu investimento no Clube de Investimentos Privado do Agronegócio
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -271,15 +274,7 @@ export function InvestmentSimulator() {
           </div>
         )}
 
-        <div className="bg-muted p-4 rounded-lg">
-          <h4 className="font-semibold mb-2">Informações Importantes:</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• Rentabilidade passada não garante rentabilidade futura</li>
-            <li>• Liquidez: D+2 (resgate em até 2 dias úteis)</li>
-            <li>• Fundo regulado pela CVM</li>
-            <li>• Investimento mínimo: R$ 5.000</li>
-          </ul>
-        </div>
+        <Disclaimers variant="compact" />
       </CardContent>
     </Card>
   )
