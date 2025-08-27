@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { TrendingUp, Shield, BarChart3, Users, Calendar, FileText } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
 const marketData = [
   { name: "Selic/Tesouro", min: 0.8, max: 1.0, avg: 0.9 },
@@ -76,29 +75,18 @@ export default function HomePage() {
           </h2>
 
           <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              <div className="space-y-4">
-                {marketData.map((item) => (
-                  <div key={item.name} className="flex justify-between items-center p-4 bg-background rounded-lg">
-                    <span className="font-medium">{item.name}</span>
-                    <span className="font-bold text-primary">
-                      {item.min}% - {item.max}% a.m.
+            <div className="space-y-4">
+              {marketData.map((item) => (
+                <div key={item.name} className="flex justify-between items-center p-4 bg-background rounded-lg">
+                  <span className="font-medium">{item.name}</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      {item.min}% - {item.max}%
                     </span>
+                    <span className="font-bold text-primary text-lg">{item.avg}% a.m.</span>
                   </div>
-                ))}
-              </div>
-
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={marketData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" fontSize={12} />
-                    <YAxis fontSize={12} />
-                    <Tooltip formatter={(value) => [`${value}%`, "Média"]} />
-                    <Bar dataKey="avg" fill="hsl(var(--primary))" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+                </div>
+              ))}
             </div>
 
             <p className="text-sm text-muted-foreground text-center mt-6">
