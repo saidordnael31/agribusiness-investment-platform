@@ -141,57 +141,49 @@ function RegisterFormContent() {
     }
 
     try {
-      const hasSupabaseConfig = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      console.log("[v0] Chamando API de registro")
 
-      if (hasSupabaseConfig) {
-        console.log("[v0] Tentando registro com Supabase")
-        const { createClient } = await import("@/lib/supabase/client")
-        const supabase = createClient()
-
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-          options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
-            data: {
-              name: formData.name,
-              user_type: formData.type,
-              role: formData.role,
-              parent_id: formData.parentId || null,
-              cpf_cnpj: formData.cpfCnpj,
-              phone: formData.phone,
-              notes: formData.notes,
-            },
-          },
-        })
-
-        if (authError) throw authError
-      } else {
-        console.log("[v0] Usando registro de demonstração")
-
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        const userData = {
-          id: Date.now().toString(),
           name: formData.name,
-          email: formData.email,
-          user_type: formData.type,
+          userType: formData.type,
           role: formData.role,
-          parent_id: formData.parentId || null,
-          cpf_cnpj: formData.cpfCnpj,
+          parentId: formData.parentId || null,
+          cpfCnpj: formData.cpfCnpj,
           phone: formData.phone,
           notes: formData.notes,
-          created_at: new Date().toISOString(),
-        }
+        }),
+      })
 
-        localStorage.setItem("user", JSON.stringify(userData))
-        localStorage.setItem("user_type", formData.type)
-        console.log("[v0] Usuário registrado com sucesso:", userData)
+      const result = await response.json()
+      console.log("[v0] Resposta da API:", result)
+
+      if (!result.success) {
+        throw new Error(result.error || "Erro no cadastro")
       }
+
+      const userData = {
+        id: result.data.user.id,
+        name: result.data.user.name,
+        email: result.data.user.email,
+        user_type: result.data.user.type,
+        role: result.data.user.role,
+        created_at: new Date().toISOString(),
+      }
+
+      localStorage.setItem("user", JSON.stringify(userData))
+      localStorage.setItem("user_type", result.data.user.type)
+      console.log("[v0] Usuário registrado com sucesso:", userData)
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: `Bem-vindo à plataforma Akintec, ${formData.name}!`,
+        description: result.data.message || `Bem-vindo à plataforma Akintec, ${formData.name}!`,
       })
 
       const redirectPath = formData.type === "admin" ? "/admin" : "/distributor"
