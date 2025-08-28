@@ -149,7 +149,7 @@ function RegisterFormContent() {
         email: formData.email,
         password: formData.password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/login`,
+          emailRedirectTo: `${window.location.origin}/login`,
           data: {
             full_name: formData.name,
             user_type: formData.type,
