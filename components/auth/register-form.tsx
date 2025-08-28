@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 
 function RegisterFormContent() {
   const [formData, setFormData] = useState({
@@ -141,49 +142,74 @@ function RegisterFormContent() {
     }
 
     try {
-      console.log("[v0] Chamando API de registro")
+      console.log("[v0] Criando cliente Supabase")
+      const supabase = createClient()
 
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      console.log("[v0] Registrando usuário no Supabase Auth")
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/login`,
+          data: {
+            full_name: formData.name,
+            user_type: formData.type,
+            role: formData.role,
+            phone: formData.phone,
+            cpf_cnpj: formData.cpfCnpj,
+            notes: formData.notes,
+            parent_id: formData.parentId || null,
+          },
         },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          name: formData.name,
-          userType: formData.type,
-          role: formData.role,
-          parentId: formData.parentId || null,
-          cpfCnpj: formData.cpfCnpj,
-          phone: formData.phone,
-          notes: formData.notes,
-        }),
       })
 
-      const result = await response.json()
-      console.log("[v0] Resposta da API:", result)
+      if (authError) {
+        console.log("[v0] Erro na autenticação:", authError)
+        throw authError
+      }
 
-      if (!result.success) {
-        throw new Error(result.error || "Erro no cadastro")
+      console.log("[v0] Usuário criado no Auth:", authData)
+
+      if (authData.user) {
+        console.log("[v0] Criando perfil na tabela profiles")
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: authData.user.id,
+          email: formData.email,
+          full_name: formData.name,
+          user_type: formData.type,
+          role: formData.role,
+          phone: formData.phone,
+          cnpj: formData.role === "escritorio" ? formData.cpfCnpj : null,
+          notes: formData.notes,
+          parent_id: formData.parentId || null,
+          hierarchy_level: formData.role,
+          is_active: true,
+        })
+
+        if (profileError) {
+          console.log("[v0] Erro ao criar perfil:", profileError)
+          throw profileError
+        }
+
+        console.log("[v0] Perfil criado com sucesso")
       }
 
       const userData = {
-        id: result.data.user.id,
-        name: result.data.user.name,
-        email: result.data.user.email,
-        user_type: result.data.user.type,
-        role: result.data.user.role,
+        id: authData.user?.id,
+        name: formData.name,
+        email: formData.email,
+        user_type: formData.type,
+        role: formData.role,
         created_at: new Date().toISOString(),
       }
 
       localStorage.setItem("user", JSON.stringify(userData))
-      localStorage.setItem("user_type", result.data.user.type)
+      localStorage.setItem("user_type", formData.type)
       console.log("[v0] Usuário registrado com sucesso:", userData)
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: result.data.message || `Bem-vindo à plataforma Akintec, ${formData.name}!`,
+        description: `Bem-vindo à plataforma Akintec, ${formData.name}! Verifique seu email para confirmar a conta.`,
       })
 
       const redirectPath = formData.type === "admin" ? "/admin" : "/distributor"
