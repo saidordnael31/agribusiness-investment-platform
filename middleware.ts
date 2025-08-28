@@ -4,8 +4,8 @@ import type { NextRequest } from "next/server"
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Bloquear rotas de cadastro público para investidores
-  if (pathname.startsWith("/register") || pathname.startsWith("/cadastro") || pathname.startsWith("/investor/signup")) {
+  // Bloquear apenas rotas específicas de cadastro de investidores
+  if (pathname.startsWith("/cadastro") || pathname.startsWith("/investor/signup")) {
     return NextResponse.redirect(new URL("/login", request.url))
   }
 

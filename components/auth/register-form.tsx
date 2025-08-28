@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { createClient } from "@/lib/supabase/client"
 import { AlertTriangle } from "lucide-react"
 
 function RegisterFormContent() {
@@ -31,7 +30,6 @@ function RegisterFormContent() {
   const { toast } = useToast()
   const searchParams = useSearchParams()
   const defaultType = searchParams.get("type") || ""
-  const supabase = createClient()
 
   useEffect(() => {
     if (formData.role && formData.role !== "escritorio") {
@@ -72,8 +70,22 @@ function RegisterFormContent() {
   }
 
   const loadParentOptions = async () => {
-    let parentRole = ""
+    const mockParentOptions = {
+      escritorio: [
+        { id: "1", name: "Escritório Principal", role: "escritorio" },
+        { id: "2", name: "Escritório Regional", role: "escritorio" },
+      ],
+      gestor: [
+        { id: "3", name: "João Silva", role: "gestor" },
+        { id: "4", name: "Maria Santos", role: "gestor" },
+      ],
+      lider: [
+        { id: "5", name: "Pedro Costa", role: "lider" },
+        { id: "6", name: "Ana Oliveira", role: "lider" },
+      ],
+    }
 
+    let parentRole = ""
     switch (formData.role) {
       case "gestor":
         parentRole = "escritorio"
@@ -86,22 +98,17 @@ function RegisterFormContent() {
         break
     }
 
-    if (parentRole) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, name, role")
-        .eq("role", parentRole)
-        .eq("is_active", true)
-
-      if (data) {
-        setParentOptions(data)
-      }
+    if (parentRole && mockParentOptions[parentRole as keyof typeof mockParentOptions]) {
+      setParentOptions(mockParentOptions[parentRole as keyof typeof mockParentOptions])
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+
+    console.log("[v0] Iniciando processo de registro")
+    console.log("[v0] Dados do formulário:", formData)
 
     if (emailError) {
       toast({
@@ -134,32 +141,64 @@ function RegisterFormContent() {
     }
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
-          data: {
-            name: formData.name,
-            user_type: formData.type,
-            role: formData.role,
-            parent_id: formData.parentId || null,
-            cpf_cnpj: formData.cpfCnpj,
-            phone: formData.phone,
-            notes: formData.notes,
-          },
-        },
-      })
+      const hasSupabaseConfig = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-      if (authError) throw authError
+      if (hasSupabaseConfig) {
+        console.log("[v0] Tentando registro com Supabase")
+        const { createClient } = await import("@/lib/supabase/client")
+        const supabase = createClient()
+
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+            data: {
+              name: formData.name,
+              user_type: formData.type,
+              role: formData.role,
+              parent_id: formData.parentId || null,
+              cpf_cnpj: formData.cpfCnpj,
+              phone: formData.phone,
+              notes: formData.notes,
+            },
+          },
+        })
+
+        if (authError) throw authError
+      } else {
+        console.log("[v0] Usando registro de demonstração")
+
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        const userData = {
+          id: Date.now().toString(),
+          name: formData.name,
+          email: formData.email,
+          user_type: formData.type,
+          role: formData.role,
+          parent_id: formData.parentId || null,
+          cpf_cnpj: formData.cpfCnpj,
+          phone: formData.phone,
+          notes: formData.notes,
+          created_at: new Date().toISOString(),
+        }
+
+        localStorage.setItem("user", JSON.stringify(userData))
+        localStorage.setItem("user_type", formData.type)
+        console.log("[v0] Usuário registrado com sucesso:", userData)
+      }
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: `Bem-vindo à plataforma Agroderi, ${formData.name}!`,
+        description: `Bem-vindo à plataforma Akintec, ${formData.name}!`,
       })
 
-      router.push("/distributor")
+      const redirectPath = formData.type === "admin" ? "/admin" : "/distributor"
+      console.log("[v0] Redirecionando para:", redirectPath)
+      router.push(redirectPath)
     } catch (error: any) {
+      console.log("[v0] Erro no registro:", error)
       toast({
         title: "Erro no cadastro",
         description: error.message || "Ocorreu um erro durante o cadastro.",
@@ -247,6 +286,7 @@ function RegisterFormContent() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="distributor">Distribuidor/Assessor</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">Investidores são cadastrados pelos assessores no dashboard</p>

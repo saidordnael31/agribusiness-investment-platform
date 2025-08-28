@@ -26,9 +26,14 @@ export function ProtectedRoute({ children, allowedTypes }: ProtectedRouteProps) 
 
       try {
         const user = JSON.parse(userStr)
-        if (allowedTypes.includes(user.type)) {
+        console.log("[v0] ProtectedRoute checking user:", user)
+        console.log("[v0] Allowed types:", allowedTypes)
+        console.log("[v0] User type:", user.user_type)
+
+        if (allowedTypes.includes(user.user_type)) {
           setIsAuthorized(true)
         } else {
+          console.log("[v0] User not authorized, redirecting to login")
           router.push("/login")
         }
       } catch {
