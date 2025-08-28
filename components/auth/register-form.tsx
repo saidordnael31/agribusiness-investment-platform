@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+// import { createClient } from "@/lib/supabase/client"
 
 function RegisterFormContent() {
   const [formData, setFormData] = useState({
@@ -17,7 +17,7 @@ function RegisterFormContent() {
     email: "",
     password: "",
     confirmPassword: "",
-    type: "",
+    type: "distributor",
     role: "",
     parentId: "",
     cpfCnpj: "",
@@ -30,7 +30,6 @@ function RegisterFormContent() {
   const router = useRouter()
   const { toast } = useToast()
   const searchParams = useSearchParams()
-  const defaultType = searchParams.get("type") || ""
 
   useEffect(() => {
     if (formData.role && formData.role !== "escritorio") {
@@ -142,53 +141,41 @@ function RegisterFormContent() {
     }
 
     try {
-      console.log("[v0] Criando cliente Supabase")
-      const supabase = createClient()
+      console.log("[v0] Registrando usuário com sistema de demonstração")
 
-      console.log("[v0] Registrando usuário no Supabase Auth")
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/login`,
-          data: {
-            full_name: formData.name,
-            user_type: formData.type,
-            role: formData.role,
-            phone: formData.phone,
-            cpf_cnpj: formData.cpfCnpj,
-            notes: formData.notes,
-            parent_id: formData.parentId || null,
-          },
-        },
-      })
-
-      if (authError) {
-        console.log("[v0] Erro na autenticação:", authError)
-        throw authError
-      }
-
-      console.log("[v0] Usuário criado no Auth:", authData)
+      // Simular delay de API
+      await new Promise((resolve) => setTimeout(resolve, 1000))
 
       const userData = {
-        id: authData.user?.id,
+        id: `user_${Date.now()}`,
         name: formData.name,
         email: formData.email,
         user_type: formData.type,
         role: formData.role,
+        parent_id: formData.parentId || null,
+        cpf_cnpj: formData.cpfCnpj,
+        phone: formData.phone,
+        notes: formData.notes,
         created_at: new Date().toISOString(),
       }
 
+      // Salvar no localStorage para demonstração
       localStorage.setItem("user", JSON.stringify(userData))
       localStorage.setItem("user_type", formData.type)
+
       console.log("[v0] Usuário registrado com sucesso:", userData)
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: `Bem-vindo à plataforma Akintec, ${formData.name}! Verifique seu email para confirmar a conta.`,
+        description: `Bem-vindo à plataforma Akintec, ${formData.name}!`,
       })
 
-      router.push("/register-success")
+      // Redirecionar baseado no tipo de usuário
+      if (formData.type === "admin") {
+        router.push("/admin")
+      } else {
+        router.push("/distributor")
+      }
     } catch (error: any) {
       console.log("[v0] Erro no registro:", error)
       toast({
@@ -270,7 +257,7 @@ function RegisterFormContent() {
         <div className="space-y-2">
           <Label htmlFor="type">Tipo de Usuário</Label>
           <Select
-            value="distributor"
+            value={formData.type}
             onValueChange={(value) => setFormData({ ...formData, type: value, role: "", parentId: "" })}
           >
             <SelectTrigger>
