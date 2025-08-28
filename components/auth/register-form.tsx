@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle } from "lucide-react"
-// import { createClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 
 function RegisterFormContent() {
   const [formData, setFormData] = useState({
@@ -141,41 +141,40 @@ function RegisterFormContent() {
     }
 
     try {
-      console.log("[v0] Registrando usuário com sistema de demonstração")
+      console.log("[v0] Registrando usuário no Supabase")
 
-      // Simular delay de API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const supabase = createClient()
 
-      const userData = {
-        id: `user_${Date.now()}`,
-        name: formData.name,
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
-        user_type: formData.type,
-        role: formData.role,
-        parent_id: formData.parentId || null,
-        cpf_cnpj: formData.cpfCnpj,
-        phone: formData.phone,
-        notes: formData.notes,
-        created_at: new Date().toISOString(),
+        password: formData.password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/login`,
+          data: {
+            full_name: formData.name,
+            user_type: formData.type,
+            role: formData.role,
+            parent_id: formData.parentId || null,
+            cpf_cnpj: formData.cpfCnpj,
+            phone: formData.phone,
+            notes: formData.notes,
+          },
+        },
+      })
+
+      if (error) {
+        console.log("[v0] Erro no Supabase:", error)
+        throw error
       }
 
-      // Salvar no localStorage para demonstração
-      localStorage.setItem("user", JSON.stringify(userData))
-      localStorage.setItem("user_type", formData.type)
-
-      console.log("[v0] Usuário registrado com sucesso:", userData)
+      console.log("[v0] Usuário registrado com sucesso no Supabase:", data)
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: `Bem-vindo à plataforma Akintec, ${formData.name}!`,
+        description: `Verifique seu email para confirmar a conta antes de fazer login.`,
       })
 
-      // Redirecionar baseado no tipo de usuário
-      if (formData.type === "admin") {
-        router.push("/admin")
-      } else {
-        router.push("/distributor")
-      }
+      router.push("/register-success")
     } catch (error: any) {
       console.log("[v0] Erro no registro:", error)
       toast({
