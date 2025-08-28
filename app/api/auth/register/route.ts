@@ -1,88 +1,73 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 
 export async function POST(request: NextRequest) {
   try {
     const userData = await request.json()
-    const { email, password, name, userType, parentId } = userData
+    const { email, password, name, userType, parentId, phone, cnpj, notes } = userData
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !supabaseKey) {
-      // Sistema de demonstração quando Supabase não está configurado
-      console.log("[v0] Supabase não configurado, usando sistema de demonstração")
-
-      // Simular criação de usuário
-      const mockUser = {
-        id: `demo-${Date.now()}`,
-        email,
-        name,
-        type: userType,
-        role: userType,
-        parent_id: parentId,
-        created_at: new Date().toISOString(),
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          user: mockUser,
-          message: "Usuário criado com sucesso no sistema de demonstração.",
-        },
-      })
-    }
-
-    let supabase
-    try {
-      supabase = createServerClient()
-      if (!supabase || !supabase.auth) {
-        throw new Error("Cliente Supabase não foi criado corretamente")
-      }
-    } catch (supabaseError) {
-      console.error("[v0] Erro ao criar cliente Supabase:", supabaseError)
+    if (!supabaseUrl || !supabaseServiceKey) {
       return NextResponse.json(
         {
           success: false,
-          error: "Erro de configuração do banco de dados",
+          error: "Configuração do banco de dados não encontrada",
         },
         { status: 500 },
       )
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
-        data: {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .insert([
+        {
+          email,
           full_name: name,
           user_type: userType,
-          parent_id: parentId,
+          role: userType,
+          parent_id: parentId || null,
+          phone: phone || null,
+          cnpj: cnpj || null,
+          notes: notes || null,
+          hierarchy_level: userType,
+          is_active: true,
         },
-      },
-    })
+      ])
+      .select()
+      .single()
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+      console.error("[v0] Erro ao inserir na tabela profiles:", error)
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Erro ao salvar usuário: ${error.message}`,
+        },
+        { status: 400 },
+      )
     }
+
+    console.log("[v0] Usuário salvo com sucesso na tabela profiles:", data)
 
     return NextResponse.json({
       success: true,
       data: {
         user: {
-          id: data.user?.id,
-          email: data.user?.email,
-          name,
-          type: userType,
-          role: userType,
+          id: data.id,
+          email: data.email,
+          name: data.full_name,
+          type: data.user_type,
+          role: data.role,
         },
-        message: "Usuário criado com sucesso. Verifique seu email para confirmar a conta.",
+        message: "Usuário cadastrado com sucesso no banco de dados.",
       },
     })
   } catch (error) {
-    console.error("Register error:", error)
+    console.error("[v0] Register error:", error)
     return NextResponse.json(
       {
         success: false,
