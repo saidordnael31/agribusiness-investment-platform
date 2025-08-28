@@ -170,30 +170,6 @@ function RegisterFormContent() {
 
       console.log("[v0] Usuário criado no Auth:", authData)
 
-      if (authData.user) {
-        console.log("[v0] Criando perfil na tabela profiles")
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: authData.user.id,
-          email: formData.email,
-          full_name: formData.name,
-          user_type: formData.type,
-          role: formData.role,
-          phone: formData.phone,
-          cnpj: formData.role === "escritorio" ? formData.cpfCnpj : null,
-          notes: formData.notes,
-          parent_id: formData.parentId || null,
-          hierarchy_level: formData.role,
-          is_active: true,
-        })
-
-        if (profileError) {
-          console.log("[v0] Erro ao criar perfil:", profileError)
-          throw profileError
-        }
-
-        console.log("[v0] Perfil criado com sucesso")
-      }
-
       const userData = {
         id: authData.user?.id,
         name: formData.name,
@@ -212,9 +188,7 @@ function RegisterFormContent() {
         description: `Bem-vindo à plataforma Akintec, ${formData.name}! Verifique seu email para confirmar a conta.`,
       })
 
-      const redirectPath = formData.type === "admin" ? "/admin" : "/distributor"
-      console.log("[v0] Redirecionando para:", redirectPath)
-      router.push(redirectPath)
+      router.push("/register-success")
     } catch (error: any) {
       console.log("[v0] Erro no registro:", error)
       toast({
