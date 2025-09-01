@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,9 +20,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Edit, Trash2, Gift, Target, TrendingUp, Users, BarChart3 } from "lucide-react"
+import { Plus, Edit, Trash2, Gift, Target, TrendingUp, Users, BarChart3, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 
 interface Promotion {
   id: string
@@ -67,84 +68,12 @@ interface PerformanceGoal {
 
 export function PromotionManager() {
   const { toast } = useToast()
+  const supabase = createClient()
 
-  const [promotions, setPromotions] = useState<Promotion[]>([
-    {
-      id: "1",
-      name: "Promoção Ano Novo",
-      description: "Taxa especial para novos investimentos até 31/03",
-      code: "NEWYEAR2025",
-      bonusRate: 0.4,
-      startDate: "2025-01-01",
-      endDate: "2025-03-31",
-      targetAudience: "all",
-      isActive: true,
-      usageCount: 47,
-      maxUsage: 100,
-      campaignType: "bonus_rate",
-      conditions: { minInvestment: 10000 },
-      results: { totalParticipants: 47, totalImpact: 235000, conversionRate: 23.5 },
-    },
-    {
-      id: "2",
-      name: "Indicação Premiada",
-      description: "Bonificação por cada indicação efetivada",
-      bonusRate: 0.2,
-      startDate: "2025-01-01",
-      endDate: "2025-12-31",
-      targetAudience: "all",
-      isActive: true,
-      usageCount: 23,
-      campaignType: "referral",
-      results: { totalParticipants: 23, totalImpact: 115000, conversionRate: 15.3 },
-    },
-    {
-      id: "3",
-      name: "Distribuidor Premium",
-      description: "Bonificação especial para distribuidores elite",
-      bonusRate: 1.5,
-      startDate: "2025-02-01",
-      endDate: "2025-04-30",
-      targetAudience: "distributors",
-      isActive: false,
-      usageCount: 0,
-      maxUsage: 50,
-      campaignType: "commission_boost",
-      conditions: { minCaptation: 500000 },
-      results: { totalParticipants: 0, totalImpact: 0, conversionRate: 0 },
-    },
-  ])
-
-  const [performanceGoals, setPerformanceGoals] = useState<PerformanceGoal[]>([
-    {
-      id: "1",
-      name: "Meta Escritório 500K",
-      description: "Escritórios que captarem R$ 500K ganham +1% adicional por 12 meses",
-      targetAmount: 500000,
-      bonusRate: 1.0,
-      duration: 12,
-      targetAudience: "offices",
-      isActive: true,
-      participants: 15,
-      achieved: 8,
-      startDate: "2025-01-01",
-      endDate: "2025-12-31",
-    },
-    {
-      id: "2",
-      name: "Meta Assessor 1M",
-      description: "Assessores que captarem R$ 1M ganham +2% adicional por 12 meses",
-      targetAmount: 1000000,
-      bonusRate: 2.0,
-      duration: 12,
-      targetAudience: "advisors",
-      isActive: true,
-      participants: 25,
-      achieved: 3,
-      startDate: "2025-01-01",
-      endDate: "2025-12-31",
-    },
-  ])
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [performanceGoals, setPerformanceGoals] = useState<PerformanceGoal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false)
@@ -176,41 +105,138 @@ export function PromotionManager() {
     endDate: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const { data: campaignsData, error: campaignsError } = await supabase
+        .from("promotional_campaigns")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (campaignsError) {
+        console.error("[v0] Erro ao buscar campanhas:", campaignsError)
+        setPromotions([])
+      } else {
+        const mappedPromotions: Promotion[] = (campaignsData || []).map((campaign) => ({
+          id: campaign.id,
+          name: campaign.name || "Campanha sem nome",
+          description: campaign.description || "",
+          code: campaign.code,
+          bonusRate: campaign.bonus_rate || 0,
+          startDate: campaign.start_date || new Date().toISOString().split("T")[0],
+          endDate: campaign.end_date || new Date().toISOString().split("T")[0],
+          targetAudience: campaign.target_audience || "all",
+          isActive: campaign.is_active || false,
+          usageCount: campaign.usage_count || 0,
+          maxUsage: campaign.max_usage,
+          campaignType: campaign.campaign_type || "bonus_rate",
+          conditions: campaign.conditions ? JSON.parse(campaign.conditions) : undefined,
+          results: {
+            totalParticipants: campaign.total_participants || 0,
+            totalImpact: campaign.total_impact || 0,
+            conversionRate: campaign.conversion_rate || 0,
+          },
+        }))
+        setPromotions(mappedPromotions)
+      }
+
+      const { data: goalsData, error: goalsError } = await supabase
+        .from("performance_goals")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (goalsError) {
+        console.error("[v0] Erro ao buscar metas:", goalsError)
+        setPerformanceGoals([])
+      } else {
+        const mappedGoals: PerformanceGoal[] = (goalsData || []).map((goal) => ({
+          id: goal.id,
+          name: goal.name || "Meta sem nome",
+          description: goal.description || "",
+          targetAmount: goal.target_amount || 0,
+          bonusRate: goal.bonus_rate || 0,
+          duration: goal.duration || 12,
+          targetAudience: goal.target_audience || "both",
+          isActive: goal.is_active || false,
+          participants: goal.participants || 0,
+          achieved: goal.achieved || 0,
+          startDate: goal.start_date || new Date().toISOString().split("T")[0],
+          endDate: goal.end_date || new Date().toISOString().split("T")[0],
+        }))
+        setPerformanceGoals(mappedGoals)
+      }
+    } catch (err) {
+      console.error("[v0] Erro geral ao buscar dados:", err)
+      setError("Erro ao carregar dados das campanhas")
+      setPromotions([])
+      setPerformanceGoals([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     const conditions: any = {}
     if (formData.minInvestment) conditions.minInvestment = Number(formData.minInvestment)
     if (formData.minCaptation) conditions.minCaptation = Number(formData.minCaptation)
 
-    const newPromotion: Promotion = {
-      id: editingPromotion?.id || Date.now().toString(),
+    const campaignData = {
       name: formData.name,
       description: formData.description,
-      code: formData.code || undefined,
-      bonusRate: formData.bonusRate,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      targetAudience: formData.targetAudience,
-      isActive: true,
-      usageCount: editingPromotion?.usageCount || 0,
-      maxUsage: formData.maxUsage ? Number.parseInt(formData.maxUsage) : undefined,
-      campaignType: formData.campaignType,
-      conditions: Object.keys(conditions).length > 0 ? conditions : undefined,
-      results: editingPromotion?.results || { totalParticipants: 0, totalImpact: 0, conversionRate: 0 },
+      code: formData.code || null,
+      bonus_rate: formData.bonusRate,
+      start_date: formData.startDate,
+      end_date: formData.endDate,
+      target_audience: formData.targetAudience,
+      is_active: true,
+      max_usage: formData.maxUsage ? Number.parseInt(formData.maxUsage) : null,
+      campaign_type: formData.campaignType,
+      conditions: Object.keys(conditions).length > 0 ? JSON.stringify(conditions) : null,
+      usage_count: editingPromotion?.usageCount || 0,
+      total_participants: editingPromotion?.results?.totalParticipants || 0,
+      total_impact: editingPromotion?.results?.totalImpact || 0,
+      conversion_rate: editingPromotion?.results?.conversionRate || 0,
     }
 
-    if (editingPromotion) {
-      setPromotions(promotions.map((p) => (p.id === editingPromotion.id ? newPromotion : p)))
+    try {
+      if (editingPromotion) {
+        const { error } = await supabase
+          .from("promotional_campaigns")
+          .update(campaignData)
+          .eq("id", editingPromotion.id)
+
+        if (error) throw error
+
+        toast({
+          title: "Campanha atualizada!",
+          description: "As alterações foram salvas com sucesso.",
+        })
+      } else {
+        const { error } = await supabase.from("promotional_campaigns").insert([campaignData])
+
+        if (error) throw error
+
+        toast({
+          title: "Campanha criada!",
+          description: "A nova campanha foi adicionada com sucesso.",
+        })
+      }
+
+      await fetchData()
+    } catch (error) {
+      console.error("[v0] Erro ao salvar campanha:", error)
       toast({
-        title: "Campanha atualizada!",
-        description: "As alterações foram salvas com sucesso.",
-      })
-    } else {
-      setPromotions([...promotions, newPromotion])
-      toast({
-        title: "Campanha criada!",
-        description: "A nova campanha foi adicionada com sucesso.",
+        title: "Erro",
+        description: "Não foi possível salvar a campanha. Tente novamente.",
+        variant: "destructive",
       })
     }
 
@@ -231,35 +257,51 @@ export function PromotionManager() {
     })
   }
 
-  const handleGoalSubmit = (e: React.FormEvent) => {
+  const handleGoalSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const newGoal: PerformanceGoal = {
-      id: editingGoal?.id || Date.now().toString(),
+    const goalData = {
       name: goalFormData.name,
       description: goalFormData.description,
-      targetAmount: goalFormData.targetAmount,
-      bonusRate: goalFormData.bonusRate,
+      target_amount: goalFormData.targetAmount,
+      bonus_rate: goalFormData.bonusRate,
       duration: goalFormData.duration,
-      targetAudience: goalFormData.targetAudience,
-      isActive: true,
+      target_audience: goalFormData.targetAudience,
+      is_active: true,
       participants: editingGoal?.participants || 0,
       achieved: editingGoal?.achieved || 0,
-      startDate: goalFormData.startDate,
-      endDate: goalFormData.endDate,
+      start_date: goalFormData.startDate,
+      end_date: goalFormData.endDate,
     }
 
-    if (editingGoal) {
-      setPerformanceGoals(performanceGoals.map((g) => (g.id === editingGoal.id ? newGoal : g)))
+    try {
+      if (editingGoal) {
+        const { error } = await supabase.from("performance_goals").update(goalData).eq("id", editingGoal.id)
+
+        if (error) throw error
+
+        toast({
+          title: "Meta atualizada!",
+          description: "As alterações foram salvas com sucesso.",
+        })
+      } else {
+        const { error } = await supabase.from("performance_goals").insert([goalData])
+
+        if (error) throw error
+
+        toast({
+          title: "Meta criada!",
+          description: "A nova meta foi adicionada com sucesso.",
+        })
+      }
+
+      await fetchData()
+    } catch (error) {
+      console.error("[v0] Erro ao salvar meta:", error)
       toast({
-        title: "Meta atualizada!",
-        description: "As alterações foram salvas com sucesso.",
-      })
-    } else {
-      setPerformanceGoals([...performanceGoals, newGoal])
-      toast({
-        title: "Meta criada!",
-        description: "A nova meta foi adicionada com sucesso.",
+        title: "Erro",
+        description: "Não foi possível salvar a meta. Tente novamente.",
+        variant: "destructive",
       })
     }
 
@@ -295,20 +337,54 @@ export function PromotionManager() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = (id: string) => {
-    setPromotions(promotions.filter((p) => p.id !== id))
-    toast({
-      title: "Campanha removida!",
-      description: "A campanha foi excluída com sucesso.",
-    })
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase.from("promotional_campaigns").delete().eq("id", id)
+
+      if (error) throw error
+
+      toast({
+        title: "Campanha removida!",
+        description: "A campanha foi excluída com sucesso.",
+      })
+
+      await fetchData()
+    } catch (error) {
+      console.error("[v0] Erro ao deletar campanha:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover a campanha. Tente novamente.",
+        variant: "destructive",
+      })
+    }
   }
 
-  const toggleActive = (id: string) => {
-    setPromotions(promotions.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p)))
-    toast({
-      title: "Status atualizado!",
-      description: "O status da campanha foi alterado.",
-    })
+  const toggleActive = async (id: string) => {
+    try {
+      const promotion = promotions.find((p) => p.id === id)
+      if (!promotion) return
+
+      const { error } = await supabase
+        .from("promotional_campaigns")
+        .update({ is_active: !promotion.isActive })
+        .eq("id", id)
+
+      if (error) throw error
+
+      toast({
+        title: "Status atualizado!",
+        description: "O status da campanha foi alterado.",
+      })
+
+      await fetchData()
+    } catch (error) {
+      console.error("[v0] Erro ao atualizar status:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status. Tente novamente.",
+        variant: "destructive",
+      })
+    }
   }
 
   const formatRate = (rate: number) => {
@@ -347,6 +423,24 @@ export function PromotionManager() {
       default:
         return type
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="ml-2">Carregando campanhas...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <p className="text-red-600 mb-4">{error}</p>
+        <Button onClick={fetchData}>Tentar Novamente</Button>
+      </div>
+    )
   }
 
   return (
@@ -412,6 +506,20 @@ export function PromotionManager() {
           </CardContent>
         </Card>
       </div>
+
+      {promotions.length === 0 && performanceGoals.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <Gift className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Nenhuma campanha encontrada</h3>
+            <p className="text-muted-foreground mb-4">Comece criando sua primeira campanha promocional</p>
+            <Button onClick={() => setIsDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nova Campanha
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="campaigns" className="space-y-6">
         <TabsList>
