@@ -1,17 +1,27 @@
 "use client"
 
 import { CardDescription } from "@/components/ui/card"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, TrendingUp, DollarSign, AlertTriangle, Eye, RefreshCw, Users, Building2 } from "lucide-react"
+import {
+  Calculator,
+  TrendingUp,
+  DollarSign,
+  AlertTriangle,
+  Eye,
+  RefreshCw,
+  Users,
+  Building2,
+  Loader2,
+} from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 interface RecurrenceCalculation {
   id: string
@@ -62,81 +72,116 @@ interface RecurrenceImpact {
 
 export function RecurrenceCalculator() {
   const { toast } = useToast()
+  const supabase = createClient()
 
-  const [recurrences, setRecurrences] = useState<RecurrenceCalculation[]>([
-    {
-      id: "1",
-      investorName: "João Silva",
-      investorEmail: "joao@email.com",
-      advisorName: "Carlos Santos",
-      advisorId: "adv1",
-      officeName: "Alpha Investimentos",
-      officeId: "off1",
-      investmentAmount: 100000,
-      baseCommissionRate: 3.0,
-      bonusRate: 0.5,
-      totalCommissionRate: 3.5,
-      monthlyCommission: 3500,
-      advisorShare: 2450,
-      officeShare: 1050,
-      startDate: "2025-01-15",
-      projectedEndDate: "2026-01-15",
-      status: "active",
-      totalPaid: 10500,
-      projectedTotal: 42000,
-      remainingMonths: 9,
-      appliedBonuses: ["Promoção Ano Novo", "Meta 500K"],
-      riskFactors: [],
-    },
-    {
-      id: "2",
-      investorName: "Maria Costa",
-      investorEmail: "maria@email.com",
-      advisorName: "Ana Oliveira",
-      advisorId: "adv2",
-      officeName: "Beta Capital",
-      officeId: "off2",
-      investmentAmount: 250000,
-      baseCommissionRate: 3.0,
-      bonusRate: 1.0,
-      totalCommissionRate: 4.0,
-      monthlyCommission: 10000,
-      advisorShare: 7000,
-      officeShare: 3000,
-      startDate: "2024-12-01",
-      status: "at_risk",
-      totalPaid: 30000,
-      projectedTotal: 120000,
-      remainingMonths: 9,
-      appliedBonuses: ["Distribuidor Premium"],
-      riskFactors: ["Solicitou informações sobre resgate", "Baixa atividade na plataforma"],
-    },
-  ])
-
+  const [recurrences, setRecurrences] = useState<RecurrenceCalculation[]>([])
   const [projections, setProjections] = useState<RecurrenceProjection[]>([])
-  const [impacts, setImpacts] = useState<RecurrenceImpact[]>([
-    {
-      type: "withdrawal",
-      description: "Resgate total previsto - João Silva",
-      impactDate: "2025-06-15",
-      monthlyImpact: -3500,
-      totalImpact: -31500,
-      affectedRecurrences: 1,
-    },
-    {
-      type: "bonus_expiry",
-      description: "Expiração da Promoção Ano Novo",
-      impactDate: "2025-03-31",
-      monthlyImpact: -2100,
-      totalImpact: -18900,
-      affectedRecurrences: 15,
-    },
-  ])
-
+  const [impacts, setImpacts] = useState<RecurrenceImpact[]>([])
   const [selectedRecurrence, setSelectedRecurrence] = useState<RecurrenceCalculation | null>(null)
   const [isProjectionOpen, setIsProjectionOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  // Cálculos agregados
+  const fetchRecurrenceData = async () => {
+    try {
+      setLoading(true)
+
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select(`
+          *,
+          investor:profiles!investments_user_id_fkey(full_name, email, user_type),
+          advisor:profiles!investments_advisor_id_fkey(full_name, user_type, office_id),
+          office:profiles!investments_office_id_fkey(full_name, user_type)
+        `)
+        .eq("status", "active")
+
+      if (investmentsError) throw investmentsError
+
+      const { data: campaigns, error: campaignsError } = await supabase
+        .from("promotional_campaigns")
+        .select("*")
+        .eq("is_active", true)
+
+      if (campaignsError) throw campaignsError
+
+      const processedRecurrences: RecurrenceCalculation[] = (investments || []).map((investment: any) => {
+        const baseCommissionRate = 3.0
+        const bonusRate = campaigns?.length > 0 ? 0.5 : 0
+        const totalCommissionRate = baseCommissionRate + bonusRate
+        const monthlyCommission = (investment.amount * totalCommissionRate) / 100
+        const advisorShare = monthlyCommission * 0.7
+        const officeShare = monthlyCommission * 0.3
+
+        const startDate = new Date(investment.created_at)
+        const now = new Date()
+        const monthsPassed = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
+        const totalPaid = monthlyCommission * monthsPassed
+
+        return {
+          id: investment.id,
+          investorName: investment.investor?.full_name || "Investidor",
+          investorEmail: investment.investor?.email || "",
+          advisorName: investment.advisor?.full_name || "Assessor",
+          advisorId: investment.advisor_id || "",
+          officeName: investment.office?.full_name || "Escritório",
+          officeId: investment.office_id || "",
+          investmentAmount: investment.amount,
+          baseCommissionRate,
+          bonusRate,
+          totalCommissionRate,
+          monthlyCommission,
+          advisorShare,
+          officeShare,
+          startDate: investment.created_at,
+          projectedEndDate: undefined,
+          status: "active" as const,
+          totalPaid,
+          projectedTotal: monthlyCommission * 12,
+          remainingMonths: 12 - monthsPassed,
+          appliedBonuses: campaigns?.map((c) => c.name) || [],
+          riskFactors: [],
+        }
+      })
+
+      setRecurrences(processedRecurrences)
+
+      const { data: withdrawals, error: withdrawalsError } = await supabase
+        .from("transaction_approvals")
+        .select(`
+          *,
+          user:profiles(full_name)
+        `)
+        .eq("type", "withdrawal")
+        .eq("status", "pending")
+
+      if (withdrawalsError) throw withdrawalsError
+
+      const processedImpacts: RecurrenceImpact[] = (withdrawals || []).map((withdrawal: any) => ({
+        type: "withdrawal" as const,
+        description: `Resgate pendente - ${withdrawal.user?.full_name || "Usuário"}`,
+        impactDate: withdrawal.created_at,
+        monthlyImpact: -(withdrawal.amount * 0.03),
+        totalImpact: -(withdrawal.amount * 0.03 * 12),
+        affectedRecurrences: 1,
+      }))
+
+      setImpacts(processedImpacts)
+    } catch (error) {
+      console.error("Erro ao buscar dados de recorrência:", error)
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Não foi possível carregar os dados de recorrência.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchRecurrenceData()
+  }, [])
+
   const totalActiveRecurrences = recurrences.filter((r) => r.status === "active").length
   const totalMonthlyCommissions = recurrences
     .filter((r) => r.status === "active")
@@ -155,9 +200,8 @@ export function RecurrenceCalculator() {
       const date = new Date()
       date.setMonth(date.getMonth() + month)
 
-      // Simular variações de bônus ao longo do tempo
       let currentBonusRate = recurrence.bonusRate
-      if (month > 3) currentBonusRate = Math.max(0, currentBonusRate - 0.1) // Alguns bônus expiram
+      if (month > 3) currentBonusRate = Math.max(0, currentBonusRate - 0.1)
 
       const monthlyCommission = (recurrence.investmentAmount * (recurrence.baseCommissionRate + currentBonusRate)) / 100
       const advisorCommission = monthlyCommission * 0.7
@@ -167,7 +211,6 @@ export function RecurrenceCalculator() {
       cumulativeOffice += officeCommission
       cumulativeTotal += monthlyCommission
 
-      // Determinar nível de risco baseado em fatores
       let riskLevel: "low" | "medium" | "high" = "low"
       if (recurrence.riskFactors.length > 0) riskLevel = "medium"
       if (recurrence.riskFactors.length > 2) riskLevel = "high"
@@ -196,10 +239,10 @@ export function RecurrenceCalculator() {
   }
 
   const recalculateAll = () => {
-    // Simular recálculo de todas as recorrências
+    fetchRecurrenceData()
     toast({
       title: "Recálculo realizado!",
-      description: "Todas as projeções foram atualizadas com as campanhas e bônus atuais.",
+      description: "Todas as projeções foram atualizadas com os dados mais recentes.",
     })
   }
 
@@ -246,6 +289,15 @@ export function RecurrenceCalculator() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="ml-2">Carregando dados de recorrência...</span>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -262,7 +314,6 @@ export function RecurrenceCalculator() {
         </Button>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -323,82 +374,91 @@ export function RecurrenceCalculator() {
               <CardDescription>Monitore todas as comissões recorrentes ativas e suas projeções</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Investidor</TableHead>
-                    <TableHead>Assessor/Escritório</TableHead>
-                    <TableHead>Investimento</TableHead>
-                    <TableHead>Taxa Total</TableHead>
-                    <TableHead>Comissão Mensal</TableHead>
-                    <TableHead>Divisão (70/30)</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recurrences.map((recurrence) => (
-                    <TableRow key={recurrence.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{recurrence.investorName}</p>
-                          <p className="text-sm text-muted-foreground">{recurrence.investorEmail}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{recurrence.advisorName}</p>
-                          <p className="text-sm text-muted-foreground">{recurrence.officeName}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium">{formatCurrency(recurrence.investmentAmount)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Desde {new Date(recurrence.startDate).toLocaleDateString("pt-BR")}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{recurrence.totalCommissionRate.toFixed(1)}%</p>
-                          <p className="text-sm text-muted-foreground">
-                            Base: {recurrence.baseCommissionRate}% + Bônus: {recurrence.bonusRate}%
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium">{formatCurrency(recurrence.monthlyCommission)}</p>
-                        <p className="text-sm text-muted-foreground">Pago: {formatCurrency(recurrence.totalPaid)}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="text-sm">
-                            <span className="text-emerald-600">{formatCurrency(recurrence.advisorShare)}</span>
-                          </p>
-                          <p className="text-sm">
-                            <span className="text-orange-600">{formatCurrency(recurrence.officeShare)}</span>
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusColor(recurrence.status)}>{getStatusLabel(recurrence.status)}</Badge>
-                        {recurrence.riskFactors.length > 0 && (
-                          <div className="mt-1">
-                            <Badge variant="outline" className="text-xs">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              {recurrence.riskFactors.length} alertas
-                            </Badge>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => handleViewProjection(recurrence)}>
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
+              {recurrences.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Nenhuma recorrência ativa encontrada.</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    As recorrências aparecerão aqui quando houver investimentos ativos na plataforma.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Investidor</TableHead>
+                      <TableHead>Assessor/Escritório</TableHead>
+                      <TableHead>Investimento</TableHead>
+                      <TableHead>Taxa Total</TableHead>
+                      <TableHead>Comissão Mensal</TableHead>
+                      <TableHead>Divisão (70/30)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {recurrences.map((recurrence) => (
+                      <TableRow key={recurrence.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{recurrence.investorName}</p>
+                            <p className="text-sm text-muted-foreground">{recurrence.investorEmail}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{recurrence.advisorName}</p>
+                            <p className="text-sm text-muted-foreground">{recurrence.officeName}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium">{formatCurrency(recurrence.investmentAmount)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Desde {new Date(recurrence.startDate).toLocaleDateString("pt-BR")}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{recurrence.totalCommissionRate.toFixed(1)}%</p>
+                            <p className="text-sm text-muted-foreground">
+                              Base: {recurrence.baseCommissionRate}% + Bônus: {recurrence.bonusRate}%
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium">{formatCurrency(recurrence.monthlyCommission)}</p>
+                          <p className="text-sm text-muted-foreground">Pago: {formatCurrency(recurrence.totalPaid)}</p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="text-sm">
+                              <span className="text-emerald-600">{formatCurrency(recurrence.advisorShare)}</span>
+                            </p>
+                            <p className="text-sm">
+                              <span className="text-orange-600">{formatCurrency(recurrence.officeShare)}</span>
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusColor(recurrence.status)}>{getStatusLabel(recurrence.status)}</Badge>
+                          {recurrence.riskFactors.length > 0 && (
+                            <div className="mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                {recurrence.riskFactors.length} alertas
+                              </Badge>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => handleViewProjection(recurrence)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -410,48 +470,59 @@ export function RecurrenceCalculator() {
               <CardDescription>Eventos que afetarão as comissões recorrentes nos próximos meses</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {impacts.map((impact, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-3 h-3 rounded-full ${
-                            impact.type === "withdrawal"
-                              ? "bg-red-500"
-                              : impact.type === "bonus_expiry"
-                                ? "bg-yellow-500"
-                                : impact.type === "campaign_end"
-                                  ? "bg-orange-500"
-                                  : "bg-blue-500"
-                          }`}
-                        ></div>
-                        <h3 className="font-semibold">{impact.description}</h3>
+              {impacts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Nenhum impacto futuro identificado.</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Impactos como resgates pendentes e campanhas expirando aparecerão aqui.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {impacts.map((impact, index) => (
+                    <div key={index} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-3 h-3 rounded-full ${
+                              impact.type === "withdrawal"
+                                ? "bg-red-500"
+                                : impact.type === "bonus_expiry"
+                                  ? "bg-yellow-500"
+                                  : impact.type === "campaign_end"
+                                    ? "bg-orange-500"
+                                    : "bg-blue-500"
+                            }`}
+                          ></div>
+                          <h3 className="font-semibold">{impact.description}</h3>
+                        </div>
+                        <Badge variant="outline">{new Date(impact.impactDate).toLocaleDateString("pt-BR")}</Badge>
                       </div>
-                      <Badge variant="outline">{new Date(impact.impactDate).toLocaleDateString("pt-BR")}</Badge>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Impacto Mensal</p>
-                        <p className={`font-medium ${impact.monthlyImpact < 0 ? "text-red-600" : "text-emerald-600"}`}>
-                          {formatCurrency(impact.monthlyImpact)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Impacto Total</p>
-                        <p className={`font-medium ${impact.totalImpact < 0 ? "text-red-600" : "text-emerald-600"}`}>
-                          {formatCurrency(impact.totalImpact)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Recorrências Afetadas</p>
-                        <p className="font-medium">{impact.affectedRecurrences}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Impacto Mensal</p>
+                          <p
+                            className={`font-medium ${impact.monthlyImpact < 0 ? "text-red-600" : "text-emerald-600"}`}
+                          >
+                            {formatCurrency(impact.monthlyImpact)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Impacto Total</p>
+                          <p className={`font-medium ${impact.totalImpact < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                            {formatCurrency(impact.totalImpact)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Recorrências Afetadas</p>
+                          <p className="font-medium">{impact.affectedRecurrences}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -519,7 +590,6 @@ export function RecurrenceCalculator() {
         </TabsContent>
       </Tabs>
 
-      {/* Projection Dialog */}
       <Dialog open={isProjectionOpen} onOpenChange={setIsProjectionOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
