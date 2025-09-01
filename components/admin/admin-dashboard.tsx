@@ -15,11 +15,12 @@ import { HierarchyManager } from "./hierarchy-manager"
 import { RecurrenceCalculator } from "./recurrence-calculator"
 import { NotificationSystem } from "./notification-system"
 import AkintecManager from "./akintec-manager"
+import { createClient } from "@/lib/supabase/client"
 
 interface UserData {
   name: string
   email: string
-  type: string
+  user_type: string
 }
 
 interface PlatformStats {
@@ -34,24 +35,95 @@ interface PlatformStats {
 
 export function AdminDashboard() {
   const [user, setUser] = useState<UserData | null>(null)
-  const [stats] = useState<PlatformStats>({
-    totalUsers: 1247,
-    totalInvestors: 892,
-    totalDistributors: 355,
-    totalInvested: 15750000,
-    monthlyRevenue: 472500,
-    activePromotions: 5,
-    pendingApprovals: 12,
+  const [stats, setStats] = useState<PlatformStats>({
+    totalUsers: 0,
+    totalInvestors: 0,
+    totalDistributors: 0,
+    totalInvested: 0,
+    monthlyRevenue: 0,
+    activePromotions: 0,
+    pendingApprovals: 0,
   })
+  const [loading, setLoading] = useState(true)
+
+  const fetchPlatformStats = async () => {
+    try {
+      const supabase = createClient()
+
+      const { data: profiles, error: profilesError } = await supabase.from("profiles").select("user_type")
+
+      if (profilesError) {
+        console.error("Erro ao buscar profiles:", profilesError)
+        return
+      }
+
+      const totalUsers = profiles?.length || 0
+      const totalInvestors = profiles?.filter((p) => p.user_type === "investor").length || 0
+      const totalDistributors =
+        profiles?.filter((p) => ["distributor", "assessor", "lider", "gestor", "escritorio"].includes(p.user_type))
+          .length || 0
+
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select("amount")
+        .eq("status", "active")
+
+      if (investmentsError) {
+        console.error("Erro ao buscar investimentos:", investmentsError)
+      }
+
+      const totalInvested = investments?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0
+
+      const monthlyRevenue = totalInvested * 0.02
+
+      const { data: campaigns, error: campaignsError } = await supabase
+        .from("promotional_campaigns")
+        .select("id")
+        .eq("is_active", true)
+
+      if (campaignsError) {
+        console.error("Erro ao buscar campanhas:", campaignsError)
+      }
+
+      const activePromotions = campaigns?.length || 0
+
+      const { data: approvals, error: approvalsError } = await supabase
+        .from("transaction_approvals")
+        .select("id")
+        .eq("status", "pending")
+
+      if (approvalsError) {
+        console.error("Erro ao buscar aprovações:", approvalsError)
+      }
+
+      const pendingApprovals = approvals?.length || 0
+
+      setStats({
+        totalUsers,
+        totalInvestors,
+        totalDistributors,
+        totalInvested,
+        monthlyRevenue,
+        activePromotions,
+        pendingApprovals,
+      })
+    } catch (error) {
+      console.error("Erro ao buscar estatísticas:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     const userStr = localStorage.getItem("user")
     if (userStr) {
       setUser(JSON.parse(userStr))
     }
+
+    fetchPlatformStats()
   }, [])
 
-  if (!user || user.type !== "admin") {
+  if (!user || user.user_type !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md">
@@ -70,6 +142,16 @@ export function AdminDashboard() {
       style: "currency",
       currency: "BRL",
     }).format(value)
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <p>Carregando dados...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -110,7 +192,7 @@ export function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalInvested)}</div>
-            <p className="text-xs text-muted-foreground">+12.5% vs mês anterior</p>
+            <p className="text-xs text-muted-foreground">Valor total em investimentos ativos</p>
           </CardContent>
         </Card>
 
@@ -132,7 +214,7 @@ export function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.pendingApprovals}</div>
-            <p className="text-xs text-muted-foreground">Resgates para aprovar</p>
+            <p className="text-xs text-muted-foreground">Transações para aprovar</p>
           </CardContent>
         </Card>
       </div>

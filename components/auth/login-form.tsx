@@ -35,16 +35,19 @@ export function LoginForm() {
       const normalizedPassword = password.trim()
 
       console.log("[v0] Normalized email:", normalizedEmail)
-      console.log("[v0] Checking demo credentials...")
+      console.log("[v0] Normalized password:", normalizedPassword)
+      console.log("[v0] Available demo emails:", Object.keys(demoCredentials))
 
-      // Verificar se é uma credencial de demonstração
-      const demoUser = Object.entries(demoCredentials).find(
-        ([demoEmail]) => demoEmail.toLowerCase() === normalizedEmail,
+      const isDemoCredential = Object.keys(demoCredentials).some(
+        (demoEmail) => demoEmail.toLowerCase() === normalizedEmail,
       )
 
-      if (demoUser && normalizedPassword === "demo123") {
+      console.log("[v0] Is demo credential:", isDemoCredential)
+      console.log("[v0] Password matches demo123:", normalizedPassword === "demo123")
+
+      if (isDemoCredential && normalizedPassword === "demo123") {
         console.log("[v0] Demo credentials matched!")
-        const [, userInfo] = demoUser
+        const userInfo = demoCredentials[normalizedEmail as keyof typeof demoCredentials]
 
         // Salvar dados do usuário no localStorage para compatibilidade
         const userData = {
@@ -76,27 +79,88 @@ export function LoginForm() {
         return
       }
 
-      console.log("[v0] Not demo credentials, trying Supabase...")
+      console.log("[v0] Attempting Supabase authentication...")
 
-      // Só tentar Supabase se não for credencial de demonstração
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      console.log("[v0] Supabase URL configured:", !!supabaseUrl)
+      console.log("[v0] Supabase Key configured:", !!supabaseKey)
+
+      if (!supabaseUrl || !supabaseKey) {
+        console.log("[v0] Supabase not configured, falling back to demo only")
+        toast({
+          title: "Erro no login",
+          description: "Credenciais inválidas. Para demonstração, use: admin@akintec.com / demo123",
+          variant: "destructive",
+        })
+        return
+      }
+
+      console.log("[v0] Creating Supabase client...")
       const { createClient } = await import("@/lib/supabase/client")
       const supabase = createClient()
 
+      console.log("[v0] Attempting Supabase signInWithPassword...")
       // Tentar autenticação real do Supabase
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password: normalizedPassword,
       })
 
-      if (authError) throw authError
+      if (authError) {
+        console.log("[v0] Supabase auth error:", authError.message)
 
+        // Fornecer feedback mais específico baseado no tipo de erro
+        let errorMessage = "Credenciais inválidas."
+
+        if (authError.message.includes("Invalid login credentials")) {
+          errorMessage =
+            "Email ou senha incorretos. Verifique suas credenciais ou confirme seu email se ainda não o fez."
+        } else if (authError.message.includes("Email not confirmed")) {
+          errorMessage = "Email não confirmado. Verifique sua caixa de entrada e clique no link de confirmação."
+        } else if (authError.message.includes("Too many requests")) {
+          errorMessage = "Muitas tentativas de login. Aguarde alguns minutos antes de tentar novamente."
+        }
+
+        toast({
+          title: "Erro no login",
+          description: errorMessage + " Para demonstração, use: admin@akintec.com / demo123",
+          variant: "destructive",
+        })
+        return
+      }
+
+      console.log("[v0] Supabase auth successful, fetching profile...")
+      // Buscar perfil do usuário
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", authData.user.id)
         .single()
 
-      if (profileError) throw profileError
+      if (profileError) {
+        console.log("[v0] Profile fetch error:", profileError.message)
+        toast({
+          title: "Erro no login",
+          description: "Erro ao carregar perfil do usuário. Tente novamente.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      console.log("[v0] Profile fetched successfully:", profile)
+      const userData = {
+        id: authData.user.id,
+        email: profile.email,
+        name: profile.name,
+        user_type: profile.user_type,
+        office_id: profile.office_id || null,
+        role: profile.role || null,
+      }
+
+      console.log("[v0] Saving Supabase user data:", userData)
+      localStorage.setItem("user", JSON.stringify(userData))
 
       toast({
         title: "Login realizado com sucesso!",
@@ -111,13 +175,13 @@ export function LoginForm() {
         redirectPath = "/admin"
       }
 
+      console.log("[v0] Redirecting to:", redirectPath)
       router.push(redirectPath)
     } catch (error: any) {
       console.error("[v0] Login error:", error)
       toast({
         title: "Erro no login",
-        description:
-          "Credenciais inválidas. Use: investidor@akintec.com / demo123 ou distributor@akintec.com / demo123",
+        description: "Erro inesperado. Para demonstração, use: admin@akintec.com / demo123",
         variant: "destructive",
       })
     } finally {
