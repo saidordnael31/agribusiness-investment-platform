@@ -33,6 +33,15 @@ interface PlatformStats {
   pendingApprovals: number
 }
 
+interface RecentActivity {
+  id: string
+  type: "investment" | "withdrawal" | "goal_achieved"
+  title: string
+  description: string
+  timestamp: string
+  color: string
+}
+
 export function AdminDashboard() {
   const [user, setUser] = useState<UserData | null>(null)
   const [stats, setStats] = useState<PlatformStats>({
@@ -44,7 +53,99 @@ export function AdminDashboard() {
     activePromotions: 0,
     pendingApprovals: 0,
   })
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
+
+  const fetchRecentActivities = async () => {
+    try {
+      const supabase = createClient()
+      const activities: RecentActivity[] = []
+
+      // Buscar investimentos recentes
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select(`
+          id,
+          amount,
+          created_at,
+          profiles!inner(full_name)
+        `)
+        .order("created_at", { ascending: false })
+        .limit(5)
+
+      if (!investmentsError && investments) {
+        investments.forEach((inv) => {
+          activities.push({
+            id: `inv-${inv.id}`,
+            type: "investment",
+            title: `Novo investimento de ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
+            description: `${inv.profiles?.full_name || "Usuário"} - Investimento realizado`,
+            timestamp: new Date(inv.created_at).toLocaleString("pt-BR"),
+            color: "bg-emerald-500",
+          })
+        })
+      }
+
+      // Buscar resgates recentes
+      const { data: withdrawals, error: withdrawalsError } = await supabase
+        .from("transaction_approvals")
+        .select(`
+          id,
+          amount,
+          status,
+          created_at,
+          profiles!inner(full_name)
+        `)
+        .eq("transaction_type", "withdrawal")
+        .order("created_at", { ascending: false })
+        .limit(5)
+
+      if (!withdrawalsError && withdrawals) {
+        withdrawals.forEach((withdrawal) => {
+          activities.push({
+            id: `with-${withdrawal.id}`,
+            type: "withdrawal",
+            title: `Resgate solicitado - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(withdrawal.amount)}`,
+            description: `${withdrawal.profiles?.full_name || "Usuário"} - ${withdrawal.status === "pending" ? "Aguardando aprovação" : "Processado"}`,
+            timestamp: new Date(withdrawal.created_at).toLocaleString("pt-BR"),
+            color: "bg-blue-500",
+          })
+        })
+      }
+
+      // Buscar metas atingidas recentes
+      const { data: goals, error: goalsError } = await supabase
+        .from("performance_goals")
+        .select(`
+          id,
+          target_amount,
+          achieved_at,
+          profiles!inner(full_name)
+        `)
+        .not("achieved_at", "is", null)
+        .order("achieved_at", { ascending: false })
+        .limit(3)
+
+      if (!goalsError && goals) {
+        goals.forEach((goal) => {
+          activities.push({
+            id: `goal-${goal.id}`,
+            type: "goal_achieved",
+            title: "Meta atingida por distribuidor",
+            description: `${goal.profiles?.full_name || "Usuário"} - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(goal.target_amount)} captados`,
+            timestamp: new Date(goal.achieved_at).toLocaleString("pt-BR"),
+            color: "bg-purple-500",
+          })
+        })
+      }
+
+      // Ordenar por timestamp e pegar apenas os 5 mais recentes
+      activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      setRecentActivities(activities.slice(0, 5))
+    } catch (error) {
+      console.error("Erro ao buscar atividades recentes:", error)
+    }
+  }
 
   const fetchPlatformStats = async () => {
     try {
@@ -121,6 +222,7 @@ export function AdminDashboard() {
     }
 
     fetchPlatformStats()
+    fetchRecentActivities()
   }, [])
 
   if (!user || user.user_type !== "admin") {
@@ -305,38 +407,26 @@ export function AdminDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                    <div>
-                      <p className="font-medium">Novo investimento de R$ 250.000</p>
-                      <p className="text-sm text-muted-foreground">João Silva - Cota Subordinada</p>
+              {recentActivities.length > 0 ? (
+                <div className="space-y-4">
+                  {recentActivities.map((activity) => (
+                    <div key={activity.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 ${activity.color} rounded-full`}></div>
+                        <div>
+                          <p className="font-medium">{activity.title}</p>
+                          <p className="text-sm text-muted-foreground">{activity.description}</p>
+                        </div>
+                      </div>
+                      <span className="text-sm text-muted-foreground">{activity.timestamp}</span>
                     </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">2 min atrás</span>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <div>
-                      <p className="font-medium">Resgate solicitado - R$ 50.000</p>
-                      <p className="text-sm text-muted-foreground">Maria Santos - Aguardando aprovação</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">15 min atrás</span>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Nenhuma atividade recente encontrada</p>
                 </div>
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <div>
-                      <p className="font-medium">Meta atingida por distribuidor</p>
-                      <p className="text-sm text-muted-foreground">Carlos Oliveira - R$ 500K captados</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">1 hora atrás</span>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
