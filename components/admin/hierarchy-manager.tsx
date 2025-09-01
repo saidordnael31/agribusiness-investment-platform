@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +19,7 @@ import {
   Calendar,
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 
 interface Office {
   id: string
@@ -60,92 +61,155 @@ interface CommissionFlow {
 }
 
 export function HierarchyManager() {
-  const [offices, setOffices] = useState<Office[]>([
-    {
-      id: "1",
-      name: "Escritório Alpha Investimentos",
-      email: "contato@alphainvest.com",
-      totalAdvisors: 12,
-      totalClients: 89,
-      totalInvested: 4500000,
-      monthlyCommission: 135000,
-      status: "active",
-      createdAt: "2024-01-15",
-    },
-    {
-      id: "2",
-      name: "Beta Capital Partners",
-      email: "admin@betacapital.com",
-      totalAdvisors: 8,
-      totalClients: 56,
-      totalInvested: 2800000,
-      monthlyCommission: 84000,
-      status: "active",
-      createdAt: "2024-02-10",
-    },
-  ])
-
-  const [advisors, setAdvisors] = useState<Advisor[]>([
-    {
-      id: "1",
-      name: "Carlos Silva",
-      email: "carlos@alphainvest.com",
-      officeId: "1",
-      officeName: "Escritório Alpha Investimentos",
-      totalClients: 25,
-      totalInvested: 1200000,
-      monthlyCommission: 36000,
-      status: "active",
-      createdAt: "2024-01-20",
-    },
-    {
-      id: "2",
-      name: "Ana Santos",
-      email: "ana@alphainvest.com",
-      officeId: "1",
-      officeName: "Escritório Alpha Investimentos",
-      totalClients: 18,
-      totalInvested: 950000,
-      monthlyCommission: 28500,
-      status: "active",
-      createdAt: "2024-02-05",
-    },
-  ])
-
-  const [commissionFlows, setCommissionFlows] = useState<CommissionFlow[]>([
-    {
-      id: "1",
-      investorName: "João Oliveira",
-      advisorName: "Carlos Silva",
-      officeName: "Escritório Alpha Investimentos",
-      investmentAmount: 100000,
-      monthlyCommission: 3000,
-      advisorShare: 2100,
-      officeShare: 900,
-      status: "active",
-      startDate: "2024-01-15",
-    },
-    {
-      id: "2",
-      investorName: "Maria Costa",
-      advisorName: "Ana Santos",
-      officeName: "Escritório Alpha Investimentos",
-      investmentAmount: 250000,
-      monthlyCommission: 7500,
-      advisorShare: 5250,
-      officeShare: 2250,
-      status: "active",
-      startDate: "2024-02-01",
-    },
-  ])
+  const [offices, setOffices] = useState<Office[]>([])
+  const [advisors, setAdvisors] = useState<Advisor[]>([])
+  const [commissionFlows, setCommissionFlows] = useState<CommissionFlow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedOffice, setSelectedOffice] = useState<string>("all")
+
+  const fetchHierarchyData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const supabase = createClient()
+
+      // Buscar escritórios (usuários com user_type = 'escritorio')
+      const { data: officesData, error: officesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_type", "escritorio")
+
+      if (officesError) throw officesError
+
+      // Buscar assessores (usuários com user_type = 'assessor')
+      const { data: advisorsData, error: advisorsError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_type", "assessor")
+
+      if (advisorsError) throw advisorsError
+
+      // Buscar investimentos para calcular comissões
+      const { data: investmentsData, error: investmentsError } = await supabase.from("investments").select("*")
+
+      if (investmentsError) throw investmentsError
+
+      // Processar dados dos escritórios
+      const processedOffices: Office[] = (officesData || []).map((office) => {
+        const officeAdvisors = (advisorsData || []).filter((advisor) => advisor.office_id === office.id)
+        const officeInvestments = (investmentsData || []).filter((inv) =>
+          officeAdvisors.some((advisor) => advisor.id === inv.advisor_id),
+        )
+
+        const totalInvested = officeInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
+        const monthlyCommission = totalInvested * 0.03 * 0.3 // 3% ao mês, 30% para escritório
+
+        return {
+          id: office.id,
+          name: office.full_name || "Escritório sem nome",
+          email: office.email || "",
+          totalAdvisors: officeAdvisors.length,
+          totalClients: officeInvestments.length,
+          totalInvested,
+          monthlyCommission,
+          status: office.status === "approved" ? "active" : "inactive",
+          createdAt: office.created_at || new Date().toISOString(),
+        }
+      })
+
+      // Processar dados dos assessores
+      const processedAdvisors: Advisor[] = (advisorsData || []).map((advisor) => {
+        const advisorInvestments = (investmentsData || []).filter((inv) => inv.advisor_id === advisor.id)
+        const office = officesData?.find((o) => o.id === advisor.office_id)
+
+        const totalInvested = advisorInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
+        const monthlyCommission = totalInvested * 0.03 * 0.7 // 3% ao mês, 70% para assessor
+
+        return {
+          id: advisor.id,
+          name: advisor.full_name || "Assessor sem nome",
+          email: advisor.email || "",
+          officeId: advisor.office_id || "",
+          officeName: office?.full_name || "Escritório não encontrado",
+          totalClients: advisorInvestments.length,
+          totalInvested,
+          monthlyCommission,
+          status: advisor.status === "approved" ? "active" : "inactive",
+          createdAt: advisor.created_at || new Date().toISOString(),
+        }
+      })
+
+      // Processar fluxos de comissão
+      const processedFlows: CommissionFlow[] = (investmentsData || []).map((investment) => {
+        const advisor = advisorsData?.find((a) => a.id === investment.advisor_id)
+        const office = officesData?.find((o) => o.id === advisor?.office_id)
+        const monthlyCommission = (investment.amount || 0) * 0.03
+
+        return {
+          id: investment.id,
+          investorName: investment.investor_name || "Investidor",
+          advisorName: advisor?.full_name || "Assessor não encontrado",
+          officeName: office?.full_name || "Escritório não encontrado",
+          investmentAmount: investment.amount || 0,
+          monthlyCommission,
+          advisorShare: monthlyCommission * 0.7,
+          officeShare: monthlyCommission * 0.3,
+          status: investment.status === "active" ? "active" : "paused",
+          startDate: investment.created_at || new Date().toISOString(),
+        }
+      })
+
+      setOffices(processedOffices)
+      setAdvisors(processedAdvisors)
+      setCommissionFlows(processedFlows)
+    } catch (err) {
+      console.error("Erro ao buscar dados da hierarquia:", err)
+      setError("Erro ao carregar dados da hierarquia")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchHierarchyData()
+  }, [])
 
   const totalOffices = offices.length
   const totalAdvisors = advisors.length
   const totalCommissionFlow = commissionFlows.reduce((sum, flow) => sum + flow.monthlyCommission, 0)
   const activeFlows = commissionFlows.filter((flow) => flow.status === "active").length
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Carregando dados da hierarquia...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+            <p className="text-red-600 mb-2">{error}</p>
+            <Button onClick={fetchHierarchyData} variant="outline">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -234,45 +298,52 @@ export function HierarchyManager() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {offices.map((office) => (
-                  <div key={office.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-6 h-6 text-orange-600" />
+              {offices.length === 0 ? (
+                <div className="text-center py-8">
+                  <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhum escritório cadastrado ainda</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {offices.map((office) => (
+                    <div key={office.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                          <Building2 className="w-6 h-6 text-orange-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold">{office.name}</h3>
+                          <p className="text-sm text-muted-foreground">{office.email}</p>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="text-xs text-muted-foreground">{office.totalAdvisors} assessores</span>
+                            <span className="text-xs text-muted-foreground">{office.totalClients} clientes</span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatCurrency(office.totalInvested)} investidos
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-semibold">{office.name}</h3>
-                        <p className="text-sm text-muted-foreground">{office.email}</p>
-                        <div className="flex items-center gap-4 mt-1">
-                          <span className="text-xs text-muted-foreground">{office.totalAdvisors} assessores</span>
-                          <span className="text-xs text-muted-foreground">{office.totalClients} clientes</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatCurrency(office.totalInvested)} investidos
-                          </span>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(office.monthlyCommission)}</p>
+                          <p className="text-xs text-muted-foreground">Comissão mensal</p>
+                        </div>
+                        <Badge variant={office.status === "active" ? "default" : "secondary"}>
+                          {office.status === "active" ? "Ativo" : "Inativo"}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-semibold">{formatCurrency(office.monthlyCommission)}</p>
-                        <p className="text-xs text-muted-foreground">Comissão mensal</p>
-                      </div>
-                      <Badge variant={office.status === "active" ? "default" : "secondary"}>
-                        {office.status === "active" ? "Ativo" : "Inativo"}
-                      </Badge>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -306,45 +377,52 @@ export function HierarchyManager() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {advisors.map((advisor) => (
-                  <div key={advisor.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Users className="w-6 h-6 text-blue-600" />
+              {advisors.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhum assessor cadastrado ainda</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {advisors.map((advisor) => (
+                    <div key={advisor.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Users className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold">{advisor.name}</h3>
+                          <p className="text-sm text-muted-foreground">{advisor.email}</p>
+                          <p className="text-xs text-orange-600">{advisor.officeName}</p>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="text-xs text-muted-foreground">{advisor.totalClients} clientes</span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatCurrency(advisor.totalInvested)} investidos
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-semibold">{advisor.name}</h3>
-                        <p className="text-sm text-muted-foreground">{advisor.email}</p>
-                        <p className="text-xs text-orange-600">{advisor.officeName}</p>
-                        <div className="flex items-center gap-4 mt-1">
-                          <span className="text-xs text-muted-foreground">{advisor.totalClients} clientes</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatCurrency(advisor.totalInvested)} investidos
-                          </span>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(advisor.monthlyCommission)}</p>
+                          <p className="text-xs text-muted-foreground">Comissão mensal</p>
+                        </div>
+                        <Badge variant={advisor.status === "active" ? "default" : "secondary"}>
+                          {advisor.status === "active" ? "Ativo" : "Inativo"}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-semibold">{formatCurrency(advisor.monthlyCommission)}</p>
-                        <p className="text-xs text-muted-foreground">Comissão mensal</p>
-                      </div>
-                      <Badge variant={advisor.status === "active" ? "default" : "secondary"}>
-                        {advisor.status === "active" ? "Ativo" : "Inativo"}
-                      </Badge>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -358,57 +436,64 @@ export function HierarchyManager() {
               </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {commissionFlows.map((flow) => (
-                  <div key={flow.id} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-                        <h3 className="font-semibold">{flow.investorName}</h3>
-                        <Badge variant={flow.status === "active" ? "default" : "secondary"}>
-                          {flow.status === "active" ? "Ativo" : flow.status === "paused" ? "Pausado" : "Cancelado"}
-                        </Badge>
+              {commissionFlows.length === 0 ? (
+                <div className="text-center py-8">
+                  <DollarSign className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhum fluxo de comissão ativo</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {commissionFlows.map((flow) => (
+                    <div key={flow.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                          <h3 className="font-semibold">{flow.investorName}</h3>
+                          <Badge variant={flow.status === "active" ? "default" : "secondary"}>
+                            {flow.status === "active" ? "Ativo" : flow.status === "paused" ? "Pausado" : "Cancelado"}
+                          </Badge>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(flow.monthlyCommission)}</p>
+                          <p className="text-xs text-muted-foreground">Comissão mensal total</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{formatCurrency(flow.monthlyCommission)}</p>
-                        <p className="text-xs text-muted-foreground">Comissão mensal total</p>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Investimento</p>
-                        <p className="font-medium">{formatCurrency(flow.investmentAmount)}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Investimento</p>
+                          <p className="font-medium">{formatCurrency(flow.investmentAmount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Assessor (70%)</p>
+                          <p className="font-medium">{flow.advisorName}</p>
+                          <p className="text-emerald-600">{formatCurrency(flow.advisorShare)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Escritório (30%)</p>
+                          <p className="font-medium">{flow.officeName}</p>
+                          <p className="text-orange-600">{formatCurrency(flow.officeShare)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-muted-foreground">Assessor (70%)</p>
-                        <p className="font-medium">{flow.advisorName}</p>
-                        <p className="text-emerald-600">{formatCurrency(flow.advisorShare)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Escritório (30%)</p>
-                        <p className="font-medium">{flow.officeName}</p>
-                        <p className="text-orange-600">{formatCurrency(flow.officeShare)}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="w-3 h-3" />
-                        Início: {new Date(flow.startDate).toLocaleDateString("pt-BR")}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <AlertTriangle className="w-4 h-4" />
-                        </Button>
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Calendar className="w-3 h-3" />
+                          Início: {new Date(flow.startDate).toLocaleDateString("pt-BR")}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <AlertTriangle className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -420,55 +505,62 @@ export function HierarchyManager() {
               <p className="text-sm text-muted-foreground">Estrutura organizacional e fluxo de comissões</p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
-                {offices.map((office) => (
-                  <div key={office.id} className="border rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                          <Building2 className="w-6 h-6 text-orange-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-lg">{office.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {office.totalAdvisors} assessores • {formatCurrency(office.monthlyCommission)}/mês
-                          </p>
+              {offices.length === 0 ? (
+                <div className="text-center py-8">
+                  <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhuma estrutura hierárquica disponível</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {offices.map((office) => (
+                    <div key={office.id} className="border rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <Building2 className="w-6 h-6 text-orange-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">{office.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {office.totalAdvisors} assessores • {formatCurrency(office.monthlyCommission)}/mês
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {advisors
-                        .filter((advisor) => advisor.officeId === office.id)
-                        .map((advisor) => (
-                          <div key={advisor.id} className="border rounded-lg p-4 bg-gray-50">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <Users className="w-4 h-4 text-blue-600" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {advisors
+                          .filter((advisor) => advisor.officeId === office.id)
+                          .map((advisor) => (
+                            <div key={advisor.id} className="border rounded-lg p-4 bg-gray-50">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                  <Users className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <h4 className="font-medium">{advisor.name}</h4>
+                                  <p className="text-xs text-muted-foreground">{advisor.totalClients} clientes</p>
+                                </div>
                               </div>
-                              <div>
-                                <h4 className="font-medium">{advisor.name}</h4>
-                                <p className="text-xs text-muted-foreground">{advisor.totalClients} clientes</p>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Investido:</span>
+                                  <span className="font-medium">{formatCurrency(advisor.totalInvested)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Comissão:</span>
+                                  <span className="font-medium text-emerald-600">
+                                    {formatCurrency(advisor.monthlyCommission)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Investido:</span>
-                                <span className="font-medium">{formatCurrency(advisor.totalInvested)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Comissão:</span>
-                                <span className="font-medium text-emerald-600">
-                                  {formatCurrency(advisor.monthlyCommission)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
