@@ -1,19 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Search, Filter, UserCheck, UserX, DollarSign } from "lucide-react"
+import { Users, Search, Filter, UserCheck, UserX, DollarSign, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 interface User {
   id: string
   name: string
   email: string
-  type: "investor" | "distributor"
+  type: "investor" | "distributor" | "assessor" | "gestor" | "escritorio"
   status: "active" | "inactive" | "pending"
   totalInvested?: number
   totalCaptured?: number
@@ -23,61 +24,64 @@ interface User {
 
 export function UserManager() {
   const { toast } = useToast()
-  const [users] = useState<User[]>([
-    {
-      id: "1",
-      name: "João Silva",
-      email: "joao@email.com",
-      type: "investor",
-      status: "active",
-      totalInvested: 250000,
-      joinedAt: "2024-01-15",
-      lastActivity: "2025-01-20",
-    },
-    {
-      id: "2",
-      name: "Maria Santos",
-      email: "maria@email.com",
-      type: "investor",
-      status: "active",
-      totalInvested: 150000,
-      joinedAt: "2024-02-10",
-      lastActivity: "2025-01-19",
-    },
-    {
-      id: "3",
-      name: "Carlos Oliveira",
-      email: "carlos@email.com",
-      type: "distributor",
-      status: "active",
-      totalCaptured: 750000,
-      joinedAt: "2024-01-20",
-      lastActivity: "2025-01-20",
-    },
-    {
-      id: "4",
-      name: "Ana Costa",
-      email: "ana@email.com",
-      type: "distributor",
-      status: "active",
-      totalCaptured: 450000,
-      joinedAt: "2024-03-05",
-      lastActivity: "2025-01-18",
-    },
-    {
-      id: "5",
-      name: "Pedro Almeida",
-      email: "pedro@email.com",
-      type: "investor",
-      status: "pending",
-      joinedAt: "2025-01-18",
-      lastActivity: "2025-01-18",
-    },
-  ])
-
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterType, setFilterType] = useState<"all" | "investor" | "distributor">("all")
+  const [filterType, setFilterType] = useState<
+    "all" | "investor" | "distributor" | "assessor" | "gestor" | "escritorio"
+  >("all")
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive" | "pending">("all")
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+
+      // Buscar todos os perfis de usuários
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Erro ao buscar usuários:", error)
+        toast({
+          title: "Erro ao carregar usuários",
+          description: "Não foi possível carregar a lista de usuários.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Transformar dados do Supabase para o formato esperado
+      const transformedUsers: User[] = (profiles || []).map((profile) => ({
+        id: profile.id,
+        name: profile.full_name || profile.email.split("@")[0],
+        email: profile.email,
+        type: profile.user_type || "investor",
+        status: profile.status || "active",
+        totalInvested: profile.total_invested || 0,
+        totalCaptured: profile.total_captured || 0,
+        joinedAt: profile.created_at,
+        lastActivity: profile.updated_at || profile.created_at,
+      }))
+
+      setUsers(transformedUsers)
+    } catch (error) {
+      console.error("Erro ao buscar usuários:", error)
+      toast({
+        title: "Erro ao carregar usuários",
+        description: "Não foi possível carregar a lista de usuários.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -121,18 +125,83 @@ export function UserManager() {
     }
   }
 
-  const handleApproveUser = (userId: string) => {
-    toast({
-      title: "Usuário aprovado!",
-      description: "O usuário foi aprovado e pode acessar a plataforma.",
-    })
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case "investor":
+        return "Investidor"
+      case "distributor":
+        return "Distribuidor"
+      case "assessor":
+        return "Assessor"
+      case "gestor":
+        return "Gestor"
+      case "escritorio":
+        return "Escritório"
+      default:
+        return type
+    }
   }
 
-  const handleSuspendUser = (userId: string) => {
-    toast({
-      title: "Usuário suspenso!",
-      description: "O acesso do usuário foi suspenso.",
-    })
+  const handleApproveUser = async (userId: string) => {
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("profiles").update({ status: "active" }).eq("id", userId)
+
+      if (error) throw error
+
+      toast({
+        title: "Usuário aprovado!",
+        description: "O usuário foi aprovado e pode acessar a plataforma.",
+      })
+
+      // Recarregar lista
+      fetchUsers()
+    } catch (error) {
+      toast({
+        title: "Erro ao aprovar usuário",
+        description: "Não foi possível aprovar o usuário.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleSuspendUser = async (userId: string) => {
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("profiles").update({ status: "inactive" }).eq("id", userId)
+
+      if (error) throw error
+
+      toast({
+        title: "Usuário suspenso!",
+        description: "O acesso do usuário foi suspenso.",
+      })
+
+      // Recarregar lista
+      fetchUsers()
+    } catch (error) {
+      toast({
+        title: "Erro ao suspender usuário",
+        description: "Não foi possível suspender o usuário.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const totalUsers = users.length
+  const totalInvestors = users.filter((u) => u.type === "investor").length
+  const totalDistributors = users.filter((u) =>
+    ["distributor", "assessor", "gestor", "escritorio"].includes(u.type),
+  ).length
+  const totalPending = users.filter((u) => u.status === "pending").length
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="ml-2">Carregando usuários...</span>
+      </div>
+    )
   }
 
   return (
@@ -179,6 +248,9 @@ export function UserManager() {
                 <option value="all">Todos</option>
                 <option value="investor">Investidores</option>
                 <option value="distributor">Distribuidores</option>
+                <option value="assessor">Assessores</option>
+                <option value="gestor">Gestores</option>
+                <option value="escritorio">Escritórios</option>
               </select>
             </div>
             <div>
@@ -205,7 +277,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total de Usuários</p>
-                <p className="text-2xl font-bold">{users.length}</p>
+                <p className="text-2xl font-bold">{totalUsers}</p>
               </div>
               <Users className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -216,7 +288,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Investidores</p>
-                <p className="text-2xl font-bold">{users.filter((u) => u.type === "investor").length}</p>
+                <p className="text-2xl font-bold">{totalInvestors}</p>
               </div>
               <DollarSign className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -227,7 +299,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Distribuidores</p>
-                <p className="text-2xl font-bold">{users.filter((u) => u.type === "distributor").length}</p>
+                <p className="text-2xl font-bold">{totalDistributors}</p>
               </div>
               <UserCheck className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -238,7 +310,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold">{users.filter((u) => u.status === "pending").length}</p>
+                <p className="text-2xl font-bold">{totalPending}</p>
               </div>
               <UserX className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -253,55 +325,64 @@ export function UserManager() {
           <CardDescription>Todos os usuários registrados na plataforma</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Cadastro</TableHead>
-                <TableHead>Última Atividade</TableHead>
-                <TableHead>Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{user.type === "investor" ? "Investidor" : "Distribuidor"}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusColor(user.status) as any}>{getStatusLabel(user.status)}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.totalInvested && formatCurrency(user.totalInvested)}
-                    {user.totalCaptured && formatCurrency(user.totalCaptured)}
-                    {!user.totalInvested && !user.totalCaptured && "-"}
-                  </TableCell>
-                  <TableCell>{new Date(user.joinedAt).toLocaleDateString("pt-BR")}</TableCell>
-                  <TableCell>{new Date(user.lastActivity).toLocaleDateString("pt-BR")}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      {user.status === "pending" && (
-                        <Button variant="ghost" size="sm" onClick={() => handleApproveUser(user.id)}>
-                          <UserCheck className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {user.status === "active" && (
-                        <Button variant="ghost" size="sm" onClick={() => handleSuspendUser(user.id)}>
-                          <UserX className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Nenhum usuário encontrado</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Cadastro</TableHead>
+                  <TableHead>Última Atividade</TableHead>
+                  <TableHead>Ações</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{getTypeLabel(user.type)}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getStatusColor(user.status) as any}>{getStatusLabel(user.status)}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.totalInvested && user.totalInvested > 0 && formatCurrency(user.totalInvested)}
+                      {user.totalCaptured && user.totalCaptured > 0 && formatCurrency(user.totalCaptured)}
+                      {(!user.totalInvested || user.totalInvested === 0) &&
+                        (!user.totalCaptured || user.totalCaptured === 0) &&
+                        "-"}
+                    </TableCell>
+                    <TableCell>{new Date(user.joinedAt).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>{new Date(user.lastActivity).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        {user.status === "pending" && (
+                          <Button variant="ghost" size="sm" onClick={() => handleApproveUser(user.id)}>
+                            <UserCheck className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {user.status === "active" && (
+                          <Button variant="ghost" size="sm" onClick={() => handleSuspendUser(user.id)}>
+                            <UserX className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
