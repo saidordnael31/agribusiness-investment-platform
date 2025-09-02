@@ -50,6 +50,8 @@ export function UserManager() {
     phone: "",
     cpf: "",
     assessorId: "",
+    password: "",
+    confirmPassword: "",
   })
   const [submittingInvestor, setSubmittingInvestor] = useState(false)
   const [assessors, setAssessors] = useState<User[]>([])
@@ -241,10 +243,28 @@ export function UserManager() {
   const handleCreateInvestor = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!investorForm.fullName || !investorForm.email || !investorForm.assessorId) {
+    if (!investorForm.fullName || !investorForm.email || !investorForm.assessorId || !investorForm.password) {
       toast({
         title: "Campos obrigatórios",
-        description: "Preencha nome, email e selecione um assessor.",
+        description: "Preencha nome, email, senha e selecione um assessor.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (investorForm.password !== investorForm.confirmPassword) {
+      toast({
+        title: "Senhas não coincidem",
+        description: "A senha e confirmação de senha devem ser iguais.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (investorForm.password.length < 6) {
+      toast({
+        title: "Senha muito curta",
+        description: "A senha deve ter pelo menos 6 caracteres.",
         variant: "destructive",
       })
       return
@@ -260,7 +280,7 @@ export function UserManager() {
         firstName,
         lastName,
         email: investorForm.email,
-        password: Math.random().toString(36).slice(-8), // Senha temporária
+        password: investorForm.password,
         phone: investorForm.phone,
         cpf: investorForm.cpf,
         rg: "", // campo obrigatório no formato, mas pode estar vazio
@@ -308,17 +328,17 @@ export function UserManager() {
         description: `${investorForm.fullName} foi cadastrado com sucesso na API externa.`,
       })
 
-      // Resetar formulário e fechar modal
       setInvestorForm({
         fullName: "",
         email: "",
         phone: "",
         cpf: "",
         assessorId: "",
+        password: "",
+        confirmPassword: "",
       })
       setShowInvestorModal(false)
 
-      // Recarregar lista de usuários
       setTimeout(() => fetchUsers(), 2000)
     } catch (error: any) {
       console.error("Erro ao cadastrar investidor:", error)
@@ -434,6 +454,32 @@ export function UserManager() {
                 </select>
               </div>
 
+              <div>
+                <Label htmlFor="password">Senha *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={investorForm.password}
+                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="Senha do investidor"
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={investorForm.confirmPassword}
+                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  placeholder="Confirme a senha"
+                  required
+                  minLength={6}
+                />
+              </div>
+
               <div className="flex justify-end space-x-2 pt-4">
                 <Button
                   type="button"
@@ -462,7 +508,6 @@ export function UserManager() {
         </Dialog>
       </div>
 
-      {/* Filtros */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -516,7 +561,6 @@ export function UserManager() {
         </CardContent>
       </Card>
 
-      {/* Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-6">
@@ -564,7 +608,6 @@ export function UserManager() {
         </Card>
       </div>
 
-      {/* Tabela de Usuários */}
       <Card>
         <CardHeader>
           <CardTitle>Lista de Usuários</CardTitle>
