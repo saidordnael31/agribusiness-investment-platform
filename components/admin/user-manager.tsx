@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Search, Filter, UserCheck, UserX, DollarSign, Loader2, UserPlus } from "lucide-react"
+import { Users, Search, Filter, UserCheck, UserX, DollarSign, Loader2, UserPlus, QrCode, Copy } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -33,6 +33,12 @@ interface User {
   lastActivity: string
 }
 
+interface QRCodeData {
+  qrCode: string
+  paymentString: string
+  originalData: any
+}
+
 export function UserManager() {
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
@@ -52,9 +58,14 @@ export function UserManager() {
     assessorId: "",
     password: "",
     confirmPassword: "",
+    investmentValue: "", // Adicionado campo para valor do investimento
   })
   const [submittingInvestor, setSubmittingInvestor] = useState(false)
   const [assessors, setAssessors] = useState<User[]>([])
+
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null)
+  const [generatingQR, setGeneratingQR] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -243,10 +254,26 @@ export function UserManager() {
   const handleCreateInvestor = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!investorForm.fullName || !investorForm.email || !investorForm.assessorId || !investorForm.password) {
+    if (
+      !investorForm.fullName ||
+      !investorForm.email ||
+      !investorForm.assessorId ||
+      !investorForm.password ||
+      !investorForm.investmentValue
+    ) {
       toast({
         title: "Campos obrigatórios",
-        description: "Preencha nome, email, senha e selecione um assessor.",
+        description: "Preencha todos os campos obrigatórios incluindo o valor do investimento.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const investmentValue = Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", "."))
+    if (investmentValue < 1000) {
+      toast({
+        title: "Valor mínimo não atingido",
+        description: "O valor mínimo de investimento é R$ 1.000,00.",
         variant: "destructive",
       })
       return
@@ -274,7 +301,7 @@ export function UserManager() {
       setSubmittingInvestor(true)
 
       const [firstName, ...lastNameParts] = investorForm.fullName.trim().split(" ")
-      const lastName = lastNameParts.join(" ") || firstName // fallback se só tiver um nome
+      const lastName = lastNameParts.join(" ") || firstName
 
       const registrationData = {
         firstName,
@@ -283,7 +310,7 @@ export function UserManager() {
         password: investorForm.password,
         phone: investorForm.phone,
         cpf: investorForm.cpf,
-        rg: "", // campo obrigatório no formato, mas pode estar vazio
+        rg: "",
         assessorId: investorForm.assessorId,
       }
 
@@ -315,7 +342,7 @@ export function UserManager() {
           cpf: investorForm.cpf,
           assessor_id: investorForm.assessorId,
           status: "active",
-          external_id: result.data?.id || null, // salvar ID da API externa se disponível
+          external_id: result.data?.id || null,
         },
       ])
 
@@ -325,8 +352,10 @@ export function UserManager() {
 
       toast({
         title: "Investidor cadastrado!",
-        description: `${investorForm.fullName} foi cadastrado com sucesso na API externa.`,
+        description: `${investorForm.fullName} foi cadastrado com sucesso. Gerando QR Code PIX...`,
       })
+
+      await generateQRCode(investmentValue, investorForm.cpf)
 
       setInvestorForm({
         fullName: "",
@@ -336,6 +365,7 @@ export function UserManager() {
         assessorId: "",
         password: "",
         confirmPassword: "",
+        investmentValue: "",
       })
       setShowInvestorModal(false)
 
@@ -352,20 +382,68 @@ export function UserManager() {
     }
   }
 
-  const totalUsers = users.length
-  const totalInvestors = users.filter((u) => u.type === "investor").length
-  const totalDistributors = users.filter((u) =>
-    ["distributor", "assessor", "gestor", "escritorio"].includes(u.type),
-  ).length
-  const totalPending = users.filter((u) => u.status === "pending").length
+  const generateQRCode = async (value: number, cpf: string) => {
+    try {
+      setGeneratingQR(true)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <span className="ml-2">Carregando usuários...</span>
-      </div>
-    )
+      console.log("[v0] Gerando QR Code PIX para:", { value, cpf })
+
+      const response = await fetch("/api/external/generate-qrcode", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ value, cpf }),
+      })
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || "Erro ao gerar QR Code PIX")
+      }
+
+      console.log("[v0] QR Code gerado com sucesso:", result)
+
+      setQRCodeData({
+        qrCode: result.qrCode,
+        paymentString: result.paymentString,
+        originalData: result.originalData,
+      })
+      setShowQRModal(true)
+
+      toast({
+        title: "QR Code PIX gerado!",
+        description: "O QR Code para pagamento foi gerado com sucesso.",
+      })
+    } catch (error: any) {
+      console.error("Erro ao gerar QR Code:", error)
+      toast({
+        title: "Erro ao gerar QR Code",
+        description: error.message || "Não foi possível gerar o QR Code PIX.",
+        variant: "destructive",
+      })
+    } finally {
+      setGeneratingQR(false)
+    }
+  }
+
+  const copyPixCode = () => {
+    if (qrCodeData?.paymentString) {
+      navigator.clipboard.writeText(qrCodeData.paymentString)
+      toast({
+        title: "Código PIX copiado!",
+        description: "O código PIX foi copiado para a área de transferência.",
+      })
+    }
+  }
+
+  const formatCurrencyInput = (value: string) => {
+    const numericValue = value.replace(/[^\d]/g, "")
+    const formattedValue = (Number.parseInt(numericValue) / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    })
+    return formattedValue
   }
 
   return (
@@ -389,7 +467,7 @@ export function UserManager() {
             <DialogHeader>
               <DialogTitle>Cadastrar Novo Investidor</DialogTitle>
               <DialogDescription>
-                Cadastre um novo investidor na plataforma. Um email de confirmação será enviado.
+                Cadastre um novo investidor na plataforma. Um QR Code PIX será gerado para pagamento.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateInvestor} className="space-y-4">
@@ -427,12 +505,27 @@ export function UserManager() {
               </div>
 
               <div>
-                <Label htmlFor="cpf">CPF</Label>
+                <Label htmlFor="cpf">CPF *</Label>
                 <Input
                   id="cpf"
                   value={investorForm.cpf}
                   onChange={(e) => setInvestorForm((prev) => ({ ...prev, cpf: e.target.value }))}
                   placeholder="000.000.000-00"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="investmentValue">Valor do Investimento * (mínimo R$ 1.000,00)</Label>
+                <Input
+                  id="investmentValue"
+                  value={investorForm.investmentValue}
+                  onChange={(e) => {
+                    const formatted = formatCurrencyInput(e.target.value)
+                    setInvestorForm((prev) => ({ ...prev, investmentValue: formatted }))
+                  }}
+                  placeholder="R$ 1.000,00"
+                  required
                 />
               </div>
 
@@ -508,6 +601,53 @@ export function UserManager() {
         </Dialog>
       </div>
 
+      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <QrCode className="w-5 h-5" />
+              QR Code PIX Gerado
+            </DialogTitle>
+            <DialogDescription>Use o QR Code abaixo ou copie o código PIX para realizar o pagamento.</DialogDescription>
+          </DialogHeader>
+
+          {qrCodeData && (
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <img
+                  src={qrCodeData.qrCode || "/placeholder.svg"}
+                  alt="QR Code PIX"
+                  className="w-64 h-64 border rounded-lg"
+                />
+              </div>
+
+              {qrCodeData.paymentString && (
+                <div className="space-y-2">
+                  <Label>Código PIX (Copia e Cola)</Label>
+                  <div className="flex gap-2">
+                    <Input value={qrCodeData.paymentString} readOnly className="font-mono text-xs" />
+                    <Button variant="outline" size="sm" onClick={copyPixCode} className="shrink-0 bg-transparent">
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button onClick={() => setShowQRModal(false)}>Fechar</Button>
+              </div>
+            </div>
+          )}
+
+          {generatingQR && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <span className="ml-2">Gerando QR Code...</span>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -567,7 +707,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total de Usuários</p>
-                <p className="text-2xl font-bold">{totalUsers}</p>
+                <p className="text-2xl font-bold">{users.length}</p>
               </div>
               <Users className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -578,7 +718,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Investidores</p>
-                <p className="text-2xl font-bold">{totalInvestors}</p>
+                <p className="text-2xl font-bold">{users.filter((u) => u.type === "investor").length}</p>
               </div>
               <DollarSign className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -589,7 +729,9 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Distribuidores</p>
-                <p className="text-2xl font-bold">{totalDistributors}</p>
+                <p className="text-2xl font-bold">
+                  {users.filter((u) => ["distributor", "assessor", "gestor", "escritorio"].includes(u.type)).length}
+                </p>
               </div>
               <UserCheck className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -600,7 +742,7 @@ export function UserManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold">{totalPending}</p>
+                <p className="text-2xl font-bold">{users.filter((u) => u.status === "pending").length}</p>
               </div>
               <UserX className="w-8 h-8 text-muted-foreground" />
             </div>
