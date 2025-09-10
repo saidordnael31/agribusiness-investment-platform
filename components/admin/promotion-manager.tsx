@@ -131,7 +131,7 @@ export function PromotionManager() {
           isActive: campaign.is_active || false,
           usageCount: campaign.usage_count || 0,
           maxUsage: campaign.max_usage,
-          campaignType: campaign.campaign_type || "bonus_rate",
+          campaignType: campaign.type || "bonus_rate",
           conditions: campaign.conditions ? JSON.parse(campaign.conditions) : undefined,
           results: {
             totalParticipants: campaign.total_participants || 0,
@@ -140,31 +140,22 @@ export function PromotionManager() {
           },
         }))
         setPromotions(mappedPromotions)
-      }
 
-      const { data: goalsData, error: goalsError } = await supabase
-        .from("performance_goals")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (goalsError) {
-        console.error("[v0] Erro ao buscar metas:", goalsError)
-        setPerformanceGoals([])
-      } else {
-        const mappedGoals: PerformanceGoal[] = (goalsData || []).map((goal) => ({
-          id: goal.id,
-          name: goal.name || "Meta sem nome",
-          description: goal.description || "",
-          targetAmount: goal.target_amount || 0,
-          bonusRate: goal.bonus_rate || 0,
-          duration: goal.duration || 12,
-          targetAudience: goal.target_audience || "both",
-          isActive: goal.is_active || false,
-          participants: goal.participants || 0,
-          achieved: goal.achieved || 0,
-          startDate: goal.start_date || new Date().toISOString().split("T")[0],
-          endDate: goal.end_date || new Date().toISOString().split("T")[0],
+        // Em vez de buscar de performance_goals, vamos criar metas baseadas nas campanhas promocionais
+        const mappedGoals: PerformanceGoal[] = (campaignsData || []).map((campaign, index) => ({
+          id: campaign.id,
+          name: `Meta: ${campaign.name || "Campanha sem nome"}`,
+          description: `Meta baseada na campanha: ${campaign.description || ""}`,
+          targetAmount: campaign.target_amount || 100000,
+          bonusRate: campaign.bonus_rate || 0,
+          duration: campaign.bonus_duration || 12,
+          participants: 0, // Será calculado dinamicamente
+          achieved: 0, // Será calculado dinamicamente
+          startDate: campaign.start_date || new Date().toISOString().split("T")[0],
+          endDate: campaign.end_date || new Date().toISOString().split("T")[0],
+          isActive: campaign.is_active || false,
         }))
+
         setPerformanceGoals(mappedGoals)
       }
     } catch (err) {
@@ -198,7 +189,7 @@ export function PromotionManager() {
       target_audience: formData.targetAudience,
       is_active: true,
       max_usage: formData.maxUsage ? Number.parseInt(formData.maxUsage) : null,
-      campaign_type: formData.campaignType,
+      type: formData.campaignType,
       conditions: Object.keys(conditions).length > 0 ? JSON.stringify(conditions) : null,
       usage_count: editingPromotion?.usageCount || 0,
       total_participants: editingPromotion?.results?.totalParticipants || 0,
@@ -263,20 +254,19 @@ export function PromotionManager() {
     const goalData = {
       name: goalFormData.name,
       description: goalFormData.description,
-      target_amount: goalFormData.targetAmount,
-      bonus_rate: goalFormData.bonusRate,
-      duration: goalFormData.duration,
-      target_audience: goalFormData.targetAudience,
+      target_amount: Number.parseFloat(goalFormData.targetAmount),
+      bonus_rate: Number.parseFloat(goalFormData.bonusRate),
+      bonus_duration: Number.parseInt(goalFormData.duration),
+      type: "performance_goal",
+      target_role: "assessor",
       is_active: true,
-      participants: editingGoal?.participants || 0,
-      achieved: editingGoal?.achieved || 0,
       start_date: goalFormData.startDate,
       end_date: goalFormData.endDate,
     }
 
     try {
       if (editingGoal) {
-        const { error } = await supabase.from("performance_goals").update(goalData).eq("id", editingGoal.id)
+        const { error } = await supabase.from("promotional_campaigns").update(goalData).eq("id", editingGoal.id)
 
         if (error) throw error
 
@@ -285,7 +275,7 @@ export function PromotionManager() {
           description: "As alterações foram salvas com sucesso.",
         })
       } else {
-        const { error } = await supabase.from("performance_goals").insert([goalData])
+        const { error } = await supabase.from("promotional_campaigns").insert([goalData])
 
         if (error) throw error
 

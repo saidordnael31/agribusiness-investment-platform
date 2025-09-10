@@ -36,9 +36,11 @@ import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
 interface UserData {
-  name: string
+  id: string
   email: string
-  type: string
+  user_type: string
+  office_id?: string | null
+  role?: string | null
 }
 
 export function Navbar() {
@@ -51,7 +53,15 @@ export function Navbar() {
   useEffect(() => {
     const userStr = localStorage.getItem("user")
     if (userStr) {
-      setUser(JSON.parse(userStr))
+      try {
+        const userData = JSON.parse(userStr)
+        if (userData && userData.email && userData.user_type) {
+          setUser(userData)
+        }
+      } catch (error) {
+        console.error("Erro ao parsear dados do usuário:", error)
+        localStorage.removeItem("user")
+      }
     }
   }, [])
 
@@ -71,6 +81,43 @@ export function Navbar() {
 
   const isActive = (path: string) => pathname === path
 
+  const getUserDisplayName = () => {
+    if (!user) return ""
+    // Extrai o nome do email se não houver nome completo
+    return user.email.split("@")[0]
+  }
+
+  const getUserTypeLabel = () => {
+    if (!user) return ""
+    switch (user.user_type) {
+      case "investor":
+        return "Investidor"
+      case "admin":
+        return "Admin"
+      case "distributor":
+      case "advisor":
+      case "assessor":
+        return "Distribuidor"
+      default:
+        return user.user_type
+    }
+  }
+
+  const getDashboardRoute = () => {
+    if (!user) return "/"
+    switch (user.user_type) {
+      case "investor":
+        return "/investor"
+      case "admin":
+        return "/admin"
+      case "distributor":
+      case "advisor":
+      case "assessor":
+      default:
+        return "/distributor"
+    }
+  }
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="container mx-auto px-4">
@@ -86,18 +133,9 @@ export function Navbar() {
             <NavigationMenu className="hidden md:flex">
               <NavigationMenuList>
                 <NavigationMenuItem>
-                  <Link
-                    href={user.type === "investor" ? "/investor" : user.type === "admin" ? "/admin" : "/distributor"}
-                    legacyBehavior
-                    passHref
-                  >
+                  <Link href={getDashboardRoute()} legacyBehavior passHref>
                     <NavigationMenuLink
-                      className={cn(
-                        navigationMenuTriggerStyle(),
-                        isActive(
-                          user.type === "investor" ? "/investor" : user.type === "admin" ? "/admin" : "/distributor",
-                        ) && "bg-accent",
-                      )}
+                      className={cn(navigationMenuTriggerStyle(), isActive(getDashboardRoute()) && "bg-accent")}
                     >
                       <BarChart3 className="h-4 w-4 mr-2" />
                       Dashboard
@@ -116,7 +154,7 @@ export function Navbar() {
                   </Link>
                 </NavigationMenuItem>
 
-                {user.type === "investor" && (
+                {user.user_type === "investor" && (
                   <>
                     <NavigationMenuItem>
                       <Link href="/deposit" legacyBehavior passHref>
@@ -142,7 +180,10 @@ export function Navbar() {
                   </>
                 )}
 
-                {(user.type === "distributor" || user.type === "admin") && (
+                {(user.user_type === "distributor" ||
+                  user.user_type === "admin" ||
+                  user.user_type === "advisor" ||
+                  user.user_type === "assessor") && (
                   <>
                     <NavigationMenuItem>
                       <Link href="/calculator" legacyBehavior passHref>
@@ -190,24 +231,20 @@ export function Navbar() {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="flex items-center space-x-2">
                       <User className="h-4 w-4" />
-                      <span className="hidden sm:inline">{user.name}</span>
+                      <span className="hidden sm:inline">{getUserDisplayName()}</span>
                       <Badge variant="secondary" className="hidden sm:inline">
-                        {user.type === "investor" ? "Investidor" : user.type === "admin" ? "Admin" : "Distribuidor"}
+                        {getUserTypeLabel()}
                       </Badge>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-sm font-medium">{getUserDisplayName()}</p>
                       <p className="text-xs text-muted-foreground">{user.email}</p>
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link
-                        href={
-                          user.type === "investor" ? "/investor" : user.type === "admin" ? "/admin" : "/distributor"
-                        }
-                      >
+                      <Link href={getDashboardRoute()}>
                         <BarChart3 className="h-4 w-4 mr-2" />
                         Dashboard
                       </Link>
@@ -218,7 +255,7 @@ export function Navbar() {
                         Documentos
                       </Link>
                     </DropdownMenuItem>
-                    {user.type === "investor" && (
+                    {user.user_type === "investor" && (
                       <>
                         <DropdownMenuItem asChild>
                           <Link href="/deposit">
@@ -234,7 +271,10 @@ export function Navbar() {
                         </DropdownMenuItem>
                       </>
                     )}
-                    {(user.type === "distributor" || user.type === "admin") && (
+                    {(user.user_type === "distributor" ||
+                      user.user_type === "admin" ||
+                      user.user_type === "advisor" ||
+                      user.user_type === "assessor") && (
                       <>
                         <DropdownMenuItem asChild>
                           <Link href="/calculator">
@@ -284,10 +324,10 @@ export function Navbar() {
           <div className="md:hidden border-t border-border py-4">
             <nav className="flex flex-col space-y-2">
               <Link
-                href={user.type === "investor" ? "/investor" : user.type === "admin" ? "/admin" : "/distributor"}
+                href={getDashboardRoute()}
                 className={cn(
                   "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                  isActive(user.type === "investor" ? "/investor" : user.type === "admin" ? "/admin" : "/distributor")
+                  isActive(getDashboardRoute())
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
                 )}
@@ -311,7 +351,7 @@ export function Navbar() {
                 Documentos
               </Link>
 
-              {user.type === "investor" && (
+              {user.user_type === "investor" && (
                 <>
                   <Link
                     href="/deposit"
@@ -333,7 +373,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/withdraw")
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                        : "text-muted-foreground hover:bg-accent/50",
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -343,7 +383,10 @@ export function Navbar() {
                 </>
               )}
 
-              {(user.type === "distributor" || user.type === "admin") && (
+              {(user.user_type === "distributor" ||
+                user.user_type === "admin" ||
+                user.user_type === "advisor" ||
+                user.user_type === "assessor") && (
                 <>
                   <Link
                     href="/calculator"
