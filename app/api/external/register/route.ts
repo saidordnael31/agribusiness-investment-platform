@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       last_name: userData.lastName,
       cpf: userData.cpf?.replace(/\D/g, "") || "", // remove máscaras
       whatsapp: userData.phone?.replace(/\D/g, "") || "", // remove máscaras
-      rg: userData.rg?.replace(/\D/g, "") || "", // remove máscaras
+      //rg: userData.rg?.replace(/\D/g, "") || "", // remove máscaras
     }
 
     console.log("[v0] Enviando dados para API externa:", registrationData)
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: responseData.message || "Erro ao cadastrar usuário na API externa",
+          error: responseData,
         },
         { status: response.status },
       )
