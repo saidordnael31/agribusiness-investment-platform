@@ -75,7 +75,17 @@ export function LoginForm() {
         }
 
         console.log("[v0] Redirecting to:", redirectPath)
-        router.push(redirectPath)
+        try {
+          router.push(redirectPath)
+          // Fallback caso router.push não funcione
+          setTimeout(() => {
+            console.log("[v0] Router fallback - using window.location")
+            window.location.href = redirectPath
+          }, 100)
+        } catch (error) {
+          console.log("[v0] Router error, using window.location:", error)
+          window.location.href = redirectPath
+        }
         return
       }
 
@@ -176,7 +186,17 @@ export function LoginForm() {
       }
 
       console.log("[v0] Redirecting to:", redirectPath)
-      router.push(redirectPath)
+      try {
+        router.push(redirectPath)
+        // Fallback caso router.push não funcione
+        setTimeout(() => {
+          console.log("[v0] Router fallback - using window.location")
+          window.location.href = redirectPath
+        }, 100)
+      } catch (error) {
+        console.log("[v0] Router error, using window.location:", error)
+        window.location.href = redirectPath
+      }
     } catch (error: any) {
       console.error("[v0] Login error:", error)
       toast({

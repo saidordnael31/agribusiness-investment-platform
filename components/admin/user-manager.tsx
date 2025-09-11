@@ -254,13 +254,7 @@ export function UserManager() {
   const handleCreateInvestor = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (
-      !investorForm.fullName ||
-      !investorForm.email ||
-      !investorForm.assessorId ||
-      !investorForm.password ||
-      !investorForm.investmentValue
-    ) {
+    if (!investorForm.fullName || !investorForm.email || !investorForm.password || !investorForm.investmentValue) {
       toast({
         title: "Campos obrigatórios",
         description: "Preencha todos os campos obrigatórios incluindo o valor do investimento.",
@@ -311,7 +305,7 @@ export function UserManager() {
         phone: investorForm.phone,
         cpf: investorForm.cpf,
         rg: "",
-        assessorId: investorForm.assessorId,
+        assessorId: investorForm.assessorId || null,
       }
 
       console.log("[v0] Enviando dados para endpoint externo:", registrationData)
@@ -340,7 +334,7 @@ export function UserManager() {
           user_type: "investor",
           phone: investorForm.phone,
           cpf: investorForm.cpf,
-          assessor_id: investorForm.assessorId,
+          assessor_id: investorForm.assessorId || null,
           status: "active",
           external_id: result.data?.id || null,
         },
@@ -530,13 +524,12 @@ export function UserManager() {
               </div>
 
               <div>
-                <Label htmlFor="assessorId">Assessor Responsável *</Label>
+                <Label htmlFor="assessorId">Assessor Responsável</Label>
                 <select
                   id="assessorId"
                   value={investorForm.assessorId}
                   onChange={(e) => setInvestorForm((prev) => ({ ...prev, assessorId: e.target.value }))}
                   className="w-full mt-1 px-3 py-2 border rounded-lg"
-                  required
                 >
                   <option value="">Selecione um assessor</option>
                   {assessors.map((assessor) => (

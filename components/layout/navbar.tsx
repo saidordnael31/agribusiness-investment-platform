@@ -329,7 +329,7 @@ export function Navbar() {
                   "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                   isActive(getDashboardRoute())
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -343,7 +343,7 @@ export function Navbar() {
                   "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                   isActive("/documents")
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -359,7 +359,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/deposit")
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -373,7 +373,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/withdraw")
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-accent/50",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -394,7 +394,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/calculator")
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -408,7 +408,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/bonifications")
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >

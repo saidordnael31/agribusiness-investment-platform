@@ -40,15 +40,15 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 mb-8">
-            <Badge variant="secondary" className="px-4 py-2">
+            <Badge variant="outline" className="px-4 py-2 bg-background text-foreground border-border">
               <Shield className="w-4 h-4 mr-2" />
               Estrutura privada auditada
             </Badge>
-            <Badge variant="secondary" className="px-4 py-2">
+            <Badge variant="outline" className="px-4 py-2 bg-background text-foreground border-border">
               <TrendingUp className="w-4 h-4 mr-2" />
               Aportes a partir de R$ 5.000
             </Badge>
-            <Badge variant="secondary" className="px-4 py-2">
+            <Badge variant="outline" className="px-4 py-2 bg-background text-foreground border-border">
               <Users className="w-4 h-4 mr-2" />
               Exclusivo por indicação
             </Badge>
