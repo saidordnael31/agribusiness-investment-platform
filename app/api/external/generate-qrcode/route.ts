@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       console.log("[v0] Erro na API externa:", response.status, response.statusText)
-      throw new Error(`API externa retornou erro: ${response.status}`)
+      throw new Error(`API externa retornou erro: ${response.error}`)
     }
 
     const responseData = await response.json()
