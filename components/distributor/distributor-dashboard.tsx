@@ -109,7 +109,7 @@ export function DistributorDashboard() {
         .from("profiles")
         .select("*")
         .eq("user_type", "investor")
-        .eq("assessor_id", distributorId)
+        .eq("parent_id", distributorId)
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -122,9 +122,9 @@ export function DistributorDashboard() {
         name: profile.full_name || profile.email.split("@")[0],
         email: profile.email,
         phone: profile.phone,
-        cpf: profile.cpf,
-        totalInvested: profile.total_invested || 0,
-        status: profile.status || "active",
+        cpf: profile.notes?.includes("CPF:") ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim() : "", // Extraindo CPF das notes
+        totalInvested: 0, // Campo não existe na tabela profiles
+        status: profile.is_active ? "active" : "inactive",
         joinedAt: profile.created_at,
         lastActivity: profile.updated_at || profile.created_at,
       }))
@@ -213,22 +213,27 @@ export function DistributorDashboard() {
       console.log("[v0] Investidor cadastrado com sucesso na API externa:", result.data)
 
       const supabase = createClient()
-      const { error: localError } = await supabase.from("profiles").insert([
-        {
-          email: investorForm.email,
-          full_name: investorForm.fullName,
-          user_type: "investor",
-          phone: investorForm.phone,
-          cpf: investorForm.cpf,
-          assessor_id: user?.id || null, // Associa ao distribuidor logado
-          status: "active",
-          external_id: result.data?.id || null,
-        },
-      ])
+      const { data: insertedProfile, error: localError } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            email: investorForm.email,
+            full_name: investorForm.fullName,
+            user_type: "investor",
+            phone: investorForm.phone,
+            parent_id: user?.id || null, // Associa ao distribuidor logado (era assessor_id)
+            is_active: true, // Era status: "active"
+            notes: `CPF: ${investorForm.cpf}${result.data?.id ? ` | External ID: ${result.data.id}` : ""}`, // Salvando CPF e external_id nas notes
+          },
+        ])
+        .select()
 
       if (localError) {
-        console.warn("[v0] Erro ao salvar no Supabase local (mas cadastro externo foi bem-sucedido):", localError)
+        console.error("[v0] Erro ao salvar no Supabase local:", localError)
+        throw new Error(`Erro ao salvar no banco local: ${localError.message}`)
       }
+
+      console.log("[v0] Investidor salvo no Supabase com sucesso:", insertedProfile)
 
       toast({
         title: "Investidor cadastrado!",
@@ -255,7 +260,7 @@ export function DistributorDashboard() {
       console.error("Erro ao cadastrar investidor:", error)
       toast({
         title: "Erro ao cadastrar investidor",
-        description: error.message || "Não foi possível cadastrar o investidor na API externa.",
+        description: error.message || "Não foi possível cadastrar o investidor.",
         variant: "destructive",
       })
     } finally {
