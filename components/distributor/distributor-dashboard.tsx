@@ -1,23 +1,71 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { TrendingUp, DollarSign, Users, Trophy } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { TrendingUp, DollarSign, Users, Trophy, UserPlus, Loader2, QrCode, Copy, Search } from "lucide-react"
 import { CommissionSimulator } from "./commission-simulator"
 import { ClientsList } from "./clients-list"
 import { SalesChart } from "./sales-chart"
+import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface UserData {
+  id: string
   name: string
   email: string
-  type: string
+  user_type: string
+}
+
+interface Investor {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  cpf?: string
+  totalInvested: number
+  status: string
+  joinedAt: string
+  lastActivity: string
+}
+
+interface QRCodeData {
+  qrCode: string
+  paymentString: string
+  originalData: any
 }
 
 export function DistributorDashboard() {
+  const { toast } = useToast()
   const [user, setUser] = useState<UserData | null>(null)
+  const [myInvestors, setMyInvestors] = useState<Investor[]>([])
+  const [loadingInvestors, setLoadingInvestors] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+
+  const [showInvestorModal, setShowInvestorModal] = useState(false)
+  const [investorForm, setInvestorForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    cpf: "",
+    password: "",
+    confirmPassword: "",
+    investmentValue: "",
+  })
+  const [submittingInvestor, setSubmittingInvestor] = useState(false)
+
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null)
+  const [generatingQR, setGeneratingQR] = useState(false)
 
   // Mock distributor data
   const [distributorData] = useState({
@@ -46,9 +94,251 @@ export function DistributorDashboard() {
   useEffect(() => {
     const userStr = localStorage.getItem("user")
     if (userStr) {
-      setUser(JSON.parse(userStr))
+      const userData = JSON.parse(userStr)
+      setUser(userData)
+      fetchMyInvestors(userData.id)
     }
   }, [])
+
+  const fetchMyInvestors = async (distributorId: string) => {
+    try {
+      setLoadingInvestors(true)
+      const supabase = createClient()
+
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_type", "investor")
+        .eq("assessor_id", distributorId)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("Erro ao buscar investidores:", error)
+        return
+      }
+
+      const transformedInvestors: Investor[] = (profiles || []).map((profile) => ({
+        id: profile.id,
+        name: profile.full_name || profile.email.split("@")[0],
+        email: profile.email,
+        phone: profile.phone,
+        cpf: profile.cpf,
+        totalInvested: profile.total_invested || 0,
+        status: profile.status || "active",
+        joinedAt: profile.created_at,
+        lastActivity: profile.updated_at || profile.created_at,
+      }))
+
+      setMyInvestors(transformedInvestors)
+    } catch (error) {
+      console.error("Erro ao buscar investidores:", error)
+    } finally {
+      setLoadingInvestors(false)
+    }
+  }
+
+  const handleCreateInvestor = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!investorForm.fullName || !investorForm.email || !investorForm.password || !investorForm.investmentValue) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha todos os campos obrigatórios incluindo o valor do investimento.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const investmentValue = Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", "."))
+    if (investmentValue < 1000) {
+      toast({
+        title: "Valor mínimo não atingido",
+        description: "O valor mínimo de investimento é R$ 1.000,00.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (investorForm.password !== investorForm.confirmPassword) {
+      toast({
+        title: "Senhas não coincidem",
+        description: "A senha e confirmação de senha devem ser iguais.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (investorForm.password.length < 6) {
+      toast({
+        title: "Senha muito curta",
+        description: "A senha deve ter pelo menos 6 caracteres.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setSubmittingInvestor(true)
+
+      const [firstName, ...lastNameParts] = investorForm.fullName.trim().split(" ")
+      const lastName = lastNameParts.join(" ") || firstName
+
+      const registrationData = {
+        firstName,
+        lastName,
+        email: investorForm.email,
+        password: investorForm.password,
+        phone: investorForm.phone,
+        cpf: investorForm.cpf,
+        rg: "",
+        assessorId: user?.id || null, // Automaticamente associa ao distribuidor logado
+      }
+
+      console.log("[v0] Enviando dados para endpoint externo:", registrationData)
+
+      const response = await fetch("/api/external/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(registrationData),
+      })
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || "Erro ao cadastrar investidor na API externa")
+      }
+
+      console.log("[v0] Investidor cadastrado com sucesso na API externa:", result.data)
+
+      const supabase = createClient()
+      const { error: localError } = await supabase.from("profiles").insert([
+        {
+          email: investorForm.email,
+          full_name: investorForm.fullName,
+          user_type: "investor",
+          phone: investorForm.phone,
+          cpf: investorForm.cpf,
+          assessor_id: user?.id || null, // Associa ao distribuidor logado
+          status: "active",
+          external_id: result.data?.id || null,
+        },
+      ])
+
+      if (localError) {
+        console.warn("[v0] Erro ao salvar no Supabase local (mas cadastro externo foi bem-sucedido):", localError)
+      }
+
+      toast({
+        title: "Investidor cadastrado!",
+        description: `${investorForm.fullName} foi cadastrado com sucesso. Gerando QR Code PIX...`,
+      })
+
+      await generateQRCode(investmentValue, investorForm.cpf)
+
+      setInvestorForm({
+        fullName: "",
+        email: "",
+        phone: "",
+        cpf: "",
+        password: "",
+        confirmPassword: "",
+        investmentValue: "",
+      })
+      setShowInvestorModal(false)
+
+      if (user?.id) {
+        setTimeout(() => fetchMyInvestors(user.id), 2000)
+      }
+    } catch (error: any) {
+      console.error("Erro ao cadastrar investidor:", error)
+      toast({
+        title: "Erro ao cadastrar investidor",
+        description: error.message || "Não foi possível cadastrar o investidor na API externa.",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmittingInvestor(false)
+    }
+  }
+
+  const generateQRCode = async (value: number, cpf: string) => {
+    try {
+      setGeneratingQR(true)
+
+      console.log("[v0] Gerando QR Code PIX para:", { value, cpf })
+
+      const response = await fetch("/api/external/generate-qrcode", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ value, cpf }),
+      })
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || "Erro ao gerar QR Code PIX")
+      }
+
+      console.log("[v0] QR Code gerado com sucesso:", result)
+
+      setQRCodeData({
+        qrCode: result.qrCode,
+        paymentString: result.paymentString,
+        originalData: result.originalData,
+      })
+      setShowQRModal(true)
+
+      toast({
+        title: "QR Code PIX gerado!",
+        description: "O QR Code para pagamento foi gerado com sucesso.",
+      })
+    } catch (error: any) {
+      console.error("Erro ao gerar QR Code:", error)
+      toast({
+        title: "Erro ao gerar QR Code",
+        description: error.message || "Não foi possível gerar o QR Code PIX.",
+        variant: "destructive",
+      })
+    } finally {
+      setGeneratingQR(false)
+    }
+  }
+
+  const copyPixCode = () => {
+    if (qrCodeData?.paymentString) {
+      navigator.clipboard.writeText(qrCodeData.paymentString)
+      toast({
+        title: "Código PIX copiado!",
+        description: "O código PIX foi copiado para a área de transferência.",
+      })
+    }
+  }
+
+  const formatCurrencyInput = (value: string) => {
+    const numericValue = value.replace(/[^\d]/g, "")
+    const formattedValue = (Number.parseInt(numericValue) / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    })
+    return formattedValue
+  }
+
+  const filteredInvestors = myInvestors.filter(
+    (investor) =>
+      investor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      investor.email.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value)
+  }
 
   if (!user) return null
 
@@ -73,10 +363,7 @@ export function DistributorDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-xl md:text-2xl font-bold text-primary">
-                {new Intl.NumberFormat("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                }).format(distributorData.totalCaptured)}
+                {formatCurrency(distributorData.totalCaptured)}
               </div>
             </CardContent>
           </Card>
@@ -88,10 +375,7 @@ export function DistributorDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-xl md:text-2xl font-bold text-secondary">
-                {new Intl.NumberFormat("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                }).format(distributorData.monthlyCommission)}
+                {formatCurrency(distributorData.monthlyCommission)}
               </div>
               <p className="text-xs text-muted-foreground">3% sobre base investida</p>
             </CardContent>
@@ -99,12 +383,12 @@ export function DistributorDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Clientes Ativos</CardTitle>
+              <CardTitle className="text-sm font-medium">Meus Investidores</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-accent">{distributorData.clientsCount}</div>
-              <p className="text-xs text-muted-foreground">Investidores cadastrados</p>
+              <div className="text-xl md:text-2xl font-bold text-accent">{myInvestors.length}</div>
+              <p className="text-xs text-muted-foreground">Investidores cadastrados por você</p>
             </CardContent>
           </Card>
 
@@ -136,12 +420,7 @@ export function DistributorDashboard() {
                   <p className="text-sm text-muted-foreground">Sua parte da comissão</p>
                 </div>
                 <div className="text-left sm:text-right">
-                  <p className="font-bold text-primary">
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(distributorData.advisorShare)}
-                  </p>
+                  <p className="font-bold text-primary">{formatCurrency(distributorData.advisorShare)}</p>
                 </div>
               </div>
 
@@ -151,12 +430,7 @@ export function DistributorDashboard() {
                   <p className="text-sm text-muted-foreground">Parte do escritório</p>
                 </div>
                 <div className="text-left sm:text-right">
-                  <p className="font-bold text-secondary">
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(distributorData.officeShare)}
-                  </p>
+                  <p className="font-bold text-secondary">{formatCurrency(distributorData.officeShare)}</p>
                 </div>
               </div>
 
@@ -207,12 +481,7 @@ export function DistributorDashboard() {
               <div className="p-4 bg-muted rounded-lg">
                 <h4 className="font-semibold mb-2">Pool Nacional</h4>
                 <p className="text-sm text-muted-foreground mb-2">Sua participação no pool dos top escritórios:</p>
-                <p className="font-bold text-accent">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(distributorData.ranking.poolShare)}
-                </p>
+                <p className="font-bold text-accent">{formatCurrency(distributorData.ranking.poolShare)}</p>
               </div>
             </CardContent>
           </Card>
@@ -231,12 +500,18 @@ export function DistributorDashboard() {
 
         {/* Tabs Section */}
         <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="simulator" className="text-sm">
-              Simulador de Comissões
+              Simulador
             </TabsTrigger>
             <TabsTrigger value="clients" className="text-sm">
               Clientes
+            </TabsTrigger>
+            <TabsTrigger value="investors" className="text-sm">
+              Meus Investidores
+            </TabsTrigger>
+            <TabsTrigger value="register" className="text-sm">
+              Cadastrar Investidor
             </TabsTrigger>
           </TabsList>
 
@@ -247,7 +522,264 @@ export function DistributorDashboard() {
           <TabsContent value="clients">
             <ClientsList />
           </TabsContent>
+
+          <TabsContent value="investors">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Meus Investidores</CardTitle>
+                    <CardDescription>Lista de investidores cadastrados por você</CardDescription>
+                  </div>
+                  <Badge variant="secondary">{myInvestors.length} investidores</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nome ou email..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                {loadingInvestors ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                    <p className="text-muted-foreground">Carregando investidores...</p>
+                  </div>
+                ) : filteredInvestors.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      {searchTerm ? "Nenhum investidor encontrado" : "Você ainda não cadastrou nenhum investidor"}
+                    </p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Total Investido</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data de Cadastro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredInvestors.map((investor) => (
+                        <TableRow key={investor.id}>
+                          <TableCell className="font-medium">{investor.name}</TableCell>
+                          <TableCell>{investor.email}</TableCell>
+                          <TableCell>{investor.phone || "-"}</TableCell>
+                          <TableCell>{formatCurrency(investor.totalInvested)}</TableCell>
+                          <TableCell>
+                            <Badge variant={investor.status === "active" ? "default" : "secondary"}>
+                              {investor.status === "active" ? "Ativo" : "Inativo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{new Date(investor.joinedAt).toLocaleDateString("pt-BR")}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="register">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5" />
+                  Cadastrar Novo Investidor
+                </CardTitle>
+                <CardDescription>
+                  Cadastre um novo investidor na plataforma. Ele será automaticamente associado a você como assessor.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleCreateInvestor} className="space-y-4 max-w-2xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="fullName">Nome Completo *</Label>
+                      <Input
+                        id="fullName"
+                        value={investorForm.fullName}
+                        onChange={(e) => setInvestorForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                        placeholder="Nome completo do investidor"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="email">Email *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={investorForm.email}
+                        onChange={(e) => setInvestorForm((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="email@exemplo.com"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="phone">Telefone</Label>
+                      <Input
+                        id="phone"
+                        value={investorForm.phone}
+                        onChange={(e) => setInvestorForm((prev) => ({ ...prev, phone: e.target.value }))}
+                        placeholder="(11) 99999-9999"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="cpf">CPF *</Label>
+                      <Input
+                        id="cpf"
+                        value={investorForm.cpf}
+                        onChange={(e) => setInvestorForm((prev) => ({ ...prev, cpf: e.target.value }))}
+                        placeholder="000.000.000-00"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="investmentValue">Valor do Investimento * (mínimo R$ 1.000,00)</Label>
+                      <Input
+                        id="investmentValue"
+                        value={investorForm.investmentValue}
+                        onChange={(e) => {
+                          const formatted = formatCurrencyInput(e.target.value)
+                          setInvestorForm((prev) => ({ ...prev, investmentValue: formatted }))
+                        }}
+                        placeholder="R$ 1.000,00"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="password">Senha *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={investorForm.password}
+                        onChange={(e) => setInvestorForm((prev) => ({ ...prev, password: e.target.value }))}
+                        placeholder="Senha do investidor"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={investorForm.confirmPassword}
+                        onChange={(e) => setInvestorForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                        placeholder="Confirme a senha"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setInvestorForm({
+                          fullName: "",
+                          email: "",
+                          phone: "",
+                          cpf: "",
+                          password: "",
+                          confirmPassword: "",
+                          investmentValue: "",
+                        })
+                      }}
+                      disabled={submittingInvestor}
+                      className="bg-transparent"
+                    >
+                      Limpar
+                    </Button>
+                    <Button type="submit" disabled={submittingInvestor}>
+                      {submittingInvestor ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Cadastrando...
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Cadastrar Investidor
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <QrCode className="w-5 h-5" />
+                QR Code PIX Gerado
+              </DialogTitle>
+              <DialogDescription>
+                Use o QR Code abaixo ou copie o código PIX para realizar o pagamento.
+              </DialogDescription>
+            </DialogHeader>
+
+            {qrCodeData && (
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <img
+                    src={qrCodeData.qrCode || "/placeholder.svg"}
+                    alt="QR Code PIX"
+                    className="w-64 h-64 border rounded-lg"
+                  />
+                </div>
+
+                {qrCodeData.paymentString && (
+                  <div className="space-y-2">
+                    <Label>Código PIX (Copia e Cola)</Label>
+                    <div className="flex gap-2">
+                      <Input value={qrCodeData.paymentString} readOnly className="font-mono text-xs" />
+                      <Button variant="outline" size="sm" onClick={copyPixCode} className="shrink-0 bg-transparent">
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <Button onClick={() => setShowQRModal(false)}>Fechar</Button>
+                </div>
+              </div>
+            )}
+
+            {generatingQR && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin" />
+                <span className="ml-2">Gerando QR Code...</span>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
