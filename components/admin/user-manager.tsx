@@ -46,6 +46,13 @@ interface User {
   cpf?: string
   fullName?: string
   assessorId?: string
+  userType?: string
+  isActive?: boolean
+  role?: string
+  hierarchyLevel?: number
+  officeId?: string
+  parentId?: string
+  notes?: string
 }
 
 interface QRCodeData {
@@ -125,16 +132,10 @@ export function UserManager() {
       setLoading(true)
       const supabase = createClient()
 
+      // Primeiro busca todos os profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select(`
-          *,
-          investments (
-            amount,
-            status,
-            created_at
-          )
-        `)
+        .select("*")
         .order("created_at", { ascending: false })
 
       if (profilesError) {
@@ -147,23 +148,48 @@ export function UserManager() {
         return
       }
 
+      // Depois busca todos os investimentos
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select("user_id, amount, status, created_at")
+
+      if (investmentsError) {
+        console.error("Erro ao buscar investimentos:", investmentsError)
+      }
+
+      // Agrupa investimentos por user_id
+      const investmentsByUser = (investments || []).reduce((acc: any, inv: any) => {
+        if (!acc[inv.user_id]) {
+          acc[inv.user_id] = []
+        }
+        acc[inv.user_id].push(inv)
+        return acc
+      }, {})
+
       const transformedUsers: User[] = (profiles || []).map((profile) => {
-        const totalInvested = profile.investments?.reduce((sum: number, inv: any) => sum + (inv.amount || 0), 0) || 0
+        const userInvestments = investmentsByUser[profile.id] || []
+        const totalInvested = userInvestments.reduce((sum: number, inv: any) => sum + (inv.amount || 0), 0)
 
         return {
           id: profile.id,
           name: profile.full_name || profile.email.split("@")[0],
           email: profile.email,
           type: profile.user_type || "investor",
-          status: profile.status || "active",
+          status: profile.is_active ? "active" : "inactive",
           totalInvested,
-          totalCaptured: profile.total_captured || 0,
+          totalCaptured: 0, // Pode ser calculado posteriormente se necessário
           joinedAt: profile.created_at,
           lastActivity: profile.updated_at || profile.created_at,
           phone: profile.phone,
-          cpf: profile.cpf,
+          cpf: profile.cnpj, // Usando cnpj como cpf por enquanto
           fullName: profile.full_name,
-          assessorId: profile.assessor_id,
+          userType: profile.user_type,
+          isActive: profile.is_active,
+          role: profile.role,
+          hierarchyLevel: profile.hierarchy_level,
+          officeId: profile.office_id,
+          parentId: profile.parent_id,
+          notes: profile.notes,
         }
       })
 
@@ -195,6 +221,13 @@ export function UserManager() {
       type: user.type,
       status: user.status,
       assessorId: user.assessorId,
+      userType: user.userType,
+      isActive: user.isActive,
+      role: user.role,
+      hierarchyLevel: user.hierarchyLevel,
+      officeId: user.officeId,
+      parentId: user.parentId,
+      notes: user.notes,
     })
     setShowEditModal(true)
   }
@@ -212,11 +245,16 @@ export function UserManager() {
           full_name: editForm.name,
           email: editForm.email,
           phone: editForm.phone,
-          cpf: editForm.cpf,
+          cnpj: editForm.cpf,
           user_type: editForm.type,
-          status: editForm.status,
+          status: editForm.status === "active" ? true : false,
           assessor_id: editForm.assessorId,
           updated_at: new Date().toISOString(),
+          role: editForm.role,
+          hierarchy_level: editForm.hierarchyLevel,
+          office_id: editForm.officeId,
+          parent_id: editForm.parentId,
+          notes: editForm.notes,
         })
         .eq("id", selectedUser.id)
 
@@ -337,7 +375,7 @@ export function UserManager() {
   const handleApproveUser = async (userId: string) => {
     try {
       const supabase = createClient()
-      const { error } = await supabase.from("profiles").update({ status: "active" }).eq("id", userId)
+      const { error } = await supabase.from("profiles").update({ is_active: true }).eq("id", userId)
 
       if (error) throw error
 
@@ -360,7 +398,7 @@ export function UserManager() {
   const handleSuspendUser = async (userId: string) => {
     try {
       const supabase = createClient()
-      const { error } = await supabase.from("profiles").update({ status: "inactive" }).eq("id", userId)
+      const { error } = await supabase.from("profiles").update({ is_active: false }).eq("id", userId)
 
       if (error) throw error
 
@@ -442,7 +480,7 @@ export function UserManager() {
             full_name: investorForm.fullName,
             user_type: "investor",
             phone: investorForm.phone,
-            cpf: investorForm.cpf,
+            cnpj: investorForm.cpf,
             assessor_id: investorForm.assessorId || null,
             status: "active",
           },
@@ -763,6 +801,48 @@ export function UserManager() {
                   <Label className="text-sm font-medium text-muted-foreground">Última Atividade</Label>
                   <p className="text-sm">{new Date(selectedUser.lastActivity).toLocaleDateString("pt-BR")}</p>
                 </div>
+                {selectedUser.userType && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Tipo de Usuário</Label>
+                    <p className="text-sm">{selectedUser.userType}</p>
+                  </div>
+                )}
+                {selectedUser.isActive !== undefined && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Ativo</Label>
+                    <p className="text-sm">{selectedUser.isActive ? "Sim" : "Não"}</p>
+                  </div>
+                )}
+                {selectedUser.role && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Cargo</Label>
+                    <p className="text-sm">{selectedUser.role}</p>
+                  </div>
+                )}
+                {selectedUser.hierarchyLevel !== undefined && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Nível Hierárquico</Label>
+                    <p className="text-sm">{selectedUser.hierarchyLevel}</p>
+                  </div>
+                )}
+                {selectedUser.officeId && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">ID do Escritório</Label>
+                    <p className="text-sm">{selectedUser.officeId}</p>
+                  </div>
+                )}
+                {selectedUser.parentId && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">ID do Responsável</Label>
+                    <p className="text-sm">{selectedUser.parentId}</p>
+                  </div>
+                )}
+                {selectedUser.notes && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Notas</Label>
+                    <p className="text-sm">{selectedUser.notes}</p>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end">
                 <Button onClick={() => setShowViewModal(false)}>Fechar</Button>
@@ -844,6 +924,70 @@ export function UserManager() {
                 <option value="inactive">Inativo</option>
                 <option value="pending">Pendente</option>
               </select>
+            </div>
+            <div>
+              <Label htmlFor="editUserType">Tipo de Usuário</Label>
+              <Input
+                id="editUserType"
+                value={editForm.userType || ""}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, userType: e.target.value }))}
+                placeholder="Tipo de usuário"
+              />
+            </div>
+            <div>
+              <Label htmlFor="editIsActive">Ativo</Label>
+              <Input
+                id="editIsActive"
+                type="checkbox"
+                checked={editForm.isActive || false}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="editRole">Cargo</Label>
+              <Input
+                id="editRole"
+                value={editForm.role || ""}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value }))}
+                placeholder="Cargo"
+              />
+            </div>
+            <div>
+              <Label htmlFor="editHierarchyLevel">Nível Hierárquico</Label>
+              <Input
+                id="editHierarchyLevel"
+                type="number"
+                value={editForm.hierarchyLevel || ""}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, hierarchyLevel: Number(e.target.value) }))}
+                placeholder="Nível hierárquico"
+              />
+            </div>
+            <div>
+              <Label htmlFor="editOfficeId">ID do Escritório</Label>
+              <Input
+                id="editOfficeId"
+                value={editForm.officeId || ""}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, officeId: e.target.value }))}
+                placeholder="ID do escritório"
+              />
+            </div>
+            <div>
+              <Label htmlFor="editParentId">ID do Responsável</Label>
+              <Input
+                id="editParentId"
+                value={editForm.parentId || ""}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, parentId: e.target.value }))}
+                placeholder="ID do responsável"
+              />
+            </div>
+            <div>
+              <Label htmlFor="editNotes">Notas</Label>
+              <Input
+                id="editNotes"
+                value={editForm.notes || ""}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+                placeholder="Notas"
+              />
             </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowEditModal(false)} disabled={submittingEdit}>
