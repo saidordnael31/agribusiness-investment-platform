@@ -504,7 +504,7 @@ export function DistributorDashboard() {
             <CardDescription>Captação mensal nos últimos 6 meses</CardDescription>
           </CardHeader>
           <CardContent>
-            <SalesChart />
+            <SalesChart distributorId={user?.id} />
           </CardContent>
         </Card>
 
