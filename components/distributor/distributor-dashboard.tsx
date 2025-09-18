@@ -355,13 +355,14 @@ export function DistributorDashboard() {
   }
 
   const copyPixCode = () => {
-    if (qrCodeData?.paymentString) {
-      navigator.clipboard.writeText(qrCodeData.paymentString)
-      toast({
-        title: "Código PIX copiado!",
-        description: "O código PIX foi copiado para a área de transferência.",
-      })
-    }
+    const fixedPixCode =
+      "00020101021126430014br.gov.bcb.pix0121agrinvest@akintec.com5204000053039865802BR5907AKINTEC6009SAO PAULO622905251K5CDD6XWS83EN88991WEBV4G63047E03"
+
+    navigator.clipboard.writeText(fixedPixCode)
+    toast({
+      title: "Código PIX copiado!",
+      description: "O código PIX foi copiado para a área de transferência.",
+    })
   }
 
   const formatCurrencyInput = (value: string) => {
@@ -792,24 +793,22 @@ export function DistributorDashboard() {
             {qrCodeData && (
               <div className="space-y-4">
                 <div className="flex justify-center">
-                  <img
-                    src={qrCodeData.qrCode || "/placeholder.svg"}
-                    alt="QR Code PIX"
-                    className="w-64 h-64 border rounded-lg"
-                  />
+                  <img src="/images/qr-code-pix.png" alt="QR Code PIX" className="w-64 h-64 border rounded-lg" />
                 </div>
 
-                {qrCodeData.paymentString && (
-                  <div className="space-y-2">
-                    <Label>Código PIX (Copia e Cola)</Label>
-                    <div className="flex gap-2">
-                      <Input value={qrCodeData.paymentString} readOnly className="font-mono text-xs" />
-                      <Button variant="outline" size="sm" onClick={copyPixCode} className="shrink-0 bg-transparent">
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                    </div>
+                <div className="space-y-2">
+                  <Label>Código PIX (Copia e Cola)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value="00020101021126430014br.gov.bcb.pix0121agrinvest@akintec.com5204000053039865802BR5907AKINTEC6009SAO PAULO622905251K5CDD6XWS83EN88991WEBV4G63047E03"
+                      readOnly
+                      className="font-mono text-xs"
+                    />
+                    <Button variant="outline" size="sm" onClick={copyPixCode} className="shrink-0 bg-transparent">
+                      <Copy className="w-4 h-4" />
+                    </Button>
                   </div>
-                )}
+                </div>
 
                 <div className="flex justify-end">
                   <Button onClick={() => setShowQRModal(false)}>Fechar</Button>
