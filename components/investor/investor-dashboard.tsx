@@ -3,13 +3,11 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, DollarSign, Calendar, ArrowUpRight, Plus, Minus } from "lucide-react"
+import { TrendingUp, DollarSign, ArrowUpRight } from "lucide-react"
 import { InvestmentSimulator } from "./investment-simulator"
 import { InvestmentHistory } from "./investment-history"
 import { PerformanceChart } from "./performance-chart"
-import Link from "next/link"
 import { createBrowserClient } from "@supabase/ssr"
 
 interface UserData {
@@ -135,23 +133,6 @@ export function InvestorDashboard() {
               <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Bem-vindo, {user.name}</h2>
               <p className="text-muted-foreground">Acompanhe seus investimentos no Clube Agroderi</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link href="/deposit" className="w-full sm:w-auto">
-                <Button className="w-full sm:w-auto flex items-center justify-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Depositar
-                </Button>
-              </Link>
-              <Link href="/withdraw" className="w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-transparent"
-                >
-                  <Minus className="h-4 w-4" />
-                  Resgatar
-                </Button>
-              </Link>
-            </div>
           </div>
         </div>
 
@@ -211,9 +192,9 @@ export function InvestorDashboard() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Liquidez</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Liquidez</CardTitle>
+              <CardDescription>Resgate em até 2 dias úteis</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-xl md:text-2xl font-bold">D+2</div>
@@ -269,29 +250,9 @@ export function InvestorDashboard() {
               {investments.totalInvested === 0 && (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">Você ainda não possui investimentos</p>
-                  <Link href="/deposit">
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Fazer Primeiro Investimento
-                    </Button>
-                  </Link>
-                </div>
-              )}
-
-              {investments.totalInvested > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2 pt-4">
-                  <Link href="/deposit" className="flex-1">
-                    <Button variant="outline" className="w-full flex items-center justify-center gap-2 bg-transparent">
-                      <Plus className="h-4 w-4" />
-                      Depositar Mais
-                    </Button>
-                  </Link>
-                  <Link href="/withdraw" className="flex-1">
-                    <Button variant="outline" className="w-full flex items-center justify-center gap-2 bg-transparent">
-                      <Minus className="h-4 w-4" />
-                      Resgatar
-                    </Button>
-                  </Link>
+                  <p className="text-sm text-muted-foreground">
+                    Entre em contato com seu assessor para realizar investimentos
+                  </p>
                 </div>
               )}
             </CardContent>
