@@ -13,7 +13,6 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TrendingUp, DollarSign, Users, Trophy, UserPlus, Loader2, QrCode, Copy, Search } from "lucide-react"
 import { CommissionSimulator } from "./commission-simulator"
-import { ClientsList } from "./clients-list"
 import { SalesChart } from "./sales-chart"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
@@ -510,12 +509,9 @@ export function DistributorDashboard() {
 
         {/* Tabs Section */}
         <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="simulator" className="text-sm">
               Simulador
-            </TabsTrigger>
-            <TabsTrigger value="clients" className="text-sm">
-              Clientes
             </TabsTrigger>
             <TabsTrigger value="investors" className="text-sm">
               Meus Investidores
@@ -527,10 +523,6 @@ export function DistributorDashboard() {
 
           <TabsContent value="simulator">
             <CommissionSimulator />
-          </TabsContent>
-
-          <TabsContent value="clients">
-            <ClientsList />
           </TabsContent>
 
           <TabsContent value="investors">
