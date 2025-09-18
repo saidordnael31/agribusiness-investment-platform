@@ -107,7 +107,7 @@ export function UserManager() {
         .from("profiles")
         .select("*")
         .eq("user_type", "assessor")
-        .eq("status", "active")
+        .eq("is_active", true)
 
       if (error) throw error
 
@@ -116,7 +116,7 @@ export function UserManager() {
         name: profile.full_name || profile.email.split("@")[0],
         email: profile.email,
         type: profile.user_type || "assessor",
-        status: profile.status || "active",
+        status: profile.is_active ? "active" : "inactive",
         joinedAt: profile.created_at,
         lastActivity: profile.updated_at || profile.created_at,
       }))
@@ -247,8 +247,7 @@ export function UserManager() {
           phone: editForm.phone,
           cnpj: editForm.cpf,
           user_type: editForm.type,
-          status: editForm.status === "active" ? true : false,
-          assessor_id: editForm.assessorId,
+          is_active: editForm.status === "active",
           updated_at: new Date().toISOString(),
           role: editForm.role,
           hierarchy_level: editForm.hierarchyLevel,
@@ -464,61 +463,38 @@ export function UserManager() {
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: investorForm.email,
-        password: investorForm.password,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
-        },
+        password: "temp123456",
       })
 
       if (authError) throw authError
 
-      if (authData.user) {
-        const { error: profileError } = await supabase.from("profiles").insert([
-          {
-            id: authData.user.id,
-            email: investorForm.email,
-            full_name: investorForm.fullName,
-            user_type: "investor",
-            phone: investorForm.phone,
-            cnpj: investorForm.cpf,
-            assessor_id: investorForm.assessorId || null,
-            status: "active",
-          },
-        ])
+      const { error: profileError } = await supabase.from("profiles").insert([
+        {
+          id: authData.user?.id,
+          email: investorForm.email,
+          full_name: investorForm.fullName,
+          user_type: "investor",
+          phone: investorForm.phone,
+          cnpj: investorForm.cpf,
+          assessor_id: investorForm.assessorId || null,
+          is_active: true,
+        },
+      ])
 
-        if (profileError) throw profileError
+      if (profileError) throw profileError
 
-        const { error: investmentError } = await supabase.from("investments").insert([
-          {
-            user_id: authData.user.id,
-            amount: investmentValue,
-            status: "pending",
-            quota_type: investmentValue >= 100000 ? "senior" : "subordinada",
-            monthly_return_rate: investmentValue >= 100000 ? 0.03 : 0.025,
-            commitment_period: 12,
-          },
-        ])
+      const { error: investmentError } = await supabase.from("investments").insert([
+        {
+          user_id: authData.user?.id,
+          amount: investmentValue,
+          status: "pending",
+          quota_type: investmentValue >= 100000 ? "senior" : "subordinada",
+          monthly_return_rate: investmentValue >= 100000 ? 0.03 : 0.025,
+          commitment_period: 12,
+        },
+      ])
 
-        if (investmentError) throw investmentError
-      }
-
-      toast({
-        title: "Investidor cadastrado!",
-        description: `${investorForm.fullName} foi cadastrado com sucesso.`,
-      })
-
-      setInvestorForm({
-        fullName: "",
-        email: "",
-        phone: "",
-        cpf: "",
-        assessorId: "",
-        password: "",
-        confirmPassword: "",
-        investmentValue: "",
-      })
-      setShowInvestorModal(false)
-      fetchUsers()
+      if (investmentError) throw investmentError
     } catch (error: any) {
       console.error("Erro ao cadastrar investidor:", error)
       toast({
