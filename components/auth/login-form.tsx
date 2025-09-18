@@ -142,12 +142,11 @@ export function LoginForm() {
       }
 
       console.log("[v0] Supabase auth successful, fetching profile...")
-      // Buscar perfil do usuário
-      const { data: profile, error: profileError } = await supabase
+      const { data: profiles, error: profileError } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", authData.user.id)
-        .single()
+        .order("created_at", { ascending: false })
 
       if (profileError) {
         console.log("[v0] Profile fetch error:", profileError.message)
@@ -159,11 +158,23 @@ export function LoginForm() {
         return
       }
 
+      if (!profiles || profiles.length === 0) {
+        console.log("[v0] No profile found for user")
+        toast({
+          title: "Erro no login",
+          description: "Perfil do usuário não encontrado. Entre em contato com o suporte.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const profile = profiles[0]
       console.log("[v0] Profile fetched successfully:", profile)
+
       const userData = {
         id: authData.user.id,
         email: profile.email,
-        name: profile.name,
+        name: profile.full_name, // Corrigido: usar full_name em vez de name
         user_type: profile.user_type,
         office_id: profile.office_id || null,
         role: profile.role || null,
@@ -174,7 +185,7 @@ export function LoginForm() {
 
       toast({
         title: "Login realizado com sucesso!",
-        description: `Bem-vindo à plataforma Akintec, ${profile.name}!`,
+        description: `Bem-vindo à plataforma Akintec, ${profile.full_name}!`, // Corrigido: usar full_name
       })
 
       let redirectPath = "/investor"

@@ -1,4 +1,4 @@
-# Agroderi Platform - Clube de Investimentos Privado do Agronegócio
+# Agribusiness Investment Platform - Clube de Investimentos Privado do Agronegócio
 
 Uma plataforma completa para gestão de investimentos no agronegócio brasileiro, desenvolvida com Next.js 15, Supabase e Tailwind CSS.
 
@@ -94,16 +94,6 @@ npm run build
 vercel --prod
 \`\`\`
 
-## 👥 Usuários de Demonstração
-
-### Credenciais de Teste (senha: demo123)
-- **Admin**: admin@agroderi.com
-- **Escritório**: escritorio@agroderi.com  
-- **Gestor**: gestor@agroderi.com
-- **Líder**: lider@agroderi.com
-- **Assessor**: assessor@agroderi.com
-- **Investidor**: investidor@agroderi.com
-
 ## 📊 Estrutura do Projeto
 
 \`\`\`
@@ -158,4 +148,4 @@ Para suporte técnico ou dúvidas sobre a plataforma:
 
 ## 📄 Licença
 
-Este projeto é propriedade da Agroderi Platform. Todos os direitos reservados.
+Este projeto é propriedade da Agribusiness Investment Platform. Todos os direitos reservados.
