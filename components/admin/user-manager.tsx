@@ -326,14 +326,7 @@ export function UserManager() {
     }
   }
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesType = filterType === "all" || user.type === filterType
-    const matchesStatus = filterStatus === "all" || user.status === filterStatus
-    return matchesSearch && matchesType && matchesStatus
-  })
+  const filteredUsers = users
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
