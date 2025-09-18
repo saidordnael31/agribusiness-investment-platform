@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -13,24 +13,16 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   TrendingUp,
   User,
   LogOut,
   Calculator,
   BarChart3,
   Menu,
-  Plus,
-  Minus,
   Gift,
   Settings,
   FileText,
+  ChevronDown,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -46,6 +38,8 @@ interface UserData {
 export function Navbar() {
   const [user, setUser] = useState<UserData | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -65,17 +59,30 @@ export function Navbar() {
     }
   }, [])
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
   const handleLogout = () => {
-    localStorage.clear() // Limpa todo o localStorage
-    sessionStorage.clear() // Limpa também o sessionStorage
-    setUser(null) // Limpa o estado local
+    localStorage.clear()
+    sessionStorage.clear()
+    setUser(null)
+    setIsUserMenuOpen(false)
 
     toast({
       title: "Logout realizado",
       description: "Você foi desconectado com sucesso.",
     })
 
-    // Força o redirecionamento e recarregamento da página
     window.location.href = "/"
   }
 
@@ -83,16 +90,12 @@ export function Navbar() {
 
   const getUserDisplayName = () => {
     if (!user) return ""
-    console.log("[v0] Getting display name for user:", user)
-    // Extrai o nome do email se não houver nome completo
     const displayName = user.email.split("@")[0]
-    console.log("[v0] Display name extracted:", displayName)
     return displayName
   }
 
   const getUserTypeLabel = () => {
     if (!user) return ""
-    console.log("[v0] Getting type label for user type:", user.user_type)
     switch (user.user_type) {
       case "investor":
         return "Investidor"
@@ -158,32 +161,6 @@ export function Navbar() {
                   </Link>
                 </NavigationMenuItem>
 
-                {user.user_type === "investor" && (
-                  <>
-                    <NavigationMenuItem>
-                      <Link href="/deposit" legacyBehavior passHref>
-                        <NavigationMenuLink
-                          className={cn(navigationMenuTriggerStyle(), isActive("/deposit") && "bg-accent")}
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Depositar
-                        </NavigationMenuLink>
-                      </Link>
-                    </NavigationMenuItem>
-
-                    <NavigationMenuItem>
-                      <Link href="/withdraw" legacyBehavior passHref>
-                        <NavigationMenuLink
-                          className={cn(navigationMenuTriggerStyle(), isActive("/withdraw") && "bg-accent")}
-                        >
-                          <Minus className="h-4 w-4 mr-2" />
-                          Resgatar
-                        </NavigationMenuLink>
-                      </Link>
-                    </NavigationMenuItem>
-                  </>
-                )}
-
                 {(user.user_type === "distributor" ||
                   user.user_type === "admin" ||
                   user.user_type === "advisor" ||
@@ -230,90 +207,88 @@ export function Navbar() {
                   <Menu className="h-5 w-5" />
                 </Button>
 
-                {/* User Dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="flex items-center space-x-2"
-                      onClick={() => {
-                        console.log("[v0] User button clicked, user data:", user)
-                        console.log("[v0] Display name:", getUserDisplayName())
-                        console.log("[v0] Type label:", getUserTypeLabel())
-                      }}
-                    >
-                      <User className="h-4 w-4" />
-                      <span className="hidden sm:inline">{getUserDisplayName()}</span>
-                      <Badge variant="secondary" className="hidden sm:inline">
-                        {getUserTypeLabel()}
-                      </Badge>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{getUserDisplayName()}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                <div className="relative" ref={dropdownRef}>
+                  <Button
+                    variant="ghost"
+                    className="flex items-center space-x-2"
+                    onClick={() => {
+                      console.log("[v0] User button clicked, toggling menu")
+                      setIsUserMenuOpen(!isUserMenuOpen)
+                    }}
+                  >
+                    <User className="h-4 w-4" />
+                    <span className="hidden sm:inline">{getUserDisplayName()}</span>
+                    <Badge variant="secondary" className="hidden sm:inline">
+                      {getUserTypeLabel()}
+                    </Badge>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", isUserMenuOpen && "rotate-180")} />
+                  </Button>
+
+                  {/* Menu customizado */}
+                  {isUserMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-md shadow-lg z-50">
+                      <div className="px-3 py-2 border-b border-border">
+                        <p className="text-sm font-medium">{getUserDisplayName()}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      </div>
+
+                      <div className="py-1">
+                        <Link
+                          href={getDashboardRoute()}
+                          className="flex items-center px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          Dashboard
+                        </Link>
+
+                        <Link
+                          href="/documents"
+                          className="flex items-center px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Documentos
+                        </Link>
+
+                        {(user.user_type === "distributor" ||
+                          user.user_type === "admin" ||
+                          user.user_type === "advisor" ||
+                          user.user_type === "assessor") && (
+                          <>
+                            <Link
+                              href="/calculator"
+                              className="flex items-center px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                              onClick={() => setIsUserMenuOpen(false)}
+                            >
+                              <Calculator className="h-4 w-4 mr-2" />
+                              Calculadora
+                            </Link>
+
+                            <Link
+                              href="/bonifications"
+                              className="flex items-center px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                              onClick={() => setIsUserMenuOpen(false)}
+                            >
+                              <Gift className="h-4 w-4 mr-2" />
+                              Bonificações
+                            </Link>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="border-t border-border py-1">
+                        <button
+                          onClick={handleLogout}
+                          className="flex items-center w-full px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground text-left"
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Sair
+                        </button>
+                      </div>
                     </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href={getDashboardRoute()}>
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Dashboard
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/documents">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Documentos
-                      </Link>
-                    </DropdownMenuItem>
-                    {user.user_type === "investor" && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link href="/deposit">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Depositar
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/withdraw">
-                            <Minus className="h-4 w-4 mr-2" />
-                            Resgatar
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {(user.user_type === "distributor" ||
-                      user.user_type === "admin" ||
-                      user.user_type === "advisor" ||
-                      user.user_type === "assessor") && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link href="/calculator">
-                            <Calculator className="h-4 w-4 mr-2" />
-                            Calculadora
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/bonifications">
-                            <Gift className="h-4 w-4 mr-2" />
-                            Bonificações
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        console.log("[v0] Logout clicked")
-                        handleLogout()
-                      }}
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Sair
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  )}
+                </div>
               </>
             ) : (
               <div className="flex items-center space-x-2">
@@ -367,38 +342,6 @@ export function Navbar() {
                 <FileText className="h-4 w-4 mr-2" />
                 Documentos
               </Link>
-
-              {user.user_type === "investor" && (
-                <>
-                  <Link
-                    href="/deposit"
-                    className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      isActive("/deposit")
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
-                    )}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Depositar
-                  </Link>
-
-                  <Link
-                    href="/withdraw"
-                    className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      isActive("/withdraw")
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
-                    )}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Minus className="h-4 w-4 mr-2" />
-                    Resgatar
-                  </Link>
-                </>
-              )}
 
               {(user.user_type === "distributor" ||
                 user.user_type === "admin" ||
