@@ -264,10 +264,10 @@ export function UserManager() {
     }
 
     const investmentValue = Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", "."))
-    if (investmentValue < 1000) {
+    if (investmentValue < 5000) {
       toast({
         title: "Valor mínimo não atingido",
-        description: "O valor mínimo de investimento é R$ 1.000,00.",
+        description: "O valor mínimo de investimento é R$ 5.000,00.",
         variant: "destructive",
       })
       return
@@ -510,7 +510,7 @@ export function UserManager() {
               </div>
 
               <div>
-                <Label htmlFor="investmentValue">Valor do Investimento * (mínimo R$ 1.000,00)</Label>
+                <Label htmlFor="investmentValue">Valor do Investimento * (mínimo R$ 5.000,00)</Label>
                 <Input
                   id="investmentValue"
                   value={investorForm.investmentValue}
@@ -518,7 +518,7 @@ export function UserManager() {
                     const formatted = formatCurrencyInput(e.target.value)
                     setInvestorForm((prev) => ({ ...prev, investmentValue: formatted }))
                   }}
-                  placeholder="R$ 1.000,00"
+                  placeholder="R$ 5.000,00"
                   required
                 />
               </div>
