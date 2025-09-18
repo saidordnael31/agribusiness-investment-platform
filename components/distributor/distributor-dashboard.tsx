@@ -222,6 +222,9 @@ export function DistributorDashboard() {
             full_name: investorForm.fullName,
             user_type: "investor",
             phone: investorForm.phone,
+            parent_id: user?.id || null,
+            cpf_cnpj: investorForm.cpf,
+            notes: `CPF: ${investorForm.cpf}${result.data?.id ? ` | External ID: ${result.data.id}` : ""}`,
           },
         },
       })
@@ -236,29 +239,7 @@ export function DistributorDashboard() {
       }
 
       console.log("[v0] Usuário criado no Supabase Auth com sucesso:", authData.user.id)
-
-      const { data: insertedProfile, error: localError } = await supabase
-        .from("profiles")
-        .insert([
-          {
-            id: authData.user.id, // Usando o ID do usuário criado no Auth
-            email: investorForm.email,
-            full_name: investorForm.fullName,
-            user_type: "investor",
-            phone: investorForm.phone,
-            parent_id: user?.id || null, // Associa ao distribuidor logado (era assessor_id)
-            is_active: true, // Era status: "active"
-            notes: `CPF: ${investorForm.cpf}${result.data?.id ? ` | External ID: ${result.data.id}` : ""}`, // Salvando CPF e external_id nas notes
-          },
-        ])
-        .select()
-
-      if (localError) {
-        console.error("[v0] Erro ao salvar no Supabase local:", localError)
-        throw new Error(`Erro ao salvar no banco local: ${localError.message}`)
-      }
-
-      console.log("[v0] Investidor salvo no Supabase com sucesso:", insertedProfile)
+      console.log("[v0] Perfil será criado automaticamente pelo trigger do Supabase")
 
       toast({
         title: "Investidor cadastrado!",
