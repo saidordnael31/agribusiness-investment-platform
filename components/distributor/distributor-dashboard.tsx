@@ -211,10 +211,37 @@ export function DistributorDashboard() {
       console.log("[v0] Investidor cadastrado com sucesso na API externa:", result.data)
 
       const supabase = createClient()
+
+      console.log("[v0] Criando usuário no Supabase Auth...")
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: investorForm.email,
+        password: investorForm.password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+          data: {
+            full_name: investorForm.fullName,
+            user_type: "investor",
+            phone: investorForm.phone,
+          },
+        },
+      })
+
+      if (authError) {
+        console.error("[v0] Erro ao criar usuário no Supabase Auth:", authError)
+        throw new Error(`Erro ao criar usuário: ${authError.message}`)
+      }
+
+      if (!authData.user) {
+        throw new Error("Erro ao criar usuário: dados do usuário não retornados")
+      }
+
+      console.log("[v0] Usuário criado no Supabase Auth com sucesso:", authData.user.id)
+
       const { data: insertedProfile, error: localError } = await supabase
         .from("profiles")
         .insert([
           {
+            id: authData.user.id, // Usando o ID do usuário criado no Auth
             email: investorForm.email,
             full_name: investorForm.fullName,
             user_type: "investor",
