@@ -67,27 +67,26 @@ export function DistributorDashboard() {
   const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null)
   const [generatingQR, setGeneratingQR] = useState(false)
 
-  // Mock distributor data
   const [distributorData] = useState({
-    totalCaptured: 750000,
-    monthlyCommission: 22500,
-    annualCommission: 270000,
-    clientsCount: 15,
-    officeShare: 8100, // 30% of commission
-    advisorShare: 18900, // 70% of commission
+    totalCaptured: 0,
+    monthlyCommission: 0,
+    annualCommission: 0,
+    clientsCount: 0,
+    officeShare: 0,
+    advisorShare: 0,
     currentMonth: {
-      captured: 125000,
-      commission: 3750,
+      captured: 0,
+      commission: 0,
     },
     performanceBonus: {
-      meta1Achieved: true, // R$ 500k
-      meta2Achieved: true, // R$ 1M
-      additionalRate: 3, // +1% + 2% = 3% additional
+      meta1Achieved: false,
+      meta2Achieved: false,
+      additionalRate: 0,
     },
     ranking: {
-      position: 3,
-      totalDistributors: 50,
-      poolShare: 2500, // Share of national pool
+      position: 0,
+      totalDistributors: 0,
+      poolShare: 0,
     },
   })
 
@@ -382,7 +381,7 @@ export function DistributorDashboard() {
               <div className="text-xl md:text-2xl font-bold text-secondary">
                 {formatCurrency(distributorData.monthlyCommission)}
               </div>
-              <p className="text-xs text-muted-foreground">3% sobre base investida</p>
+              <p className="text-xs text-muted-foreground">Baseado na captação atual</p>
             </CardContent>
           </Card>
 
@@ -403,9 +402,13 @@ export function DistributorDashboard() {
               <Trophy className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl md:text-2xl font-bold">#{distributorData.ranking.position}</div>
+              <div className="text-xl md:text-2xl font-bold">
+                {distributorData.ranking.position > 0 ? `#${distributorData.ranking.position}` : "-"}
+              </div>
               <p className="text-xs text-muted-foreground">
-                de {distributorData.ranking.totalDistributors} distribuidores
+                {distributorData.ranking.totalDistributors > 0
+                  ? `de ${distributorData.ranking.totalDistributors} distribuidores`
+                  : "Aguardando dados"}
               </p>
             </CardContent>
           </Card>
@@ -483,11 +486,13 @@ export function DistributorDashboard() {
                 <p className="text-xs text-muted-foreground">+2% recorrente adicional por 12 meses</p>
               </div>
 
-              <div className="p-4 bg-muted rounded-lg">
-                <h4 className="font-semibold mb-2">Pool Nacional</h4>
-                <p className="text-sm text-muted-foreground mb-2">Sua participação no pool dos top escritórios:</p>
-                <p className="font-bold text-accent">{formatCurrency(distributorData.ranking.poolShare)}</p>
-              </div>
+              {distributorData.ranking.poolShare > 0 && (
+                <div className="p-4 bg-muted rounded-lg">
+                  <h4 className="font-semibold mb-2">Pool Nacional</h4>
+                  <p className="text-sm text-muted-foreground mb-2">Sua participação no pool dos top escritórios:</p>
+                  <p className="font-bold text-accent">{formatCurrency(distributorData.ranking.poolShare)}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
