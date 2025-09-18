@@ -109,7 +109,7 @@ export function UserManager() {
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("user_type", "assessor")
+        .eq("user_type", "distributor")
         .eq("is_active", true)
 
       if (error) throw error
