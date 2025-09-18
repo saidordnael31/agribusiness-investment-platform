@@ -105,7 +105,15 @@ export function DistributorDashboard() {
 
       const { data: profiles, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(`
+          *,
+          investments (
+            id,
+            amount,
+            status,
+            created_at
+          )
+        `)
         .eq("user_type", "investor")
         .eq("parent_id", distributorId)
         .order("created_at", { ascending: false })
@@ -115,17 +123,21 @@ export function DistributorDashboard() {
         return
       }
 
-      const transformedInvestors: Investor[] = (profiles || []).map((profile) => ({
-        id: profile.id,
-        name: profile.full_name || profile.email.split("@")[0],
-        email: profile.email,
-        phone: profile.phone,
-        cpf: profile.notes?.includes("CPF:") ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim() : "", // Extraindo CPF das notes
-        totalInvested: 0, // Campo não existe na tabela profiles
-        status: profile.is_active ? "active" : "inactive",
-        joinedAt: profile.created_at,
-        lastActivity: profile.updated_at || profile.created_at,
-      }))
+      const transformedInvestors: Investor[] = (profiles || []).map((profile) => {
+        const totalInvested = profile.investments?.reduce((sum: number, inv: any) => sum + (inv.amount || 0), 0) || 0
+
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email.split("@")[0],
+          email: profile.email,
+          phone: profile.phone,
+          cpf: profile.notes?.includes("CPF:") ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim() : "",
+          totalInvested,
+          status: profile.is_active ? "active" : "inactive",
+          joinedAt: profile.created_at,
+          lastActivity: profile.updated_at || profile.created_at,
+        }
+      })
 
       setMyInvestors(transformedInvestors)
     } catch (error) {
@@ -189,7 +201,7 @@ export function DistributorDashboard() {
         phone: investorForm.phone,
         cpf: investorForm.cpf,
         rg: "",
-        assessorId: user?.id || null, // Automaticamente associa ao distribuidor logado
+        assessorId: user?.id || null,
       }
 
       console.log("[v0] Enviando dados para endpoint externo:", registrationData)
@@ -240,6 +252,29 @@ export function DistributorDashboard() {
 
       console.log("[v0] Usuário criado no Supabase Auth com sucesso:", authData.user.id)
       console.log("[v0] Perfil será criado automaticamente pelo trigger do Supabase")
+
+      console.log("[v0] Criando investimento na tabela investments...")
+      const { data: investmentData, error: investmentError } = await supabase
+        .from("investments")
+        .insert([
+          {
+            id: crypto.randomUUID(),
+            user_id: authData.user.id,
+            amount: investmentValue,
+            status: "pending",
+            quota_type: "senior",
+            monthly_return_rate: 0.03,
+            commitment_period: 12,
+          },
+        ])
+        .select()
+
+      if (investmentError) {
+        console.error("[v0] Erro ao criar investimento:", investmentError)
+        throw new Error(`Erro ao criar investimento: ${investmentError.message}`)
+      }
+
+      console.log("[v0] Investimento criado com sucesso:", investmentData)
 
       toast({
         title: "Investidor cadastrado!",
