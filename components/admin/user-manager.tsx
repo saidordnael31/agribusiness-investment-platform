@@ -132,11 +132,17 @@ export function UserManager() {
       setLoading(true)
       const supabase = createClient()
 
+      console.log("[v0] Iniciando busca de usuários...")
+
       // Primeiro busca todos os profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false })
+
+      console.log("[v0] Profiles encontrados:", profiles?.length || 0)
+      console.log("[v0] Erro nos profiles:", profilesError)
+      console.log("[v0] Dados dos profiles:", profiles)
 
       if (profilesError) {
         console.error("Erro ao buscar usuários:", profilesError)
@@ -152,6 +158,9 @@ export function UserManager() {
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
         .select("user_id, amount, status, created_at")
+
+      console.log("[v0] Investimentos encontrados:", investments?.length || 0)
+      console.log("[v0] Erro nos investimentos:", investmentsError)
 
       if (investmentsError) {
         console.error("Erro ao buscar investimentos:", investmentsError)
@@ -193,9 +202,13 @@ export function UserManager() {
         }
       })
 
+      console.log("[v0] Usuários transformados:", transformedUsers.length)
+      console.log("[v0] Dados transformados:", transformedUsers)
+
       setUsers(transformedUsers)
     } catch (error) {
       console.error("Erro ao buscar usuários:", error)
+      console.log("[v0] Erro completo:", error)
       toast({
         title: "Erro ao carregar usuários",
         description: "Não foi possível carregar a lista de usuários.",
