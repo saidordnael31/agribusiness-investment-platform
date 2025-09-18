@@ -10,33 +10,120 @@ import { InvestmentSimulator } from "./investment-simulator"
 import { InvestmentHistory } from "./investment-history"
 import { PerformanceChart } from "./performance-chart"
 import Link from "next/link"
+import { createBrowserClient } from "@supabase/ssr"
 
 interface UserData {
   name: string
   email: string
   type: string
+  id?: string
+}
+
+interface InvestmentData {
+  totalInvested: number
+  currentValue: number
+  monthlyReturn: number
+  seniorQuota: number
+  subordinateQuota: number
 }
 
 export function InvestorDashboard() {
   const [user, setUser] = useState<UserData | null>(null)
-
-  // Mock investment data
-  const [investments] = useState({
-    totalInvested: 150000,
-    currentValue: 163500,
-    monthlyReturn: 4500,
-    seniorQuota: 100000,
-    subordinateQuota: 50000,
+  const [investments, setInvestments] = useState<InvestmentData>({
+    totalInvested: 0,
+    currentValue: 0,
+    monthlyReturn: 0,
+    seniorQuota: 0,
+    subordinateQuota: 0,
   })
+  const [loading, setLoading] = useState(true)
+
+  const fetchInvestmentData = async (userId: string) => {
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      )
+
+      const { data: investmentData, error } = await supabase
+        .from("investments")
+        .select("amount, quota_type, monthly_return_rate")
+        .eq("user_id", userId)
+        .eq("status", "active")
+
+      if (error) {
+        console.error("[v0] Erro ao buscar investimentos:", error)
+        return
+      }
+
+      if (!investmentData || investmentData.length === 0) {
+        console.log("[v0] Nenhum investimento encontrado para o usuário")
+        setLoading(false)
+        return
+      }
+
+      const totalInvested = investmentData.reduce((sum, inv) => sum + Number(inv.amount), 0)
+
+      const seniorInvestments = investmentData.filter((inv) => inv.quota_type === "senior")
+      const subordinateInvestments = investmentData.filter((inv) => inv.quota_type === "subordinate")
+
+      const seniorQuota = seniorInvestments.reduce((sum, inv) => sum + Number(inv.amount), 0)
+      const subordinateQuota = subordinateInvestments.reduce((sum, inv) => sum + Number(inv.amount), 0)
+
+      const seniorReturn = seniorQuota * 0.03
+      const subordinateReturn = subordinateQuota * 0.035
+      const monthlyReturn = seniorReturn + subordinateReturn
+
+      const currentValue = totalInvested + monthlyReturn * 6
+
+      setInvestments({
+        totalInvested,
+        currentValue,
+        monthlyReturn,
+        seniorQuota,
+        subordinateQuota,
+      })
+
+      console.log("[v0] Dados de investimento carregados:", {
+        totalInvested,
+        currentValue,
+        monthlyReturn,
+        seniorQuota,
+        subordinateQuota,
+      })
+    } catch (error) {
+      console.error("[v0] Erro ao carregar dados de investimento:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     const userStr = localStorage.getItem("user")
     if (userStr) {
-      setUser(JSON.parse(userStr))
+      const userData = JSON.parse(userStr)
+      setUser(userData)
+
+      if (userData.id) {
+        fetchInvestmentData(userData.id)
+      }
+    } else {
+      setLoading(false)
     }
   }, [])
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Carregando seus investimentos...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -98,7 +185,11 @@ export function InvestorDashboard() {
                 }).format(investments.currentValue)}
               </div>
               <p className="text-xs text-muted-foreground">
-                +{((investments.currentValue / investments.totalInvested - 1) * 100).toFixed(2)}% no período
+                +
+                {investments.totalInvested > 0
+                  ? ((investments.currentValue / investments.totalInvested - 1) * 100).toFixed(2)
+                  : "0.00"}
+                % no período
               </p>
             </CardContent>
           </Card>
@@ -115,7 +206,7 @@ export function InvestorDashboard() {
                   currency: "BRL",
                 }).format(investments.monthlyReturn)}
               </div>
-              <p className="text-xs text-muted-foreground">Média dos últimos 3 meses</p>
+              <p className="text-xs text-muted-foreground">Baseado na rentabilidade das cotas</p>
             </CardContent>
           </Card>
 
@@ -139,52 +230,70 @@ export function InvestorDashboard() {
               <CardDescription>Suas cotas no Clube Agroderi</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
-                <div>
-                  <h4 className="font-semibold text-primary">Cota Sênior</h4>
-                  <p className="text-sm text-muted-foreground">Rentabilidade: 3% a.m.</p>
+              {investments.seniorQuota > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
+                  <div>
+                    <h4 className="font-semibold text-primary">Cota Sênior</h4>
+                    <p className="text-sm text-muted-foreground">Rentabilidade: 3% a.m.</p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="font-bold">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(investments.seniorQuota)}
+                    </p>
+                    <Badge variant="outline">Conservador</Badge>
+                  </div>
                 </div>
-                <div className="text-left sm:text-right">
-                  <p className="font-bold">
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(investments.seniorQuota)}
-                  </p>
-                  <Badge variant="outline">Conservador</Badge>
-                </div>
-              </div>
+              )}
 
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
-                <div>
-                  <h4 className="font-semibold text-secondary">Cota Subordinada</h4>
-                  <p className="text-sm text-muted-foreground">Rentabilidade: 3,5% a.m.</p>
+              {investments.subordinateQuota > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
+                  <div>
+                    <h4 className="font-semibold text-secondary">Cota Subordinada</h4>
+                    <p className="text-sm text-muted-foreground">Rentabilidade: 3,5% a.m.</p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="font-bold">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(investments.subordinateQuota)}
+                    </p>
+                    <Badge variant="secondary">Arrojado</Badge>
+                  </div>
                 </div>
-                <div className="text-left sm:text-right">
-                  <p className="font-bold">
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(investments.subordinateQuota)}
-                  </p>
-                  <Badge variant="secondary">Arrojado</Badge>
-                </div>
-              </div>
+              )}
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-4">
-                <Link href="/deposit" className="flex-1">
-                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 bg-transparent">
-                    <Plus className="h-4 w-4" />
-                    Depositar Mais
-                  </Button>
-                </Link>
-                <Link href="/withdraw" className="flex-1">
-                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 bg-transparent">
-                    <Minus className="h-4 w-4" />
-                    Resgatar
-                  </Button>
-                </Link>
-              </div>
+              {investments.totalInvested === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">Você ainda não possui investimentos</p>
+                  <Link href="/deposit">
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Fazer Primeiro Investimento
+                    </Button>
+                  </Link>
+                </div>
+              )}
+
+              {investments.totalInvested > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                  <Link href="/deposit" className="flex-1">
+                    <Button variant="outline" className="w-full flex items-center justify-center gap-2 bg-transparent">
+                      <Plus className="h-4 w-4" />
+                      Depositar Mais
+                    </Button>
+                  </Link>
+                  <Link href="/withdraw" className="flex-1">
+                    <Button variant="outline" className="w-full flex items-center justify-center gap-2 bg-transparent">
+                      <Minus className="h-4 w-4" />
+                      Resgatar
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
 
