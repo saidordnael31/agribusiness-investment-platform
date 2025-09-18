@@ -62,6 +62,8 @@ interface QRCodeData {
 }
 
 export function UserManager() {
+  console.log("[v0] UserManager component rendered")
+
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,6 +98,7 @@ export function UserManager() {
   const [generatingQR, setGeneratingQR] = useState(false)
 
   useEffect(() => {
+    console.log("[v0] UserManager useEffect triggered")
     fetchUsers()
     fetchAssessors()
   }, [])
