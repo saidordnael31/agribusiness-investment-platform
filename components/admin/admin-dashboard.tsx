@@ -216,16 +216,24 @@ export function AdminDashboard() {
   }
 
   useEffect(() => {
+    console.log("[v0] AdminDashboard: Component mounted")
+
     const userStr = localStorage.getItem("user")
+    console.log("[v0] AdminDashboard: User from localStorage:", userStr)
+
     if (userStr) {
-      setUser(JSON.parse(userStr))
+      const userData = JSON.parse(userStr)
+      console.log("[v0] AdminDashboard: Parsed user data:", userData)
+      setUser(userData)
     }
 
+    console.log("[v0] AdminDashboard: Starting to fetch platform stats")
     fetchPlatformStats()
     fetchRecentActivities()
   }, [])
 
   if (!user || user.user_type !== "admin") {
+    console.log("[v0] AdminDashboard: Access denied - user:", user)
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md">
@@ -247,6 +255,7 @@ export function AdminDashboard() {
   }
 
   if (loading) {
+    console.log("[v0] AdminDashboard: Still loading...")
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
@@ -255,6 +264,8 @@ export function AdminDashboard() {
       </div>
     )
   }
+
+  console.log("[v0] AdminDashboard: Rendering main dashboard")
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -460,6 +471,7 @@ export function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="users">
+          {console.log("[v0] AdminDashboard: Users tab content is being rendered")}
           <UserManager />
         </TabsContent>
 
