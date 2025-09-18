@@ -83,12 +83,16 @@ export function Navbar() {
 
   const getUserDisplayName = () => {
     if (!user) return ""
+    console.log("[v0] Getting display name for user:", user)
     // Extrai o nome do email se não houver nome completo
-    return user.email.split("@")[0]
+    const displayName = user.email.split("@")[0]
+    console.log("[v0] Display name extracted:", displayName)
+    return displayName
   }
 
   const getUserTypeLabel = () => {
     if (!user) return ""
+    console.log("[v0] Getting type label for user type:", user.user_type)
     switch (user.user_type) {
       case "investor":
         return "Investidor"
@@ -229,7 +233,15 @@ export function Navbar() {
                 {/* User Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      className="flex items-center space-x-2"
+                      onClick={() => {
+                        console.log("[v0] User button clicked, user data:", user)
+                        console.log("[v0] Display name:", getUserDisplayName())
+                        console.log("[v0] Type label:", getUserTypeLabel())
+                      }}
+                    >
                       <User className="h-4 w-4" />
                       <span className="hidden sm:inline">{getUserDisplayName()}</span>
                       <Badge variant="secondary" className="hidden sm:inline">
@@ -291,7 +303,12 @@ export function Navbar() {
                       </>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        console.log("[v0] Logout clicked")
+                        handleLogout()
+                      }}
+                    >
                       <LogOut className="h-4 w-4 mr-2" />
                       Sair
                     </DropdownMenuItem>
