@@ -137,7 +137,6 @@ export function UserManager() {
 
       console.log("[v0] Iniciando busca de usuários...")
 
-      // Primeiro busca todos os profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
@@ -157,43 +156,19 @@ export function UserManager() {
         return
       }
 
-      // Depois busca todos os investimentos
-      const { data: investments, error: investmentsError } = await supabase
-        .from("investments")
-        .select("user_id, amount, status, created_at")
-
-      console.log("[v0] Investimentos encontrados:", investments?.length || 0)
-      console.log("[v0] Erro nos investimentos:", investmentsError)
-
-      if (investmentsError) {
-        console.error("Erro ao buscar investimentos:", investmentsError)
-      }
-
-      // Agrupa investimentos por user_id
-      const investmentsByUser = (investments || []).reduce((acc: any, inv: any) => {
-        if (!acc[inv.user_id]) {
-          acc[inv.user_id] = []
-        }
-        acc[inv.user_id].push(inv)
-        return acc
-      }, {})
-
       const transformedUsers: User[] = (profiles || []).map((profile) => {
-        const userInvestments = investmentsByUser[profile.id] || []
-        const totalInvested = userInvestments.reduce((sum: number, inv: any) => sum + (inv.amount || 0), 0)
-
         return {
           id: profile.id,
           name: profile.full_name || profile.email.split("@")[0],
           email: profile.email,
           type: profile.user_type || "investor",
           status: profile.is_active ? "active" : "inactive",
-          totalInvested,
-          totalCaptured: 0, // Pode ser calculado posteriormente se necessário
+          totalInvested: 0, // Sem dados de investimento por enquanto
+          totalCaptured: 0,
           joinedAt: profile.created_at,
           lastActivity: profile.updated_at || profile.created_at,
           phone: profile.phone,
-          cpf: profile.cnpj, // Usando cnpj como cpf por enquanto
+          cpf: profile.cnpj,
           fullName: profile.full_name,
           userType: profile.user_type,
           isActive: profile.is_active,
