@@ -1,24 +1,36 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Calculator, Gift, TrendingUp } from "lucide-react"
-import { Disclaimers } from "@/components/compliance/disclaimers"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Calculator, Gift, TrendingUp } from "lucide-react";
+import { Disclaimers } from "@/components/compliance/disclaimers";
 
 interface Bonification {
-  id: string
-  type: "value" | "commitment" | "promotion"
-  name: string
-  description: string
-  bonus: number
-  minValue?: number
-  minCommitment?: number
-  isActive: boolean
+  id: string;
+  type: "value" | "commitment" | "promotion";
+  name: string;
+  description: string;
+  bonus: number;
+  minValue?: number;
+  minCommitment?: number;
+  isActive: boolean;
 }
 
 const mockBonifications: Bonification[] = [
@@ -66,70 +78,90 @@ const mockBonifications: Bonification[] = [
     bonus: 0.2,
     isActive: true,
   },
-]
+];
 
 export function InvestmentSimulator() {
-  const [amount, setAmount] = useState("")
-  const [period, setPeriod] = useState("")
-  const [commitmentPeriod, setCommitmentPeriod] = useState("")
-  const [withRescue, setWithRescue] = useState("")
+  const [user, setUser] = useState<null>(null);
+  const [amount, setAmount] = useState("");
+  const [period, setPeriod] = useState("");
+  const [commitmentPeriod, setCommitmentPeriod] = useState("");
+  const [withRescue, setWithRescue] = useState("");
   const [results, setResults] = useState<{
-    monthlyReturn: number
-    totalReturn: number
-    finalAmount: number
-    baseBonifications: Bonification[]
-    totalBonusRate: number
-    bonusReturn: number
-  } | null>(null)
+    monthlyReturn: number;
+    totalReturn: number;
+    finalAmount: number;
+    baseBonifications: Bonification[];
+    totalBonusRate: number;
+    bonusReturn: number;
+  } | null>(null);
 
-  const getApplicableBonifications = (investmentAmount: number, commitment: number): Bonification[] => {
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      setUser(JSON.parse(userStr));
+    }
+  }, []);
+
+  const getApplicableBonifications = (
+    investmentAmount: number,
+    commitment: number
+  ): Bonification[] => {
     return mockBonifications.filter((bonification) => {
-      if (!bonification.isActive) return false
+      if (!bonification.isActive) return false;
 
       switch (bonification.type) {
         case "value":
-          return bonification.minValue ? investmentAmount >= bonification.minValue : true
+          return bonification.minValue
+            ? investmentAmount >= bonification.minValue
+            : true;
         case "commitment":
-          return bonification.minCommitment ? commitment >= bonification.minCommitment : true
+          return bonification.minCommitment
+            ? commitment >= bonification.minCommitment
+            : true;
         case "promotion":
-          return true
+          return true;
         default:
-          return false
+          return false;
       }
-    })
-  }
+    });
+  };
 
   const calculateReturns = () => {
-    const investmentAmount = Number.parseFloat(amount)
-    const months = Number.parseInt(period)
-    const commitment = Number.parseInt(commitmentPeriod) || 0
-    const isWithRescue = withRescue === "sim"
+    const investmentAmount = Number.parseFloat(amount);
+    const months = Number.parseInt(period);
+    const commitment = Number.parseInt(commitmentPeriod) || 0;
+    const isWithRescue = withRescue === "sim";
 
-    if (!investmentAmount || !months) return
+    if (!investmentAmount || !months) return;
 
-    const baseMonthlyRate = 0.02 // 2% ao mês
+    const baseMonthlyRate =
+      user?.user_type === "investor"
+        ? 0.02
+        : user?.user_type === "escritorio"
+        ? 0.01
+        : 0.03;
 
-    let monthlyReturn: number
-    let totalReturn: number
-    let finalAmount: number
+    let monthlyReturn: number;
+    let totalReturn: number;
+    let finalAmount: number;
 
     if (isWithRescue) {
       // Juros simples - retorno mensal fixo sobre o valor inicial
-      monthlyReturn = investmentAmount * baseMonthlyRate
-      totalReturn = monthlyReturn * months
-      finalAmount = investmentAmount + totalReturn
+      monthlyReturn = investmentAmount * baseMonthlyRate;
+      totalReturn = monthlyReturn * months;
+      finalAmount = investmentAmount + totalReturn;
     } else {
       // Juros compostos - retorno mensal sobre o valor acumulado
-      monthlyReturn = investmentAmount * baseMonthlyRate
-      finalAmount = investmentAmount * Math.pow(1 + baseMonthlyRate, months)
-      totalReturn = finalAmount - investmentAmount
+      monthlyReturn = investmentAmount * baseMonthlyRate;
+      finalAmount = investmentAmount * Math.pow(1 + baseMonthlyRate, months);
+      totalReturn = finalAmount - investmentAmount;
     }
 
-    console.log("[v0] Com resgate:", isWithRescue)
-    console.log("[v0] Retorno mensal:", monthlyReturn)
-    console.log("[v0] meses:", months)
-    console.log("[v0] Retorno total:", totalReturn)
-    console.log("[v0] Valor final:", finalAmount)
+    console.log("[v0] Com resgate:", isWithRescue);
+    console.log("[v0] Retorno mensal:", monthlyReturn);
+    console.log("[v0] meses:", months);
+    console.log("[v0] Retorno total:", totalReturn);
+    console.log("[v0] Valor final:", finalAmount);
 
     setResults({
       monthlyReturn,
@@ -138,8 +170,8 @@ export function InvestmentSimulator() {
       baseBonifications: [],
       totalBonusRate: 0,
       bonusReturn: 0,
-    })
-  }
+    });
+  };
 
   return (
     <Card>
@@ -149,7 +181,8 @@ export function InvestmentSimulator() {
           Simulador de Investimentos
         </CardTitle>
         <CardDescription>
-          Simule os retornos do seu investimento no Clube de Investimentos Privado do Agronegócio (2% ao mês)
+          Simule os retornos do seu investimento no Clube de Investimentos
+          Privado do Agronegócio (2% ao mês)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -181,7 +214,10 @@ export function InvestmentSimulator() {
 
           <div className="space-y-2">
             <Label htmlFor="commitment">Compromisso (meses)</Label>
-            <Select value={commitmentPeriod} onValueChange={setCommitmentPeriod}>
+            <Select
+              value={commitmentPeriod}
+              onValueChange={setCommitmentPeriod}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Sem compromisso" />
               </SelectTrigger>
@@ -291,5 +327,5 @@ export function InvestmentSimulator() {
         <Disclaimers variant="compact" />
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -1112,7 +1112,7 @@ export function DistributorDashboard() {
                     </div>
 
                     {/* Exibir rentabilidade dinâmica */}
-                    {investorForm.profitability ? (
+                    {/* {investorForm.profitability ? (
                       <p className="mt-2 text-sm text-green-700">
                         Rentabilidade estimada:{" "}
                         <strong>{investorForm.profitability}</strong>
@@ -1121,7 +1121,7 @@ export function DistributorDashboard() {
                       <p className="mt-2 text-sm text-red-700">
                         Escolha um prazo de resgate
                       </p>
-                    )}
+                    )} */}
 
                     {/* Aviso de multa */}
                     <p className="mt-1 text-sm text-red-600">
