@@ -26,18 +26,20 @@ export function LoginForm() {
       console.log("[v0] Password length:", password.length);
 
       const demoCredentials = {
-        "investidor@akintec.com": { type: "investor", name: "João Silva" },
+        "investidor@akintec.com": { type: "investor", name: "João Silva", rescue_type: "D+2" },
         "distributor@akintec.com": {
           type: "distributor",
           name: "Maria Santos",
           office_id: null,
           role: "office",
+          rescue_type: "D+2",
         },
         "assessor@akintec.com": {
           type: "distributor",
           name: "Pedro Costa",
           office_id: "office-1",
           role: "advisor",
+          rescue_type: "D+2",
         },
         "admin@akintec.com": { type: "admin", name: "Administrador" },
       };
@@ -73,6 +75,7 @@ export function LoginForm() {
           user_type: userInfo.type,
           office_id: userInfo.office_id || null,
           role: userInfo.role || null,
+          rescue_type: userInfo.rescue_type || null,
         };
 
         console.log("[v0] Saving user data:", userData);
@@ -230,6 +233,7 @@ export function LoginForm() {
         user_type: profile.user_type,
         office_id: profile.office_id || null,
         role: profile.role || null,
+        rescue_type: profile.rescue_type || null,
       };
 
       console.log("[v0] Saving Supabase user data:", userData);

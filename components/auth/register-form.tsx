@@ -215,7 +215,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
         .insert([
           {
             id: authData.user.id,
-            email: authData.user.email,
+            email: formData.email,
             full_name: authData.user.user_metadata.full_name,
             user_type: authData.user.user_metadata.user_type,
             role: "investidor",

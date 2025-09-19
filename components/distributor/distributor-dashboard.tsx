@@ -389,6 +389,7 @@ export function DistributorDashboard() {
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
             notes: "Cadastro de profile via login",
             hierarchy_level: "advisor",
+            rescue_type: investorForm.rescueTerm,
             is_active: true,
           },
         ])

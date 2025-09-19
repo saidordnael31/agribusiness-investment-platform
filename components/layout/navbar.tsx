@@ -47,6 +47,7 @@ interface UserData {
 export function Navbar() {
   const [user, setUser] = useState<UserData | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -67,9 +68,15 @@ export function Navbar() {
   }, []);
 
   const handleLogout = () => {
+    console.log("Saindo...");
+    toast({
+      title: "Saindo...",
+      description: "Você foi desconectado com sucesso.",
+    });
     localStorage.clear(); // Limpa todo o localStorage
     sessionStorage.clear(); // Limpa também o sessionStorage
     setUser(null); // Limpa o estado local
+    setIsUserDropdownOpen(false); // Fecha o dropdown
 
     toast({
       title: "Logout realizado",
@@ -83,12 +90,6 @@ export function Navbar() {
   const isActive = (path: string) => pathname === path;
 
   const getUserDisplayName = () => {
-    // const supabase = createServerClient()
-    // // Buscar perfil do usuário
-    // const { data: profiles } = await supabase
-    //   .from("profiles")
-    //   .select("*")
-    // console.log("PROFILE", profiles)
     if (!user) return "";
     // Extrai o nome do email se não houver nome completo
     return user.name;
@@ -251,14 +252,23 @@ export function Navbar() {
                 </Button>
 
                 {/* User Dropdown */}
-                <DropdownMenu>
+                <DropdownMenu
+                  open={isUserDropdownOpen}
+                  onOpenChange={setIsUserDropdownOpen}
+                >
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="flex items-center space-x-2"
+                      className="flex items-center space-x-2 hover:bg-accent/80"
                     >
                       <User className="h-4 w-4" />
-                      <span className="hidden sm:inline">
+                      <span
+                        className="hidden sm:inline cursor-pointer hover:text-accent-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsUserDropdownOpen(!isUserDropdownOpen);
+                        }}
+                      >
                         {getUserDisplayName()}
                       </span>
                       <Badge variant="secondary" className="hidden sm:inline">
@@ -323,13 +333,13 @@ export function Navbar() {
                         </DropdownMenuItem>
                       </>
                     )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Sair
-                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                <Button variant="outline" size="sm" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sair
+                </Button>
               </>
             ) : (
               <div className="flex items-center space-x-2">

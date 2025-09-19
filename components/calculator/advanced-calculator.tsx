@@ -89,8 +89,8 @@ export function AdvancedCalculator() {
     }, 0)
 
     // Division calculation
-    const advisorShare = (amount) * 0.03
-    const officeShare = (amount) * 0.01
+    const advisorShare = (totalCommission) * 0.75
+    const officeShare = (totalCommission) * 0.25
 
     // Pool calculation (annual)
     const annualPoolShare = (amount * 0.003 * 12 * poolShare) / 100 // 0.3% of annual commission * pool %
@@ -292,7 +292,7 @@ export function AdvancedCalculator() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-                    <span className="font-medium">Assessor (3%)</span>
+                    <span className="font-medium">Assessor</span>
                     <span className="font-bold text-primary">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
@@ -301,7 +301,7 @@ export function AdvancedCalculator() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-secondary/5 rounded-lg">
-                    <span className="font-medium">Escritório (1%)</span>
+                    <span className="font-medium">Escritório</span>
                     <span className="font-bold text-secondary">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
@@ -344,7 +344,7 @@ export function AdvancedCalculator() {
               </Card> */}
             </div>
 
-            <Card className="border-2 border-primary">
+            {/* <Card className="border-2 border-primary">
               <CardHeader>
                 <CardTitle className="text-primary">Total com Todos os Bônus</CardTitle>
               </CardHeader>
@@ -358,7 +358,7 @@ export function AdvancedCalculator() {
                 <p className="text-sm text-muted-foreground mt-2">
                   Valor total considerando comissões base, bônus de performance
                   {results.promotionalBonus > 0 ? ", promoções ativas" : ""} e participação no pool nacional
-                </p>
+                </p> */}
                 {/* {results.promotionalBonus > 0 && (
                   <div className="mt-4 p-3 bg-accent/5 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
@@ -374,8 +374,9 @@ export function AdvancedCalculator() {
                     <p className="text-xs text-muted-foreground">Promoções ativas aplicadas ao período</p>
                   </div>
                 )} */}
-              </CardContent>
-            </Card>
+              {/* </CardContent>
+            </Card> */}
+            
           </div>
         )}
       </CardContent>

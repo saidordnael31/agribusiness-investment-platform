@@ -95,7 +95,10 @@ export function DepositFlow() {
     const { data, error } = await supabase.from("investments").select("*");
     console.log(data, error);
     if (!data) return;
-    const allInvestmentsValues = data.reduce((acc, curr) => acc + curr.amount, 0);
+    const allInvestmentsValues = data.reduce(
+      (acc, curr) => acc + curr.amount,
+      0
+    );
     setAllInvestmentsReturn(allInvestmentsValues * 0.03);
     setAllInvestmentsValue(allInvestmentsValues);
     setInvestments(data);
@@ -123,7 +126,7 @@ export function DepositFlow() {
         p_user_id: user?.id, // ou o id do investidor que o assessor quer criar
         p_amount: Number(depositAmount),
         p_status: "pending",
-        p_quota_type:"senior",
+        p_quota_type: "senior",
         p_monthly_return_rate: 0.03,
         p_commitment_period: 12,
       }
@@ -208,10 +211,7 @@ export function DepositFlow() {
     }).format(value);
   };
 
-  const calculateNewReturn = (
-    investment: number,
-    additionalAmount: number
-  ) => {
+  const calculateNewReturn = (investment: number, additionalAmount: number) => {
     const rate = 0.03;
     const newTotal = investment + additionalAmount;
     return newTotal * rate;
@@ -326,9 +326,9 @@ export function DepositFlow() {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* <div className="bg-gray-50 p-6 rounded-lg"> */}
-              {/* <h3 className="font-semibold mb-4">Resumo do Depósito</h3> */}
-              {/* <div className="space-y-3"> */}
-                {/* <div className="flex justify-between">
+            {/* <h3 className="font-semibold mb-4">Resumo do Depósito</h3> */}
+            {/* <div className="space-y-3"> */}
+            {/* <div className="flex justify-between">
                   <span className="text-gray-600">
                     Investimento Selecionado:
                   </span>
@@ -345,7 +345,7 @@ export function DepositFlow() {
                       : "Subordinada"}
                   </Badge>
                 </div> */}
-                {/* <div className="flex justify-between">
+            {/* <div className="flex justify-between">
                   <span className="text-gray-600">Valor Atual:</span>
                   <span>
                     {formatCurrency(allInvestmentsValue || 0)}

@@ -70,9 +70,9 @@ const mockBonifications: Bonification[] = [
 
 export function InvestmentSimulator() {
   const [amount, setAmount] = useState("")
-  const [quotaType, setQuotaType] = useState("")
   const [period, setPeriod] = useState("")
   const [commitmentPeriod, setCommitmentPeriod] = useState("")
+  const [withRescue, setWithRescue] = useState("")
   const [results, setResults] = useState<{
     monthlyReturn: number
     totalReturn: number
@@ -103,28 +103,41 @@ export function InvestmentSimulator() {
     const investmentAmount = Number.parseFloat(amount)
     const months = Number.parseInt(period)
     const commitment = Number.parseInt(commitmentPeriod) || 0
+    const isWithRescue = withRescue === "sim"
 
-    if (!investmentAmount || !quotaType || !months) return
+    if (!investmentAmount || !months) return
 
-    const baseMonthlyRate = quotaType === "senior" ? 0.03 : 0.035
+    const baseMonthlyRate = 0.02 // 2% ao mês
 
-    const applicableBonifications = getApplicableBonifications(investmentAmount, commitment)
-    const totalBonusRate = applicableBonifications.reduce((sum, bonus) => sum + bonus.bonus, 0) / 100
-    const finalMonthlyRate = baseMonthlyRate + totalBonusRate
+    let monthlyReturn: number
+    let totalReturn: number
+    let finalAmount: number
 
-    const monthlyReturn = investmentAmount * finalMonthlyRate
-    const baseMonthlyReturn = investmentAmount * baseMonthlyRate
-    const bonusReturn = monthlyReturn - baseMonthlyReturn
-    const totalReturn = monthlyReturn * months
-    const finalAmount = investmentAmount + totalReturn
+    if (isWithRescue) {
+      // Juros simples - retorno mensal fixo sobre o valor inicial
+      monthlyReturn = investmentAmount * baseMonthlyRate
+      totalReturn = monthlyReturn * months
+      finalAmount = investmentAmount + totalReturn
+    } else {
+      // Juros compostos - retorno mensal sobre o valor acumulado
+      monthlyReturn = investmentAmount * baseMonthlyRate
+      finalAmount = investmentAmount * Math.pow(1 + baseMonthlyRate, months)
+      totalReturn = finalAmount - investmentAmount
+    }
+
+    console.log("[v0] Com resgate:", isWithRescue)
+    console.log("[v0] Retorno mensal:", monthlyReturn)
+    console.log("[v0] meses:", months)
+    console.log("[v0] Retorno total:", totalReturn)
+    console.log("[v0] Valor final:", finalAmount)
 
     setResults({
       monthlyReturn,
       totalReturn,
       finalAmount,
-      baseBonifications: applicableBonifications,
-      totalBonusRate: totalBonusRate * 100,
-      bonusReturn: bonusReturn * months,
+      baseBonifications: [],
+      totalBonusRate: 0,
+      bonusReturn: 0,
     })
   }
 
@@ -136,11 +149,11 @@ export function InvestmentSimulator() {
           Simulador de Investimentos
         </CardTitle>
         <CardDescription>
-          Simule os retornos do seu investimento no Clube de Investimentos Privado do Agronegócio
+          Simule os retornos do seu investimento no Clube de Investimentos Privado do Agronegócio (2% ao mês)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="space-y-2">
             <Label htmlFor="amount">Valor do Investimento</Label>
             <Input
@@ -152,19 +165,6 @@ export function InvestmentSimulator() {
               min="5000"
             />
             <p className="text-xs text-muted-foreground">Mínimo: R$ 5.000</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="quota">Tipo de Cota</Label>
-            <Select value={quotaType} onValueChange={setQuotaType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a cota" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="senior">Cota Sênior (3% a.m.)</SelectItem>
-                <SelectItem value="subordinate">Cota Subordinada (3,5% a.m.)</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">
@@ -186,21 +186,35 @@ export function InvestmentSimulator() {
                 <SelectValue placeholder="Sem compromisso" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="0">Sem compromisso</SelectItem>
-                <SelectItem value="12">12 meses (+0,3%)</SelectItem>
-                <SelectItem value="24">24 meses (+0,7%)</SelectItem>
+                <SelectItem value="2">2 meses</SelectItem>
+                <SelectItem value="3">3 meses</SelectItem>
+                <SelectItem value="6">6 meses</SelectItem>
+                <SelectItem value="12">12 meses</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withRescue">Com Resgate</Label>
+            <Select value={withRescue} onValueChange={setWithRescue}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sim">Sim</SelectItem>
+                <SelectItem value="nao">Não</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
         <Button onClick={calculateReturns} className="w-full">
-          Calcular Retornos com Bonificações
+          Calcular Retornos
         </Button>
 
         {results && (
           <div className="space-y-6">
-            {results.baseBonifications.length > 0 && (
+            {/* {results.baseBonifications.length > 0 && (
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <div className="flex items-center gap-2 mb-3">
                   <Gift className="h-5 w-5 text-primary" />
@@ -219,9 +233,9 @@ export function InvestmentSimulator() {
                   ))}
                 </div>
               </div>
-            )}
+            )} */}
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-card rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-card rounded-lg border">
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Retorno Mensal</p>
                 <p className="text-2xl font-bold text-primary">
@@ -230,18 +244,18 @@ export function InvestmentSimulator() {
                     currency: "BRL",
                   }).format(results.monthlyReturn)}
                 </p>
-                {results.totalBonusRate > 0 && (
+                {/* {results.totalBonusRate > 0 && (
                   <p className="text-xs text-primary">
                     <TrendingUp className="h-3 w-3 inline mr-1" />+
                     {new Intl.NumberFormat("pt-BR", {
                       style: "currency",
                       currency: "BRL",
                     }).format(
-                      results.monthlyReturn - Number.parseFloat(amount) * (quotaType === "senior" ? 0.03 : 0.035),
+                      results.monthlyReturn - Number.parseFloat(amount) * 0.02,
                     )}{" "}
                     bônus
                   </p>
-                )}
+                )} */}
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Retorno Total</p>
@@ -252,7 +266,7 @@ export function InvestmentSimulator() {
                   }).format(results.totalReturn)}
                 </p>
               </div>
-              <div className="text-center">
+              {/* <div className="text-center">
                 <p className="text-sm text-muted-foreground">Bônus Total</p>
                 <p className="text-2xl font-bold text-accent">
                   {new Intl.NumberFormat("pt-BR", {
@@ -260,7 +274,7 @@ export function InvestmentSimulator() {
                     currency: "BRL",
                   }).format(results.bonusReturn)}
                 </p>
-              </div>
+              </div> */}
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Valor Final</p>
                 <p className="text-2xl font-bold text-foreground">
