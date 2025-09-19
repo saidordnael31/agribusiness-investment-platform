@@ -554,7 +554,7 @@ export function DistributorDashboard() {
         {/* Welcome Section */}
         <div className="mb-6 md:mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-            Dashboard do Investidor
+            {user?.role === "escritorio" ? "Dashboard do Escritório" : "Dashboard do Investidor"}
           </h2>
           <p className="text-muted-foreground">
             Acompanhe suas vendas, comissões e performance
