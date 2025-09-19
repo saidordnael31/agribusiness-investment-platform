@@ -26,8 +26,8 @@ export function ComparisonCalculator() {
       performanceBonus = amount * 0.01 * 12 // +1% additional
     }
 
-    const advisorShare = (annualCommission + performanceBonus) * 0.7
-    const totalWithBonus = annualCommission + performanceBonus
+    const advisorShare = (annualCommission) * 0.03
+    const totalWithBonus = annualCommission
 
     return {
       monthlyCommission,
@@ -51,7 +51,6 @@ export function ComparisonCalculator() {
       amount: scenario.amount,
       monthly: calc.monthlyCommission,
       annual: calc.annualCommission,
-      bonus: calc.performanceBonus,
       total: calc.totalWithBonus,
       advisor: calc.advisorShare,
     }
@@ -106,7 +105,7 @@ export function ComparisonCalculator() {
                     style: "currency",
                     currency: "BRL",
                   }).format(value),
-                  name === "annual" ? "Comissão Anual" : name === "bonus" ? "Bônus" : "Total",
+                  name === "annual" ? "Comissão Anual" : "Comissão Anual",
                 ]}
                 labelStyle={{ color: "hsl(var(--foreground))" }}
                 contentStyle={{
@@ -140,7 +139,7 @@ export function ComparisonCalculator() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Mensal</span>
                       <p className="font-bold">
@@ -159,7 +158,7 @@ export function ComparisonCalculator() {
                         }).format(data.annual)}
                       </p>
                     </div>
-                    <div>
+                    {/* <div>
                       <span className="text-muted-foreground">Bônus</span>
                       <p className="font-bold text-secondary">
                         {new Intl.NumberFormat("pt-BR", {
@@ -167,7 +166,7 @@ export function ComparisonCalculator() {
                           currency: "BRL",
                         }).format(data.bonus)}
                       </p>
-                    </div>
+                    </div> */}
                     <div>
                       <span className="text-muted-foreground">Total</span>
                       <p className="font-bold text-primary">

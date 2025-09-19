@@ -93,20 +93,20 @@ export function CommissionCalculator() {
             <CardDescription>Entenda como funcionam as comissões e bônus</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-2">
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <h4 className="font-semibold text-primary mb-2">Comissão Base</h4>
-                <p className="text-2xl font-bold text-primary">3%</p>
+                <p className="text-2xl font-bold text-primary">4%</p>
                 <p className="text-xs text-muted-foreground">ao mês sobre valor investido</p>
               </div>
 
               <div className="p-4 bg-secondary/5 rounded-lg border border-secondary/20">
                 <h4 className="font-semibold text-secondary mb-2">Divisão</h4>
-                <p className="text-lg font-bold text-secondary">70% / 30%</p>
+                <p className="text-lg font-bold text-secondary">3% / 1%</p>
                 <p className="text-xs text-muted-foreground">Assessor / Escritório</p>
               </div>
 
-              <div className="p-4 bg-accent/5 rounded-lg border border-accent/20">
+              {/* <div className="p-4 bg-accent/5 rounded-lg border border-accent/20">
                 <h4 className="font-semibold text-accent mb-2">Bônus Meta 1</h4>
                 <p className="text-lg font-bold text-accent">+1%</p>
                 <p className="text-xs text-muted-foreground">R$ 500k captados</p>
@@ -116,17 +116,17 @@ export function CommissionCalculator() {
                 <h4 className="font-semibold mb-2">Bônus Meta 2</h4>
                 <p className="text-lg font-bold">+2%</p>
                 <p className="text-xs text-muted-foreground">R$ 1M captados</p>
-              </div>
+              </div> */}
             </div>
           </CardContent>
         </Card>
 
         {/* Calculator Tabs */}
         <Tabs defaultValue="advanced" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="advanced">Calculadora Avançada</TabsTrigger>
             <TabsTrigger value="comparison">Comparação</TabsTrigger>
-            <TabsTrigger value="scenarios">Análise de Cenários</TabsTrigger>
+            {/* <TabsTrigger value="scenarios">Análise de Cenários</TabsTrigger> */}
           </TabsList>
 
           <TabsContent value="advanced">

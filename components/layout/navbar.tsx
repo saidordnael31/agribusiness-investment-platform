@@ -1,24 +1,24 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter, usePathname } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   NavigationMenu,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
   navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu"
+} from "@/components/ui/navigation-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   TrendingUp,
   User,
@@ -31,92 +31,99 @@ import {
   Gift,
   Settings,
   FileText,
-} from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { createServerClient } from "@/lib/supabase/server";
 
 interface UserData {
-  id: string
-  email: string
-  user_type: string
-  office_id?: string | null
-  role?: string | null
+  id: string;
+  email: string;
+  user_type: string;
+  office_id?: string | null;
+  role?: string | null;
 }
 
 export function Navbar() {
-  const [user, setUser] = useState<UserData | null>(null)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const router = useRouter()
-  const pathname = usePathname()
-  const { toast } = useToast()
+  const [user, setUser] = useState<UserData | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { toast } = useToast();
 
   useEffect(() => {
-    const userStr = localStorage.getItem("user")
+    const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
-        const userData = JSON.parse(userStr)
+        const userData = JSON.parse(userStr);
         if (userData && userData.email && userData.user_type) {
-          setUser(userData)
+          setUser(userData);
         }
       } catch (error) {
-        console.error("Erro ao parsear dados do usuário:", error)
-        localStorage.removeItem("user")
+        console.error("Erro ao parsear dados do usuário:", error);
+        localStorage.removeItem("user");
       }
     }
-  }, [])
+  }, []);
 
   const handleLogout = () => {
-    localStorage.clear() // Limpa todo o localStorage
-    sessionStorage.clear() // Limpa também o sessionStorage
-    setUser(null) // Limpa o estado local
+    localStorage.clear(); // Limpa todo o localStorage
+    sessionStorage.clear(); // Limpa também o sessionStorage
+    setUser(null); // Limpa o estado local
 
     toast({
       title: "Logout realizado",
       description: "Você foi desconectado com sucesso.",
-    })
+    });
 
     // Força o redirecionamento e recarregamento da página
-    window.location.href = "/"
-  }
+    window.location.href = "/";
+  };
 
-  const isActive = (path: string) => pathname === path
+  const isActive = (path: string) => pathname === path;
 
   const getUserDisplayName = () => {
-    if (!user) return ""
+    // const supabase = createServerClient()
+    // // Buscar perfil do usuário
+    // const { data: profiles } = await supabase
+    //   .from("profiles")
+    //   .select("*")
+    // console.log("PROFILE", profiles)
+    if (!user) return "";
     // Extrai o nome do email se não houver nome completo
-    return user.email.split("@")[0]
-  }
+    return user.name;
+  };
 
   const getUserTypeLabel = () => {
-    if (!user) return ""
+    if (!user) return "";
     switch (user.user_type) {
       case "investor":
-        return "Investidor"
+        return "Investidor";
       case "admin":
-        return "Admin"
+        return "Admin";
       case "distributor":
       case "advisor":
       case "assessor":
-        return "Distribuidor"
+        return "Distribuidor";
       default:
-        return user.user_type
+        return user.user_type;
     }
-  }
+  };
 
   const getDashboardRoute = () => {
-    if (!user) return "/"
+    if (!user) return "/";
     switch (user.user_type) {
       case "investor":
-        return "/investor"
+        return "/investor";
       case "admin":
-        return "/admin"
+        return "/admin";
       case "distributor":
       case "advisor":
       case "assessor":
       default:
-        return "/distributor"
+        return "/distributor";
     }
-  }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -125,7 +132,9 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
             <TrendingUp className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-card-foreground">Akintec Platform</span>
+            <span className="text-xl font-bold text-card-foreground">
+              Akintec Platform
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -135,7 +144,10 @@ export function Navbar() {
                 <NavigationMenuItem>
                   <Link href={getDashboardRoute()} legacyBehavior passHref>
                     <NavigationMenuLink
-                      className={cn(navigationMenuTriggerStyle(), isActive(getDashboardRoute()) && "bg-accent")}
+                      className={cn(
+                        navigationMenuTriggerStyle(),
+                        isActive(getDashboardRoute()) && "bg-accent"
+                      )}
                     >
                       <BarChart3 className="h-4 w-4 mr-2" />
                       Dashboard
@@ -146,7 +158,10 @@ export function Navbar() {
                 <NavigationMenuItem>
                   <Link href="/documents" legacyBehavior passHref>
                     <NavigationMenuLink
-                      className={cn(navigationMenuTriggerStyle(), isActive("/documents") && "bg-accent")}
+                      className={cn(
+                        navigationMenuTriggerStyle(),
+                        isActive("/documents") && "bg-accent"
+                      )}
                     >
                       <FileText className="h-4 w-4 mr-2" />
                       Documentos
@@ -159,7 +174,10 @@ export function Navbar() {
                     <NavigationMenuItem>
                       <Link href="/deposit" legacyBehavior passHref>
                         <NavigationMenuLink
-                          className={cn(navigationMenuTriggerStyle(), isActive("/deposit") && "bg-accent")}
+                          className={cn(
+                            navigationMenuTriggerStyle(),
+                            isActive("/deposit") && "bg-accent"
+                          )}
                         >
                           <Plus className="h-4 w-4 mr-2" />
                           Depositar
@@ -170,7 +188,10 @@ export function Navbar() {
                     <NavigationMenuItem>
                       <Link href="/withdraw" legacyBehavior passHref>
                         <NavigationMenuLink
-                          className={cn(navigationMenuTriggerStyle(), isActive("/withdraw") && "bg-accent")}
+                          className={cn(
+                            navigationMenuTriggerStyle(),
+                            isActive("/withdraw") && "bg-accent"
+                          )}
                         >
                           <Minus className="h-4 w-4 mr-2" />
                           Resgatar
@@ -188,7 +209,10 @@ export function Navbar() {
                     <NavigationMenuItem>
                       <Link href="/calculator" legacyBehavior passHref>
                         <NavigationMenuLink
-                          className={cn(navigationMenuTriggerStyle(), isActive("/calculator") && "bg-accent")}
+                          className={cn(
+                            navigationMenuTriggerStyle(),
+                            isActive("/calculator") && "bg-accent"
+                          )}
                         >
                           <Calculator className="h-4 w-4 mr-2" />
                           Calculadora
@@ -196,7 +220,7 @@ export function Navbar() {
                       </Link>
                     </NavigationMenuItem>
 
-                    <NavigationMenuItem>
+                    {/* <NavigationMenuItem>
                       <Link href="/bonifications" legacyBehavior passHref>
                         <NavigationMenuLink
                           className={cn(navigationMenuTriggerStyle(), isActive("/bonifications") && "bg-accent")}
@@ -205,7 +229,7 @@ export function Navbar() {
                           Bonificações
                         </NavigationMenuLink>
                       </Link>
-                    </NavigationMenuItem>
+                    </NavigationMenuItem> */}
                   </>
                 )}
               </NavigationMenuList>
@@ -229,9 +253,14 @@ export function Navbar() {
                 {/* User Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      className="flex items-center space-x-2"
+                    >
                       <User className="h-4 w-4" />
-                      <span className="hidden sm:inline">{getUserDisplayName()}</span>
+                      <span className="hidden sm:inline">
+                        {getUserDisplayName()}
+                      </span>
                       <Badge variant="secondary" className="hidden sm:inline">
                         {getUserTypeLabel()}
                       </Badge>
@@ -239,8 +268,12 @@ export function Navbar() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{getUserDisplayName()}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                      <p className="text-sm font-medium">
+                        {getUserDisplayName()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {user.email}
+                      </p>
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
@@ -329,7 +362,7 @@ export function Navbar() {
                   "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                   isActive(getDashboardRoute())
                     ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
+                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -343,7 +376,7 @@ export function Navbar() {
                   "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                   isActive("/documents")
                     ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
+                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -359,7 +392,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/deposit")
                         ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -373,7 +406,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/withdraw")
                         ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -394,7 +427,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/calculator")
                         ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -408,7 +441,7 @@ export function Navbar() {
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive("/bonifications")
                         ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80",
+                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -422,5 +455,5 @@ export function Navbar() {
         )}
       </div>
     </header>
-  )
+  );
 }

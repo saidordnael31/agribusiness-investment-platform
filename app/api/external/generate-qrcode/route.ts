@@ -4,49 +4,22 @@ export async function POST(request: NextRequest) {
   try {
     const { value, cpf } = await request.json()
 
-    console.log("[v0] Gerando QR Code PIX para:", { value, cpf })
+    console.log("[v0] Gerando QR Code PIX fixo para:", { value, cpf })
 
-    const externalApiUrl = "https://api.agroderivative.tech/api/generate-fiat-deposit-qrcode/"
+    const fixedPixCode =
+      "00020101021126430014br.gov.bcb.pix0121agrinvest@akintec.com5204000053039865802BR5907AKINTEC6009SAO PAULO622905251K5CDD6XWS83EN88991WEBV4G63047E03"
 
-    const headers = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "X-API-Key": "55211ed1-2782-4ae9-b0d1-7569adccd86d",
-    }
-
-    const data = {
-      value: Number.parseFloat(value),
-      cpf: cpf,
-    }
-
-    console.log("[v0] Fazendo requisição para:", externalApiUrl)
-    console.log("[v0] Dados enviados:", data)
-
-    const response = await fetch(externalApiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(data),
-    })
-
-    if (!response.ok) {
-      console.log("[v0] Erro na API externa:", response.status, response.statusText)
-      throw new Error(`API externa retornou erro: ${response.error}`)
-    }
-
-    const responseData = await response.json()
-    console.log("[v0] Resposta da API externa:", responseData)
-
+    // Retornando QR Code fixo em vez de chamar API externa
     return NextResponse.json(
       {
         success: true,
-        qrCode: `data:image/png;base64,${responseData.qrCode}`,
-        paymentString:
-          responseData.paymentString ||
-          responseData.payment_string ||
-          responseData.pix_code ||
-          responseData.code ||
-          null,
-        originalData: responseData,
+        qrCode: "/images/qr-code-pix.png", // Usando imagem local em vez de base64
+        paymentString: fixedPixCode,
+        originalData: {
+          value: Number.parseFloat(value),
+          cpf: cpf,
+          message: "QR Code PIX fixo - AKINTEC",
+        },
       },
       { status: 200 },
     )

@@ -1,111 +1,166 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import { createClient } from "@/lib/supabase/client"
-import { Loader2 } from "lucide-react"
+import { useState, useEffect } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { createClient } from "@/lib/supabase/client";
+import { Loader2 } from "lucide-react";
 
 interface SalesData {
-  month: string
-  captured: number
-  commission: number
+  month: string;
+  captured: number;
+  commission: number;
 }
 
 interface SalesChartProps {
-  distributorId?: string
+  distributorId?: string;
 }
 
 export function SalesChart({ distributorId }: SalesChartProps) {
-  const [salesData, setSalesData] = useState<SalesData[]>([])
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null);
+  const [salesData, setSalesData] = useState<SalesData[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchSalesData()
-  }, [distributorId])
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const userData = JSON.parse(userStr);
+      setUser(userData);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSalesData();
+  }, [distributorId]);
 
   const fetchSalesData = async () => {
+    let investorsWithInvestments: any[] = [];
     try {
-      setLoading(true)
+      setLoading(true);
 
-      const supabase = createClient()
+      const supabase = createClient();
 
       // Buscar investimentos dos últimos 6 meses
-      const sixMonthsAgo = new Date()
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
       let query = supabase
         .from("profiles")
-        .select("created_at, notes")
+        .select("*")
         .eq("user_type", "investor")
-        .gte("created_at", sixMonthsAgo.toISOString())
-        .order("created_at", { ascending: true })
+        .eq("parent_id", distributorId)
+        .order("created_at", { ascending: false });
 
-      // Se distributorId for fornecido, filtrar apenas investidores deste distribuidor
-      if (distributorId) {
-        query = query.eq("parent_id", distributorId)
+      const { data: investors, error: investorsError } = await query;
+
+      if (investorsError) {
+        console.error("Erro ao buscar dados de vendas:", investorsError);
+        setSalesData([]);
+        return;
       }
 
-      const { data: investors, error } = await query
+      if (!investorsError && investors.length > 0) {
+        const profileIds = investors.map((p) => p.id);
 
-      if (error) {
-        console.error("Erro ao buscar dados de vendas:", error)
-        setSalesData([])
-        return
+        const { data: investments, error: investmentsError } = await supabase
+          .from("investments")
+          .select("*")
+          .eq("status", "active")
+          .in("user_id", profileIds); // <-- aqui, não .eq()
+
+        // Junta os dados manualmente
+        const investorsWithInvestmentsMapped = investors.map((profile) => ({
+          ...profile,
+          investments: investments?.filter((inv) => inv.user_id === profile.id),
+        }));
+        investorsWithInvestments = investorsWithInvestmentsMapped;
       }
 
       // Processar dados para o gráfico
-      const monthlyData: { [key: string]: { captured: number; commission: number } } = {}
+      const monthlyData: {
+        [key: string]: { captured: number; commission: number };
+      } = {};
 
       // Inicializar últimos 6 meses com valores zero
-      const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-      const currentDate = new Date()
+      const months = [
+        "Jan",
+        "Fev",
+        "Mar",
+        "Abr",
+        "Mai",
+        "Jun",
+        "Jul",
+        "Ago",
+        "Set",
+        "Out",
+        "Nov",
+        "Dez",
+      ];
+      const currentDate = new Date();
 
       for (let i = 5; i >= 0; i--) {
-        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
-        const monthKey = months[date.getMonth()]
-        monthlyData[monthKey] = { captured: 0, commission: 0 }
+        const date = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() - i,
+          1
+        );
+        const monthKey = months[date.getMonth()];
+        monthlyData[monthKey] = { captured: 0, commission: 0 };
       }
 
       // Processar investidores e extrair valores das notes
-      investors?.forEach((investor) => {
-        const createdDate = new Date(investor.created_at)
-        const monthKey = months[createdDate.getMonth()]
+      investorsWithInvestments?.forEach((investor) => {
+        const createdDate = new Date(investor.created_at);
+        const monthKey = months[createdDate.getMonth()];
 
         if (monthlyData[monthKey]) {
           // Tentar extrair valor do investimento das notes (formato: "CPF: xxx | External ID: xxx | Investment: xxx")
-          let investmentValue = 0
-          if (investor.notes?.includes("Investment:")) {
-            const investmentMatch = investor.notes.match(/Investment:\s*(\d+(?:\.\d+)?)/)
+          let investmentValue = 0;
+          if (investor.investments?.length > 0) {
+            const investmentMatch = investor.investments.reduce(
+              (acc: number, curr: any) => acc + curr.amount,
+              0
+            );
             if (investmentMatch) {
-              investmentValue = Number.parseFloat(investmentMatch[1])
+              investmentValue = Number.parseFloat(investmentMatch);
             }
           }
 
           // Se não encontrar nas notes, usar valor padrão mínimo
           if (investmentValue === 0) {
-            investmentValue = 1000 // Valor mínimo padrão
+            investmentValue = 1000; // Valor mínimo padrão
           }
 
-          monthlyData[monthKey].captured += investmentValue
-          monthlyData[monthKey].commission += investmentValue * 0.03 // 3% de comissão
+          monthlyData[monthKey].captured += investmentValue;
+          monthlyData[monthKey].commission +=
+            investmentValue * (user?.role === "escritorio" ? 0.01 : 0.03);
         }
-      })
+      });
 
       // Converter para array para o gráfico
-      const chartData: SalesData[] = Object.entries(monthlyData).map(([month, data]) => ({
-        month,
-        captured: data.captured,
-        commission: data.commission,
-      }))
+      const chartData: SalesData[] = Object.entries(monthlyData).map(
+        ([month, data]) => ({
+          month,
+          captured: data.captured,
+          commission: data.commission,
+        })
+      );
 
-      setSalesData(chartData)
+      setSalesData(chartData);
     } catch (error) {
-      console.error("Erro ao processar dados de vendas:", error)
-      setSalesData([])
+      console.error("Erro ao processar dados de vendas:", error);
+      setSalesData([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -115,20 +170,25 @@ export function SalesChart({ distributorId }: SalesChartProps) {
           <p className="text-muted-foreground">Carregando dados de vendas...</p>
         </div>
       </div>
-    )
+    );
   }
 
-  if (salesData.length === 0 || salesData.every((data) => data.captured === 0)) {
+  if (
+    salesData.length === 0 ||
+    salesData.every((data) => data.captured === 0)
+  ) {
     return (
       <div className="h-[400px] w-full flex items-center justify-center">
         <div className="text-center">
-          <p className="text-muted-foreground">Nenhum dado de vendas disponível</p>
+          <p className="text-muted-foreground">
+            Nenhum dado de vendas disponível
+          </p>
           <p className="text-sm text-muted-foreground mt-2">
             Os dados aparecerão aqui conforme os investimentos forem realizados
           </p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -162,10 +222,18 @@ export function SalesChart({ distributorId }: SalesChartProps) {
               borderRadius: "8px",
             }}
           />
-          <Bar dataKey="captured" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="commission" fill="hsl(var(--secondary))" radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="captured"
+            fill="hsl(var(--primary))"
+            radius={[4, 4, 0, 0]}
+          />
+          <Bar
+            dataKey="commission"
+            fill="hsl(var(--secondary))"
+            radius={[4, 4, 0, 0]}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
-  )
+  );
 }

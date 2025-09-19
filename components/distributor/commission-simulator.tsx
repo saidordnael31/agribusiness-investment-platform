@@ -26,8 +26,8 @@ export function CommissionSimulator() {
     const monthlyCommission = amount * baseCommissionRate
     const annualCommission = monthlyCommission * 12
 
-    const advisorShare = annualCommission * 0.7 // 70%
-    const officeShare = annualCommission * 0.3 // 30%
+    const advisorShare = amount * 0.03 // 3%
+    const officeShare = amount * 0.01 // 1%
 
     // Performance bonus calculation
     let performanceBonus = 0
@@ -37,7 +37,7 @@ export function CommissionSimulator() {
       performanceBonus = amount * 0.01 * 12 // +1% additional
     }
 
-    const totalWithBonus = annualCommission + performanceBonus
+    const totalWithBonus = annualCommission
 
     setResults({
       monthlyCommission,
@@ -102,7 +102,7 @@ export function CommissionSimulator() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <p className="text-sm text-muted-foreground">Assessor (70%)</p>
                 <p className="text-xl font-bold text-primary">
@@ -122,7 +122,7 @@ export function CommissionSimulator() {
                   }).format(results.officeShare)}
                 </p>
               </div>
-            </div>
+            </div> */}
 
             {results.performanceBonus > 0 && (
               <div className="p-4 bg-accent/5 rounded-lg border border-accent/20">
@@ -142,7 +142,7 @@ export function CommissionSimulator() {
             )}
 
             <div className="p-4 bg-muted rounded-lg border-2 border-primary">
-              <p className="text-sm text-muted-foreground">Total Anual com Bônus</p>
+              <p className="text-sm text-muted-foreground">Total Anual</p>
               <p className="text-3xl font-bold text-primary">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
@@ -157,10 +157,7 @@ export function CommissionSimulator() {
           <h4 className="font-semibold mb-2">Estrutura de Comissões:</h4>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• Comissão base: 3% ao mês sobre valor investido</li>
-            <li>• Divisão: 70% assessor / 30% escritório</li>
-            <li>• Meta 1 (R$ 500k): +1% adicional por 12 meses</li>
-            <li>• Meta 2 (R$ 1M): +2% adicional por 12 meses</li>
-            <li>• Pool Nacional: 10% dividido entre top escritórios</li>
+            <li>• Divisão: 3% assessor / 1% escritório</li>
           </ul>
         </div>
       </CardContent>

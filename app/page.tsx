@@ -7,18 +7,44 @@ const marketData = [
   { name: "Selic/Tesouro", min: 0.8, max: 1.0, avg: 0.9 },
   { name: "CDBs/Fundos RF", min: 1.0, max: 1.2, avg: 1.1 },
   { name: "Fundos Multi", min: 1.5, max: 2.0, avg: 1.75 },
-  { name: "Clube Akintec", min: 2.5, max: 4.0, avg: 3.25 },
+  { name: "Clube Akintec", min: 2.0, max: 3.0, avg: 2.50 },
 ]
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max));
+}
+
+// Função para variar um valor +/- 0.2 dentro do intervalo e limitar a 2 casas decimais
+function vary(value: number, min: number, max: number, delta = 0.2) {
+  const variation = (Math.random() * 2 - 1) * delta; // -delta a +delta
+  const result = clamp(value + variation, min, max);
+  return Math.round(result * 100) / 100; // limita a 2 casas decimais
+}
 
 const highlights = {
   opsAtivas: 18,
   volume30d: 12800000,
   proj: {
-    "12m": { conservador: 1.8, base: 2.6, otimista: 3.2 },
-    "24m": { conservador: 2.1, base: 3.1, otimista: 3.9 },
-    "36m": { conservador: 2.4, base: 3.4, otimista: 4.2 },
+    "12m": { 
+      conservador: vary(2.0, 2.0, 3.0),
+      base: 2.4,
+      otimista: vary(3.0, 2.0, 3.0),
+    },
+    "24m": { 
+      conservador: vary(2.1, 2.0, 3.0),
+      base: 2.5,
+      otimista: vary(3.0, 2.0, 3.0),
+    },
+    "36m": { 
+      conservador: vary(2.4, 2.0, 3.0),
+      base: vary(3.0, 2.0, 3.0),
+      otimista: vary(3.0, 2.0, 3.0),
+    },
   },
-}
+};
+
+console.log(highlights);
+
 
 export default function HomePage() {
   const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendly.com/akintec/30min"

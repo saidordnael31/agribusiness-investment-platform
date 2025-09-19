@@ -40,6 +40,10 @@ class ApiClient {
     }
   }
 
+  async getUsersProfiles() {
+    return this.request<any[]>("/users")
+  }
+
   // Authentication
   async login(email: string, password: string) {
     return this.request<{ user: any; token: string }>("/auth/login", {

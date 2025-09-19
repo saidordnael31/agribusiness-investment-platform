@@ -1,17 +1,27 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { Suspense, useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useRouter, useSearchParams } from "next/navigation"
-import { useToast } from "@/hooks/use-toast"
-import { AlertTriangle } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import type React from "react";
+import { Suspense, useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { AlertTriangle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { createServerClient } from "@/lib/supabase/server";
+import { apiClient } from "@/lib/api";
+import { useApi, useAuth } from "@/hooks/use-api";
 
-function RegisterFormContent() {
+function RegisterFormContent({closeModal}: {closeModal: () => void}) {
+  const auth = useAuth();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -23,19 +33,21 @@ function RegisterFormContent() {
     cpfCnpj: "",
     phone: "",
     notes: "",
-  })
-  const [parentOptions, setParentOptions] = useState<Array<{ id: string; name: string; role: string }>>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [emailError, setEmailError] = useState("")
-  const router = useRouter()
-  const { toast } = useToast()
-  const searchParams = useSearchParams()
+  });
+  const [parentOptions, setParentOptions] = useState<
+    Array<{ id: string; name: string; role: string }>
+  >([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const router = useRouter();
+  const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (formData.role && formData.role !== "escritorio") {
-      loadParentOptions()
+      loadParentOptions();
     }
-  }, [formData.role])
+  }, [formData.role]);
 
   const validatePersonalEmail = (email: string) => {
     const personalDomains = [
@@ -47,27 +59,38 @@ function RegisterFormContent() {
       "uol.com.br",
       "terra.com.br",
       "bol.com.br",
-    ]
-    const domain = email.split("@")[1]?.toLowerCase()
+    ];
+    const domain = email.split("@")[1]?.toLowerCase();
 
-    if (!domain) return false
+    if (!domain) return false;
 
-    const isPersonal = personalDomains.includes(domain)
-    const corporateKeywords = ["empresa", "escritorio", "consultoria", "investimentos", "financeira", "capital"]
-    const isCorporate = corporateKeywords.some((keyword) => domain.includes(keyword))
+    const isPersonal = personalDomains.includes(domain);
+    const corporateKeywords = [
+      "empresa",
+      "escritorio",
+      "consultoria",
+      "investimentos",
+      "financeira",
+      "capital",
+    ];
+    const isCorporate = corporateKeywords.some((keyword) =>
+      domain.includes(keyword)
+    );
 
-    return isPersonal && !isCorporate
-  }
+    return isPersonal && !isCorporate;
+  };
 
   const handleEmailChange = (email: string) => {
-    setFormData({ ...formData, email })
+    setFormData({ ...formData, email });
 
     if (email && !validatePersonalEmail(email)) {
-      setEmailError("Use apenas email pessoal (Gmail, Yahoo, Outlook, etc.). Emails corporativos não são aceitos.")
+      setEmailError(
+        "Use apenas email pessoal (Gmail, Yahoo, Outlook, etc.). Emails corporativos não são aceitos."
+      );
     } else {
-      setEmailError("")
+      setEmailError("");
     }
-  }
+  };
 
   const loadParentOptions = async () => {
     const mockParentOptions = {
@@ -83,41 +106,59 @@ function RegisterFormContent() {
         { id: "5", name: "Pedro Costa", role: "lider" },
         { id: "6", name: "Ana Oliveira", role: "lider" },
       ],
-    }
+    };
 
-    let parentRole = ""
+    let parentRole = "";
     switch (formData.role) {
       case "gestor":
-        parentRole = "escritorio"
-        break
+        parentRole = "escritorio";
+        break;
       case "lider":
-        parentRole = "gestor"
-        break
+        parentRole = "gestor";
+        break;
       case "assessor":
-        parentRole = "lider"
-        break
+        parentRole = "lider";
+        break;
     }
 
-    if (parentRole && mockParentOptions[parentRole as keyof typeof mockParentOptions]) {
-      setParentOptions(mockParentOptions[parentRole as keyof typeof mockParentOptions])
-    }
-  }
+    // if (parentRole && mockParentOptions[parentRole as keyof typeof mockParentOptions]) {
+    //   setParentOptions(mockParentOptions[parentRole as keyof typeof mockParentOptions])
+    // }
+  };
+
+  const getProfiles = async () => {
+    const supabase = createClient();
+    const { data, error } = await supabase.from("profiles").select("*");
+    console.log(data, error);
+    if (!data) return;
+    setParentOptions(
+      data.map((item) => ({
+        id: item.id,
+        name: item.full_name,
+        role: item.role,
+      }))
+    );
+  };
+
+  useEffect(() => {
+    getProfiles();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
 
-    console.log("[v0] Iniciando processo de registro")
-    console.log("[v0] Dados do formulário:", formData)
+    console.log("[v0] Iniciando processo de registro");
+    console.log("[v0] Dados do formulário:", formData);
 
     if (emailError) {
       toast({
         title: "Erro no cadastro",
         description: "Corrija o email antes de continuar.",
         variant: "destructive",
-      })
-      setIsLoading(false)
-      return
+      });
+      setIsLoading(false);
+      return;
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -125,9 +166,9 @@ function RegisterFormContent() {
         title: "Erro no cadastro",
         description: "As senhas não coincidem.",
         variant: "destructive",
-      })
-      setIsLoading(false)
-      return
+      });
+      setIsLoading(false);
+      return;
     }
 
     if (formData.role !== "escritorio" && !formData.parentId) {
@@ -135,17 +176,17 @@ function RegisterFormContent() {
         title: "Erro no cadastro",
         description: "Selecione o responsável hierárquico.",
         variant: "destructive",
-      })
-      setIsLoading(false)
-      return
+      });
+      setIsLoading(false);
+      return;
     }
 
     try {
-      console.log("[v0] Registrando usuário no Supabase")
+      console.log("[v0] Registrando usuário no Supabase");
 
-      const supabase = createClient()
+      const supabase = createClient();
 
-      const { data, error } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
@@ -160,55 +201,81 @@ function RegisterFormContent() {
             notes: formData.notes,
           },
         },
-      })
+      });
 
-      if (error) {
-        console.log("[v0] Erro no Supabase:", error)
-        throw error
+      if (authError) {
+        console.log("[v0] Erro no Supabase:", authError);
+        throw authError;
       }
 
-      console.log("[v0] Usuário registrado com sucesso no Supabase:", data)
+      console.log("[v0] Usuário registrado com sucesso no Supabase:", authData);
+
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            id: authData.user.id,
+            email: authData.user.email,
+            full_name: authData.user.user_metadata.full_name,
+            user_type: authData.user.user_metadata.user_type,
+            role: "investidor",
+            parent_id: authData.user.user_metadata.parent_id || null,
+            phone: authData.user.user_metadata.phone || null,
+            cnpj: authData.user.user_metadata.cpf_cnpj || null,
+            notes: "Cadastro de profile via login",
+            hierarchy_level: "advisor",
+            is_active: true,
+          },
+        ])
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error("Erro ao criar perfil:", profileError);
+
+        throw new Error(`Erro ao criar perfil: ${profileError.message}`);
+      } else {
+        console.log("Perfil criado:", profileData);
+      }
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: `Verifique seu email para confirmar a conta antes de fazer login.`,
-      })
+        description: `Peça a ${formData.name} para verificar o email e confirmar a conta antes de fazer login.`,
+      });
 
-      router.push("/register-success")
+      closeModal();
     } catch (error: any) {
-      console.log("[v0] Erro no registro:", error)
+      console.log("[v0] Erro no registro:", error);
       toast({
         title: "Erro no cadastro",
         description: error.message || "Ocorreu um erro durante o cadastro.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const getRoleLabel = (role: string) => {
     const labels = {
       escritorio: "Escritório (CNPJ)",
-      gestor: "Gestor",
-      lider: "Líder",
       assessor: "Assessor",
-    }
-    return labels[role as keyof typeof labels] || role
-  }
+    };
+    return labels[role as keyof typeof labels] || role;
+  };
 
   const getParentLabel = (role: string) => {
     const labels = {
       gestor: "Escritório Responsável",
       lider: "Gestor Responsável",
-      assessor: "Líder Responsável",
-    }
-    return labels[role as keyof typeof labels] || "Responsável"
-  }
+      assessor: "Escritório Responsável",
+    };
+    return labels[role as keyof typeof labels] || "Responsável";
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+    <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+      {/* <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
         <div className="flex items-center gap-2 text-amber-800">
           <AlertTriangle className="h-5 w-5" />
           <h3 className="font-semibold">Cadastro de Investidores</h3>
@@ -217,7 +284,7 @@ function RegisterFormContent() {
           Investidores não podem se cadastrar diretamente. Apenas assessores e escritórios podem cadastrar investidores
           através do dashboard.
         </p>
-      </div>
+      </div> */}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
@@ -257,7 +324,9 @@ function RegisterFormContent() {
           <Label htmlFor="type">Tipo de Usuário</Label>
           <Select
             value={formData.type}
-            onValueChange={(value) => setFormData({ ...formData, type: value, role: "", parentId: "" })}
+            onValueChange={(value) =>
+              setFormData({ ...formData, type: value, role: "", parentId: "" })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Distribuidor/Assessor" />
@@ -267,22 +336,24 @@ function RegisterFormContent() {
               <SelectItem value="admin">Admin</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">Investidores são cadastrados pelos assessores no dashboard</p>
+          <p className="text-xs text-muted-foreground">
+            Investidores são cadastrados pelos assessores no dashboard
+          </p>
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="role">Nível Hierárquico</Label>
           <Select
             value={formData.role}
-            onValueChange={(value) => setFormData({ ...formData, role: value, parentId: "" })}
+            onValueChange={(value) =>
+              setFormData({ ...formData, role: value, parentId: "" })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecione o nível hierárquico" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="escritorio">Escritório (CNPJ)</SelectItem>
-              <SelectItem value="gestor">Gestor</SelectItem>
-              <SelectItem value="lider">Líder</SelectItem>
               <SelectItem value="assessor">Assessor</SelectItem>
             </SelectContent>
           </Select>
@@ -291,14 +362,23 @@ function RegisterFormContent() {
         {formData.role && formData.role !== "escritorio" && (
           <div className="space-y-2">
             <Label htmlFor="parentId">{getParentLabel(formData.role)}</Label>
-            <Select value={formData.parentId} onValueChange={(value) => setFormData({ ...formData, parentId: value })}>
+            <Select
+              value={formData.parentId}
+              onValueChange={(value) =>
+                setFormData({ ...formData, parentId: value })
+              }
+            >
               <SelectTrigger>
-                <SelectValue placeholder={`Selecione ${getParentLabel(formData.role).toLowerCase()}`} />
+                <SelectValue
+                  placeholder={`Selecione ${getParentLabel(
+                    formData.role
+                  ).toLowerCase()}`}
+                />
               </SelectTrigger>
               <SelectContent>
                 {parentOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id}>
-                    {option.name} ({getRoleLabel(option.role)})
+                    {option.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -307,12 +387,20 @@ function RegisterFormContent() {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="cpfCnpj">{formData.role === "escritorio" ? "CNPJ" : "CPF"}</Label>
+          <Label htmlFor="cpfCnpj">
+            {formData.role === "escritorio" ? "CNPJ" : "CPF"}
+          </Label>
           <Input
             id="cpfCnpj"
-            placeholder={formData.role === "escritorio" ? "00.000.000/0001-00" : "000.000.000-00"}
+            placeholder={
+              formData.role === "escritorio"
+                ? "00.000.000/0001-00"
+                : "000.000.000-00"
+            }
             value={formData.cpfCnpj}
-            onChange={(e) => setFormData({ ...formData, cpfCnpj: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, cpfCnpj: e.target.value })
+            }
             required
           />
         </div>
@@ -323,7 +411,9 @@ function RegisterFormContent() {
             id="phone"
             placeholder="(11) 99999-9999"
             value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, phone: e.target.value })
+            }
             required
           />
         </div>
@@ -335,9 +425,13 @@ function RegisterFormContent() {
               id="notes"
               placeholder="Notas sobre perfil, potencial, observações..."
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, notes: e.target.value })
+              }
             />
-            <p className="text-xs text-muted-foreground">Visível para follow-up e gestão de relacionamento</p>
+            <p className="text-xs text-muted-foreground">
+              Visível para follow-up e gestão de relacionamento
+            </p>
           </div>
         )}
 
@@ -348,7 +442,9 @@ function RegisterFormContent() {
             type="password"
             placeholder="••••••••"
             value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, password: e.target.value })
+            }
             required
           />
         </div>
@@ -360,20 +456,26 @@ function RegisterFormContent() {
             type="password"
             placeholder="••••••••"
             value={formData.confirmPassword}
-            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, confirmPassword: e.target.value })
+            }
             required
           />
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading || !!emailError}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading || !!emailError}
+        >
           {isLoading ? "Cadastrando..." : "Criar Conta"}
         </Button>
       </form>
     </div>
-  )
+  );
 }
 
-export function RegisterForm() {
+export function RegisterForm({closeModal}: {closeModal: () => void}) {
   return (
     <Suspense
       fallback={
@@ -385,7 +487,7 @@ export function RegisterForm() {
         </div>
       }
     >
-      <RegisterFormContent />
+      <RegisterFormContent closeModal={closeModal} />
     </Suspense>
-  )
+  );
 }

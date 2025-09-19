@@ -1,76 +1,108 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { FileText, Download, Shield, TrendingUp, Building, Upload, Plus, UserCheck, Briefcase } from "lucide-react"
-import { useState, useEffect } from "react"
-import { useToast } from "@/hooks/use-toast"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  FileText,
+  Download,
+  Shield,
+  TrendingUp,
+  Building,
+  Upload,
+  Plus,
+  UserCheck,
+  Briefcase,
+} from "lucide-react";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface UserData {
-  name: string
-  email: string
-  user_type: string
-  role?: string
-  office_id?: string
+  name: string;
+  email: string;
+  user_type: string;
+  role?: string;
+  office_id?: string;
 }
 
 export default function DocumentsPage() {
-  const [user, setUser] = useState<UserData | null>(null)
-  const { toast } = useToast()
+  const [user, setUser] = useState<UserData | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const userStr = localStorage.getItem("user")
+      const userStr = localStorage.getItem("user");
       if (userStr) {
-        setUser(JSON.parse(userStr))
+        setUser(JSON.parse(userStr));
       }
     }
-  }, [])
+  }, []);
 
-  const isAdmin = user?.user_type === "admin"
-  const isOffice = user?.user_type === "distributor" && user?.role === "escritorio"
-  const isManager = user?.user_type === "distributor" && user?.role === "gestor"
-  const isLeader = user?.user_type === "distributor" && user?.role === "lider"
-  const isAdvisor = user?.user_type === "distributor" && user?.role === "assessor"
-  const isInvestor = user?.user_type === "investor"
+  const isAdmin = user?.user_type === "admin";
+  const isOffice =
+    user?.user_type === "distributor" && user?.role === "escritorio";
+  const isManager =
+    user?.user_type === "distributor" && user?.role === "gestor";
+  const isLeader = user?.user_type === "distributor" && user?.role === "lider";
+  const isAdvisor =
+    user?.user_type === "distributor" && user?.role === "assessor";
+  const isInvestor = user?.user_type === "investor";
 
-  const canAccessDistributorDocs = isAdmin || isOffice || isManager || isLeader || isAdvisor
-  const canAccessOfficeDocs = isAdmin || isOffice
-  const canAccessManagerDocs = isAdmin || isOffice || isManager
-  const canAccessLeaderDocs = isAdmin || isOffice || isManager || isLeader
-  const canAccessAdvisorDocs = isAdmin || isOffice || isManager || isLeader || isAdvisor
+  const canAccessDistributorDocs =
+    isAdmin || isOffice || isManager || isLeader || isAdvisor;
+  const canAccessOfficeDocs = isAdmin || isOffice;
+  const canAccessManagerDocs = isAdmin || isOffice || isManager;
+  const canAccessLeaderDocs = isAdmin || isOffice || isManager || isLeader;
+  const canAccessAdvisorDocs =
+    isAdmin || isOffice || isManager || isLeader || isAdvisor;
 
   const handleDownload = (fileName: string) => {
     toast({
       title: "Download iniciado",
       description: `Baixando ${fileName}...`,
-    })
-  }
+    });
+
+    // LOGICA PARA DOWNLOAD DO ARQUIVO
+    // @assets\pdf\Contrato_SCP_Akintec_Investidor.pdf
+    const fileUrl = '/pdf/' + fileName;
+
+    if (fileUrl) {
+      window.open(fileUrl, "_blank");
+    }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
+    const files = event.target.files;
     if (files && files.length > 0) {
       toast({
         title: "Upload realizado",
         description: `${files.length} arquivo(s) enviado(s) com sucesso.`,
-      })
+      });
     }
-  }
+  };
 
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-4">Documentos Institucionais</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-4">
+          Documentos Institucionais
+        </h1>
         <p className="text-muted-foreground text-lg">
-          Acesse todos os documentos oficiais, relatórios de auditoria e lâminas de investimento do Clube de
-          Investimentos Privado Agroderi.
+          Acesse todos os documentos oficiais, relatórios de auditoria e lâminas
+          de investimento do Clube de Investimentos Privado Agroderi.
         </p>
         {user && (
           <div className="mt-4 p-3 bg-muted rounded-lg">
             <p className="text-sm text-muted-foreground">
-              Logado como: <span className="font-medium text-foreground">{user.name}</span> -
+              Logado como:{" "}
+              <span className="font-medium text-foreground">{user.name}</span> -
               <span className="font-medium text-primary ml-1">
                 {isAdmin && "Administrador"}
                 {isOffice && "Escritório"}
@@ -98,12 +130,16 @@ export default function DocumentsPage() {
                   <Plus className="h-5 w-5" />
                   Upload de Documentos
                 </CardTitle>
-                <CardDescription>Adicione novos documentos em formato ZIP ou PDF</CardDescription>
+                <CardDescription>
+                  Adicione novos documentos em formato ZIP ou PDF
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-2">Arraste arquivos aqui ou clique para selecionar</p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Arraste arquivos aqui ou clique para selecionar
+                  </p>
                   <input
                     type="file"
                     multiple
@@ -118,14 +154,18 @@ export default function DocumentsPage() {
                     </Button>
                   </label>
                 </div>
-                <div className="text-xs text-muted-foreground">Formatos aceitos: PDF, ZIP (máx. 50MB)</div>
+                <div className="text-xs text-muted-foreground">
+                  Formatos aceitos: PDF, ZIP (máx. 50MB)
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle>Documentos Recentes</CardTitle>
-                <CardDescription>Últimos documentos adicionados</CardDescription>
+                <CardDescription>
+                  Últimos documentos adicionados
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm">
@@ -152,6 +192,37 @@ export default function DocumentsPage() {
       <section className="mb-12">
         <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
           <Shield className="h-6 w-6 text-primary" />
+          Minuta do Contrato SCP do Investidor
+        </h2>
+        <div className="grid md:grid-cols-2 lg:grid-cols-1 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Minuta do Contrato SCP do Investidor
+              </CardTitle>
+              <CardDescription>
+                Documento oficial do clube de investimentos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() => handleDownload("Contrato_SCP_Akintec_Investidor.pdf")}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Documentos de Compliance */}
+      <section className="mb-12">
+        <h2 className="text-2xl font-semibold text-foreground mb-6 flex items-center gap-2">
+          <Shield className="h-6 w-6 text-primary" />
           Documentos de Compliance
         </h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -161,7 +232,9 @@ export default function DocumentsPage() {
                 <FileText className="h-5 w-5" />
                 Regulamento do Clube
               </CardTitle>
-              <CardDescription>Documento oficial do clube de investimentos</CardDescription>
+              <CardDescription>
+                Documento oficial do clube de investimentos
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button
@@ -181,13 +254,17 @@ export default function DocumentsPage() {
                 <FileText className="h-5 w-5" />
                 Política de Investimentos
               </CardTitle>
-              <CardDescription>Diretrizes e critérios de investimento</CardDescription>
+              <CardDescription>
+                Diretrizes e critérios de investimento
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Politica_Investimentos_Agroderi.pdf")}
+                onClick={() =>
+                  handleDownload("Politica_Investimentos_Agroderi.pdf")
+                }
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
@@ -227,7 +304,9 @@ export default function DocumentsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Auditoria Independente - 2024</CardTitle>
-              <CardDescription>Relatório anual de auditoria independente</CardDescription>
+              <CardDescription>
+                Relatório anual de auditoria independente
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between text-sm">
@@ -241,7 +320,9 @@ export default function DocumentsPage() {
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Auditoria_Independente_2024.pdf")}
+                onClick={() =>
+                  handleDownload("Auditoria_Independente_2024.pdf")
+                }
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download Relatório
@@ -252,7 +333,9 @@ export default function DocumentsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Auditoria Independente - 2023</CardTitle>
-              <CardDescription>Relatório anual de auditoria independente</CardDescription>
+              <CardDescription>
+                Relatório anual de auditoria independente
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between text-sm">
@@ -266,7 +349,9 @@ export default function DocumentsPage() {
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Auditoria_Independente_2023.pdf")}
+                onClick={() =>
+                  handleDownload("Auditoria_Independente_2023.pdf")
+                }
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download Relatório
@@ -286,7 +371,9 @@ export default function DocumentsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Cota Sênior</CardTitle>
-              <CardDescription>Informações detalhadas sobre a cota sênior</CardDescription>
+              <CardDescription>
+                Informações detalhadas sobre a cota sênior
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -306,7 +393,9 @@ export default function DocumentsPage() {
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Lamina_Cota_Senior_Agroderi.pdf")}
+                onClick={() =>
+                  handleDownload("Lamina_Cota_Senior_Agroderi.pdf")
+                }
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download Lâmina
@@ -317,7 +406,9 @@ export default function DocumentsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Cota Subordinada</CardTitle>
-              <CardDescription>Informações detalhadas sobre a cota subordinada</CardDescription>
+              <CardDescription>
+                Informações detalhadas sobre a cota subordinada
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -337,7 +428,9 @@ export default function DocumentsPage() {
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Lamina_Cota_Subordinada_Agroderi.pdf")}
+                onClick={() =>
+                  handleDownload("Lamina_Cota_Subordinada_Agroderi.pdf")
+                }
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download Lâmina
@@ -361,13 +454,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Manual do Escritório
                 </CardTitle>
-                <CardDescription>Guia completo para gestão de escritórios</CardDescription>
+                <CardDescription>
+                  Guia completo para gestão de escritórios
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Manual_Escritorio_Agroderi.pdf")}
+                  onClick={() =>
+                    handleDownload("Manual_Escritorio_Agroderi.pdf")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -381,13 +478,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Contratos de Parceria
                 </CardTitle>
-                <CardDescription>Modelos de contratos para assessores</CardDescription>
+                <CardDescription>
+                  Modelos de contratos para assessores
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Contratos_Parceria_Agroderi.zip")}
+                  onClick={() =>
+                    handleDownload("Contratos_Parceria_Agroderi.zip")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP
@@ -401,13 +502,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Relatórios Gerenciais
                 </CardTitle>
-                <CardDescription>Templates para relatórios de performance</CardDescription>
+                <CardDescription>
+                  Templates para relatórios de performance
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Templates_Relatorios_Agroderi.zip")}
+                  onClick={() =>
+                    handleDownload("Templates_Relatorios_Agroderi.zip")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP
@@ -432,7 +537,9 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Manual do Gestor
                 </CardTitle>
-                <CardDescription>Guia para gestão de equipes e metas</CardDescription>
+                <CardDescription>
+                  Guia para gestão de equipes e metas
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
@@ -452,13 +559,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Relatórios de Performance
                 </CardTitle>
-                <CardDescription>Templates para acompanhamento de equipes</CardDescription>
+                <CardDescription>
+                  Templates para acompanhamento de equipes
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Relatorios_Performance_Gestor.zip")}
+                  onClick={() =>
+                    handleDownload("Relatorios_Performance_Gestor.zip")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP
@@ -472,13 +583,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Estrutura de Comissões
                 </CardTitle>
-                <CardDescription>Tabela detalhada de comissões por hierarquia</CardDescription>
+                <CardDescription>
+                  Tabela detalhada de comissões por hierarquia
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Estrutura_Comissoes_Akintec.pdf")}
+                  onClick={() =>
+                    handleDownload("Estrutura_Comissoes_Akintec.pdf")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -503,7 +618,9 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Manual de Liderança
                 </CardTitle>
-                <CardDescription>Guia para liderança de assessores</CardDescription>
+                <CardDescription>
+                  Guia para liderança de assessores
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
@@ -543,13 +660,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Treinamento de Equipes
                 </CardTitle>
-                <CardDescription>Materiais para capacitação de assessores</CardDescription>
+                <CardDescription>
+                  Materiais para capacitação de assessores
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Treinamento_Equipes_Lider.zip")}
+                  onClick={() =>
+                    handleDownload("Treinamento_Equipes_Lider.zip")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP
@@ -574,7 +695,9 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Manual do Assessor
                 </CardTitle>
-                <CardDescription>Guia completo para assessores Akintec</CardDescription>
+                <CardDescription>
+                  Guia completo para assessores Akintec
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
@@ -594,13 +717,17 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Tabela de Comissões
                 </CardTitle>
-                <CardDescription>Estrutura detalhada de comissões</CardDescription>
+                <CardDescription>
+                  Estrutura detalhada de comissões
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Tabela_Comissoes_Agroderi.pdf")}
+                  onClick={() =>
+                    handleDownload("Tabela_Comissoes_Agroderi.pdf")
+                  }
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -614,7 +741,9 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Material de Vendas
                 </CardTitle>
-                <CardDescription>Apresentações e materiais promocionais</CardDescription>
+                <CardDescription>
+                  Apresentações e materiais promocionais
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
@@ -634,7 +763,9 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Scripts de Vendas
                 </CardTitle>
-                <CardDescription>Roteiros para abordagem de clientes</CardDescription>
+                <CardDescription>
+                  Roteiros para abordagem de clientes
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
@@ -654,7 +785,9 @@ export default function DocumentsPage() {
                   <FileText className="h-5 w-5" />
                   Treinamentos
                 </CardTitle>
-                <CardDescription>Materiais de capacitação e treinamento</CardDescription>
+                <CardDescription>
+                  Materiais de capacitação e treinamento
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button
@@ -671,5 +804,5 @@ export default function DocumentsPage() {
         </section>
       )}
     </div>
-  )
+  );
 }

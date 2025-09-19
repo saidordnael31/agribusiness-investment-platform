@@ -68,7 +68,7 @@ export function AdvancedCalculator() {
     const poolShare = poolParticipation[0]
 
     // Base commission calculation
-    const monthlyCommissionRate = 0.03
+    const monthlyCommissionRate = 0.04
     const monthlyCommission = amount * monthlyCommissionRate
     const totalCommission = monthlyCommission * months
 
@@ -89,8 +89,8 @@ export function AdvancedCalculator() {
     }, 0)
 
     // Division calculation
-    const advisorShare = (totalCommission + performanceBonus + promotionalBonus) * 0.7
-    const officeShare = (totalCommission + performanceBonus + promotionalBonus) * 0.3
+    const advisorShare = (amount) * 0.03
+    const officeShare = (amount) * 0.01
 
     // Pool calculation (annual)
     const annualPoolShare = (amount * 0.003 * 12 * poolShare) / 100 // 0.3% of annual commission * pool %
@@ -122,7 +122,7 @@ export function AdvancedCalculator() {
         <CardDescription>Configure todos os parâmetros para uma simulação detalhada</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {activePromotions.length > 0 && (
+        {/* {activePromotions.length > 0 && (
           <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
             <div className="flex items-center gap-2 mb-3">
               <Gift className="h-5 w-5 text-primary" />
@@ -148,7 +148,7 @@ export function AdvancedCalculator() {
               ))}
             </div>
           </div>
-        )}
+        )} */}
 
         {/* Input Controls */}
         <div className="grid md:grid-cols-2 gap-6">
@@ -174,7 +174,7 @@ export function AdvancedCalculator() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label>Participação no Pool Nacional: {poolParticipation[0]}%</Label>
               <Slider
                 value={poolParticipation}
@@ -188,7 +188,7 @@ export function AdvancedCalculator() {
                 <span>0%</span>
                 <span>20%</span>
               </div>
-            </div>
+            </div> */}
           </div>
 
           <div className="space-y-4">
@@ -196,15 +196,33 @@ export function AdvancedCalculator() {
               <h4 className="font-semibold mb-2">Status das Metas</h4>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 1 (R$ 500k):</span>
-                  <Badge variant={capturedAmount >= 500000 ? "default" : "secondary"}>
-                    {capturedAmount >= 500000 ? "Atingida" : "Não atingida"}
+                  <span className="text-sm">Meta 1 (R$ 3M):</span>
+                  <Badge variant={capturedAmount >= 3000000 ? "default" : "secondary"}>
+                    {capturedAmount >= 3000000 ? "Atingida" : "Não atingida"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 2 (R$ 1M):</span>
-                  <Badge variant={capturedAmount >= 1000000 ? "default" : "secondary"}>
-                    {capturedAmount >= 1000000 ? "Atingida" : "Não atingida"}
+                  <span className="text-sm">Meta 2 (R$ 7M):</span>
+                  <Badge variant={capturedAmount >= 7000000 ? "default" : "secondary"}>
+                    {capturedAmount >= 7000000 ? "Atingida" : "Não atingida"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Meta 3 (R$ 15M):</span>
+                  <Badge variant={capturedAmount >= 15000000 ? "default" : "secondary"}>
+                    {capturedAmount >= 15000000 ? "Atingida" : "Não atingida"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Meta 4 (R$ 30M):</span>
+                  <Badge variant={capturedAmount >= 30000000 ? "default" : "secondary"}>
+                    {capturedAmount >= 30000000 ? "Atingida" : "Não atingida"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Meta 5 (R$ 50M):</span>
+                  <Badge variant={capturedAmount >= 50000000 ? "default" : "secondary"}>
+                    {capturedAmount >= 50000000 ? "Atingida" : "Não atingida"}
                   </Badge>
                 </div>
               </div>
@@ -222,7 +240,7 @@ export function AdvancedCalculator() {
           <div className="space-y-6 pt-6 border-t">
             <h3 className="text-xl font-bold">Resultados da Simulação</h3>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-muted-foreground">Comissão Mensal</CardTitle>
@@ -253,7 +271,7 @@ export function AdvancedCalculator() {
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-muted-foreground">Taxa Efetiva</CardTitle>
                 </CardHeader>
@@ -261,10 +279,10 @@ export function AdvancedCalculator() {
                   <p className="text-2xl font-bold text-accent">{results.effectiveRate}%</p>
                   <p className="text-xs text-muted-foreground">ao mês (com bônus)</p>
                 </CardContent>
-              </Card>
+              </Card> */}
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-1 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -274,7 +292,7 @@ export function AdvancedCalculator() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-                    <span className="font-medium">Assessor (70%)</span>
+                    <span className="font-medium">Assessor (3%)</span>
                     <span className="font-bold text-primary">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
@@ -283,7 +301,7 @@ export function AdvancedCalculator() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-secondary/5 rounded-lg">
-                    <span className="font-medium">Escritório (30%)</span>
+                    <span className="font-medium">Escritório (1%)</span>
                     <span className="font-bold text-secondary">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
@@ -294,7 +312,7 @@ export function AdvancedCalculator() {
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Trophy className="h-4 w-4" />
@@ -323,7 +341,7 @@ export function AdvancedCalculator() {
                     <p className="text-xs text-muted-foreground">{poolParticipation[0]}% do pool anual</p>
                   </div>
                 </CardContent>
-              </Card>
+              </Card> */}
             </div>
 
             <Card className="border-2 border-primary">
@@ -341,7 +359,7 @@ export function AdvancedCalculator() {
                   Valor total considerando comissões base, bônus de performance
                   {results.promotionalBonus > 0 ? ", promoções ativas" : ""} e participação no pool nacional
                 </p>
-                {results.promotionalBonus > 0 && (
+                {/* {results.promotionalBonus > 0 && (
                   <div className="mt-4 p-3 bg-accent/5 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
                       <TrendingUp className="h-4 w-4 text-accent" />
@@ -355,7 +373,7 @@ export function AdvancedCalculator() {
                     </p>
                     <p className="text-xs text-muted-foreground">Promoções ativas aplicadas ao período</p>
                   </div>
-                )}
+                )} */}
               </CardContent>
             </Card>
           </div>

@@ -1,16 +1,40 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Search, Filter, UserCheck, UserX, DollarSign, Loader2, UserPlus, QrCode, Copy } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { createClient } from "@/lib/supabase/client"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Users,
+  Search,
+  Filter,
+  UserCheck,
+  UserX,
+  DollarSign,
+  Loader2,
+  UserPlus,
+  QrCode,
+  Copy,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { createClient } from "@/lib/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -18,38 +42,42 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RegisterForm } from "../auth/register-form";
 
 interface User {
-  id: string
-  name: string
-  email: string
-  type: "investor" | "distributor" | "assessor" | "gestor" | "escritorio"
-  status: "active" | "inactive" | "pending"
-  totalInvested?: number
-  totalCaptured?: number
-  joinedAt: string
-  lastActivity: string
+  id: string;
+  name: string;
+  email: string;
+  type: "investor" | "distributor" | "assessor" | "gestor" | "escritorio";
+  status: "active" | "inactive" | "pending";
+  totalInvested?: number;
+  totalCaptured?: number;
+  joinedAt: string;
+  lastActivity: string;
 }
 
 interface QRCodeData {
-  qrCode: string
-  paymentString: string
-  originalData: any
+  qrCode: string;
+  paymentString: string;
+  originalData: any;
 }
 
 export function UserManager() {
-  const { toast } = useToast()
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
+  const { toast } = useToast();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<
     "all" | "investor" | "distributor" | "assessor" | "gestor" | "escritorio"
-  >("all")
-  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive" | "pending">("all")
+  >("all");
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "active" | "inactive" | "pending"
+  >("all");
 
-  const [showInvestorModal, setShowInvestorModal] = useState(false)
+  const [showInvestorModal, setShowInvestorModal] = useState(false);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [investorForm, setInvestorForm] = useState({
     fullName: "",
     email: "",
@@ -59,66 +87,69 @@ export function UserManager() {
     password: "",
     confirmPassword: "",
     investmentValue: "", // Adicionado campo para valor do investimento
-  })
-  const [submittingInvestor, setSubmittingInvestor] = useState(false)
-  const [assessors, setAssessors] = useState<User[]>([])
+  });
+  const [submittingInvestor, setSubmittingInvestor] = useState(false);
+  const [assessors, setAssessors] = useState<User[]>([]);
 
-  const [showQRModal, setShowQRModal] = useState(false)
-  const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null)
-  const [generatingQR, setGeneratingQR] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null);
+  const [generatingQR, setGeneratingQR] = useState(false);
 
   useEffect(() => {
-    fetchUsers()
-    fetchAssessors()
-  }, [])
+    fetchUsers();
+    fetchAssessors();
+  }, []);
 
   const fetchAssessors = async () => {
     try {
-      const supabase = createClient()
+      const supabase = createClient();
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("user_type", "assessor")
-        .eq("status", "active")
+        .eq("is_active", true);
 
-      if (error) throw error
+      if (error) throw error;
 
       const transformedAssessors: User[] = (profiles || []).map((profile) => ({
         id: profile.id,
         name: profile.full_name || profile.email.split("@")[0],
         email: profile.email,
         type: profile.user_type || "assessor",
-        status: profile.status || "active",
+        status: profile.is_active ? "active" : "inactive",
         joinedAt: profile.created_at,
         lastActivity: profile.updated_at || profile.created_at,
-      }))
+      }));
 
-      setAssessors(transformedAssessors)
+      setAssessors(transformedAssessors);
     } catch (error) {
-      console.error("Erro ao buscar assessores:", error)
+      console.error("Erro ao buscar assessores:", error);
     }
-  }
+  };
 
   const fetchUsers = async () => {
     try {
-      setLoading(true)
-      const supabase = createClient()
+      setLoading(true);
+      const supabase = createClient();
 
       // Buscar todos os perfis de usuários
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Erro ao buscar usuários:", error)
+        console.error("Erro ao buscar usuários:", error);
         toast({
           title: "Erro ao carregar usuários",
           description: "Não foi possível carregar a lista de usuários.",
           variant: "destructive",
-        })
-        return
+        });
+        return;
       }
+
+      console.log("ON ADMIN DASHBOARD - profiles", profiles);
+      console.log("error", error);
 
       // Transformar dados do Supabase para o formato esperado
       const transformedUsers: User[] = (profiles || []).map((profile) => ({
@@ -131,146 +162,161 @@ export function UserManager() {
         totalCaptured: profile.total_captured || 0,
         joinedAt: profile.created_at,
         lastActivity: profile.updated_at || profile.created_at,
-      }))
+      }));
 
-      setUsers(transformedUsers)
+      setUsers(transformedUsers);
     } catch (error) {
-      console.error("Erro ao buscar usuários:", error)
+      console.error("Erro ao buscar usuários:", error);
       toast({
         title: "Erro ao carregar usuários",
         description: "Não foi possível carregar a lista de usuários.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesType = filterType === "all" || user.type === filterType
-    const matchesStatus = filterStatus === "all" || user.status === filterStatus
-    return matchesSearch && matchesType && matchesStatus
-  })
+      user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = filterType === "all" || user.type === filterType;
+    const matchesStatus =
+      filterStatus === "all" || user.status === filterStatus;
+    return matchesSearch && matchesType && matchesStatus;
+  });
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
-    }).format(value)
-  }
+    }).format(value);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "default"
+        return "default";
       case "inactive":
-        return "secondary"
+        return "secondary";
       case "pending":
-        return "outline"
+        return "outline";
       default:
-        return "secondary"
+        return "secondary";
     }
-  }
+  };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "active":
-        return "Ativo"
+        return "Ativo";
       case "inactive":
-        return "Inativo"
+        return "Inativo";
       case "pending":
-        return "Pendente"
+        return "Pendente";
       default:
-        return status
+        return status;
     }
-  }
+  };
 
   const getTypeLabel = (type: string) => {
     switch (type) {
       case "investor":
-        return "Investidor"
+        return "Investidor";
       case "distributor":
-        return "Distribuidor"
+        return "Distribuidor";
       case "assessor":
-        return "Assessor"
+        return "Assessor";
       case "gestor":
-        return "Gestor"
+        return "Gestor";
       case "escritorio":
-        return "Escritório"
+        return "Escritório";
       default:
-        return type
+        return type;
     }
-  }
+  };
 
   const handleApproveUser = async (userId: string) => {
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from("profiles").update({ status: "active" }).eq("id", userId)
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: "active" })
+        .eq("id", userId);
 
-      if (error) throw error
+      if (error) throw error;
 
       toast({
         title: "Usuário aprovado!",
         description: "O usuário foi aprovado e pode acessar a plataforma.",
-      })
+      });
 
       // Recarregar lista
-      fetchUsers()
+      fetchUsers();
     } catch (error) {
       toast({
         title: "Erro ao aprovar usuário",
         description: "Não foi possível aprovar o usuário.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleSuspendUser = async (userId: string) => {
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from("profiles").update({ status: "inactive" }).eq("id", userId)
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: "inactive" })
+        .eq("id", userId);
 
-      if (error) throw error
+      if (error) throw error;
 
       toast({
         title: "Usuário suspenso!",
         description: "O acesso do usuário foi suspenso.",
-      })
+      });
 
       // Recarregar lista
-      fetchUsers()
+      fetchUsers();
     } catch (error) {
       toast({
         title: "Erro ao suspender usuário",
         description: "Não foi possível suspender o usuário.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleCreateInvestor = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    if (!investorForm.fullName || !investorForm.email || !investorForm.password || !investorForm.investmentValue) {
+    if (
+      !investorForm.fullName ||
+      !investorForm.email ||
+      !investorForm.password ||
+      !investorForm.investmentValue
+    ) {
       toast({
         title: "Campos obrigatórios",
-        description: "Preencha todos os campos obrigatórios incluindo o valor do investimento.",
+        description:
+          "Preencha todos os campos obrigatórios incluindo o valor do investimento.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    const investmentValue = Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", "."))
+    const investmentValue = Number.parseFloat(
+      investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
+    );
     if (investmentValue < 5000) {
       toast({
         title: "Valor mínimo não atingido",
         description: "O valor mínimo de investimento é R$ 5.000,00.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     if (investorForm.password !== investorForm.confirmPassword) {
@@ -278,8 +324,8 @@ export function UserManager() {
         title: "Senhas não coincidem",
         description: "A senha e confirmação de senha devem ser iguais.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     if (investorForm.password.length < 6) {
@@ -287,15 +333,17 @@ export function UserManager() {
         title: "Senha muito curta",
         description: "A senha deve ter pelo menos 6 caracteres.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     try {
-      setSubmittingInvestor(true)
+      setSubmittingInvestor(true);
 
-      const [firstName, ...lastNameParts] = investorForm.fullName.trim().split(" ")
-      const lastName = lastNameParts.join(" ") || firstName
+      const [firstName, ...lastNameParts] = investorForm.fullName
+        .trim()
+        .split(" ");
+      const lastName = lastNameParts.join(" ") || firstName;
 
       const registrationData = {
         firstName,
@@ -306,9 +354,12 @@ export function UserManager() {
         cpf: investorForm.cpf,
         rg: "",
         assessorId: investorForm.assessorId || null,
-      }
+      };
 
-      console.log("[v0] Enviando dados para endpoint externo:", registrationData)
+      console.log(
+        "[v0] Enviando dados para endpoint externo:",
+        registrationData
+      );
 
       const response = await fetch("/api/external/register", {
         method: "POST",
@@ -316,17 +367,22 @@ export function UserManager() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(registrationData),
-      })
+      });
 
-      const result = await response.json()
+      const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error || "Erro ao cadastrar investidor na API externa")
+        throw new Error(
+          result.error || "Erro ao cadastrar investidor na API externa"
+        );
       }
 
-      console.log("[v0] Investidor cadastrado com sucesso na API externa:", result.data)
+      console.log(
+        "[v0] Investidor cadastrado com sucesso na API externa:",
+        result.data
+      );
 
-      const supabase = createClient()
+      const supabase = createClient();
       const { error: localError } = await supabase.from("profiles").insert([
         {
           email: investorForm.email,
@@ -338,18 +394,21 @@ export function UserManager() {
           status: "active",
           external_id: result.data?.id || null,
         },
-      ])
+      ]);
 
       if (localError) {
-        console.warn("[v0] Erro ao salvar no Supabase local (mas cadastro externo foi bem-sucedido):", localError)
+        console.warn(
+          "[v0] Erro ao salvar no Supabase local (mas cadastro externo foi bem-sucedido):",
+          localError
+        );
       }
 
       toast({
         title: "Investidor cadastrado!",
         description: `${investorForm.fullName} foi cadastrado com sucesso. Gerando QR Code PIX...`,
-      })
+      });
 
-      await generateQRCode(investmentValue, investorForm.cpf)
+      await generateQRCode(investmentValue, investorForm.cpf);
 
       setInvestorForm({
         fullName: "",
@@ -360,27 +419,29 @@ export function UserManager() {
         password: "",
         confirmPassword: "",
         investmentValue: "",
-      })
-      setShowInvestorModal(false)
+      });
+      setShowInvestorModal(false);
 
-      setTimeout(() => fetchUsers(), 2000)
+      setTimeout(() => fetchUsers(), 2000);
     } catch (error: any) {
-      console.error("Erro ao cadastrar investidor:", error)
+      console.error("Erro ao cadastrar investidor:", error);
       toast({
         title: "Erro ao cadastrar investidor",
-        description: error.message || "Não foi possível cadastrar o investidor na API externa.",
+        description:
+          error.message ||
+          "Não foi possível cadastrar o investidor na API externa.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setSubmittingInvestor(false)
+      setSubmittingInvestor(false);
     }
-  }
+  };
 
   const generateQRCode = async (value: number, cpf: string) => {
     try {
-      setGeneratingQR(true)
+      setGeneratingQR(true);
 
-      console.log("[v0] Gerando QR Code PIX para:", { value, cpf })
+      console.log("[v0] Gerando QR Code PIX para:", { value, cpf });
 
       const response = await fetch("/api/external/generate-qrcode", {
         method: "POST",
@@ -388,57 +449,60 @@ export function UserManager() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ value, cpf }),
-      })
+      });
 
-      const result = await response.json()
+      const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error || "Erro ao gerar QR Code PIX")
+        throw new Error(result.error || "Erro ao gerar QR Code PIX");
       }
 
-      console.log("[v0] QR Code gerado com sucesso:", result)
+      console.log("[v0] QR Code gerado com sucesso:", result);
 
       setQRCodeData({
         qrCode: result.qrCode,
         paymentString: result.paymentString,
         originalData: result.originalData,
-      })
-      setShowQRModal(true)
+      });
+      setShowQRModal(true);
 
       toast({
         title: "QR Code PIX gerado!",
         description: "O QR Code para pagamento foi gerado com sucesso.",
-      })
+      });
     } catch (error: any) {
-      console.error("Erro ao gerar QR Code:", error)
+      console.error("Erro ao gerar QR Code:", error);
       toast({
         title: "Erro ao gerar QR Code",
         description: error.message || "Não foi possível gerar o QR Code PIX.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setGeneratingQR(false)
+      setGeneratingQR(false);
     }
-  }
+  };
 
   const copyPixCode = () => {
     if (qrCodeData?.paymentString) {
-      navigator.clipboard.writeText(qrCodeData.paymentString)
+      navigator.clipboard.writeText(qrCodeData.paymentString);
       toast({
         title: "Código PIX copiado!",
         description: "O código PIX foi copiado para a área de transferência.",
-      })
+      });
     }
-  }
+  };
 
   const formatCurrencyInput = (value: string) => {
-    const numericValue = value.replace(/[^\d]/g, "")
-    const formattedValue = (Number.parseInt(numericValue) / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    })
-    return formattedValue
-  }
+    const numericValue = value.replace(/[^\d]/g, "");
+    const formattedValue = (Number.parseInt(numericValue) / 100).toLocaleString(
+      "pt-BR",
+      {
+        style: "currency",
+        currency: "BRL",
+      }
+    );
+    return formattedValue;
+  };
 
   return (
     <div className="space-y-6">
@@ -448,8 +512,28 @@ export function UserManager() {
             <Users className="w-6 h-6" />
             Gerenciamento de Usuários
           </h2>
-          <p className="text-muted-foreground">Gerencie investidores e distribuidores da plataforma</p>
+          <p className="text-muted-foreground">
+            Gerencie investidores e distribuidores da plataforma
+          </p>
         </div>
+        <Dialog open={showCreateUserModal} onOpenChange={setShowCreateUserModal}>
+          <DialogTrigger asChild>
+            <Button className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4" />
+              Cadastrar Usuário
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Cadastrar Novo Usuário</DialogTitle>
+              <DialogDescription>
+                Cadastre um novo usuário na plataforma.
+              </DialogDescription>
+            </DialogHeader>
+            <RegisterForm closeModal={() => setShowCreateUserModal(false)} />
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={showInvestorModal} onOpenChange={setShowInvestorModal}>
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
@@ -461,7 +545,8 @@ export function UserManager() {
             <DialogHeader>
               <DialogTitle>Cadastrar Novo Investidor</DialogTitle>
               <DialogDescription>
-                Cadastre um novo investidor na plataforma. Um QR Code PIX será gerado para pagamento.
+                Cadastre um novo investidor na plataforma. Um QR Code PIX será
+                gerado para pagamento.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateInvestor} className="space-y-4">
@@ -470,7 +555,12 @@ export function UserManager() {
                 <Input
                   id="fullName"
                   value={investorForm.fullName}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      fullName: e.target.value,
+                    }))
+                  }
                   placeholder="Nome completo do investidor"
                   required
                 />
@@ -482,7 +572,12 @@ export function UserManager() {
                   id="email"
                   type="email"
                   value={investorForm.email}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      email: e.target.value,
+                    }))
+                  }
                   placeholder="email@exemplo.com"
                   required
                 />
@@ -493,7 +588,12 @@ export function UserManager() {
                 <Input
                   id="phone"
                   value={investorForm.phone}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      phone: e.target.value,
+                    }))
+                  }
                   placeholder="(11) 99999-9999"
                 />
               </div>
@@ -503,20 +603,30 @@ export function UserManager() {
                 <Input
                   id="cpf"
                   value={investorForm.cpf}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, cpf: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      cpf: e.target.value,
+                    }))
+                  }
                   placeholder="000.000.000-00"
                   required
                 />
               </div>
 
               <div>
-                <Label htmlFor="investmentValue">Valor do Investimento * (mínimo R$ 5.000,00)</Label>
+                <Label htmlFor="investmentValue">
+                  Valor do Investimento * (mínimo R$ 5.000,00)
+                </Label>
                 <Input
                   id="investmentValue"
                   value={investorForm.investmentValue}
                   onChange={(e) => {
-                    const formatted = formatCurrencyInput(e.target.value)
-                    setInvestorForm((prev) => ({ ...prev, investmentValue: formatted }))
+                    const formatted = formatCurrencyInput(e.target.value);
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      investmentValue: formatted,
+                    }));
                   }}
                   placeholder="R$ 5.000,00"
                   required
@@ -528,7 +638,12 @@ export function UserManager() {
                 <select
                   id="assessorId"
                   value={investorForm.assessorId}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, assessorId: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      assessorId: e.target.value,
+                    }))
+                  }
                   className="w-full mt-1 px-3 py-2 border rounded-lg"
                 >
                   <option value="">Selecione um assessor</option>
@@ -546,7 +661,12 @@ export function UserManager() {
                   id="password"
                   type="password"
                   value={investorForm.password}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, password: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      password: e.target.value,
+                    }))
+                  }
                   placeholder="Senha do investidor"
                   required
                   minLength={6}
@@ -559,7 +679,12 @@ export function UserManager() {
                   id="confirmPassword"
                   type="password"
                   value={investorForm.confirmPassword}
-                  onChange={(e) => setInvestorForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
                   placeholder="Confirme a senha"
                   required
                   minLength={6}
@@ -601,7 +726,10 @@ export function UserManager() {
               <QrCode className="w-5 h-5" />
               QR Code PIX Gerado
             </DialogTitle>
-            <DialogDescription>Use o QR Code abaixo ou copie o código PIX para realizar o pagamento.</DialogDescription>
+            <DialogDescription>
+              Use o QR Code abaixo ou copie o código PIX para realizar o
+              pagamento.
+            </DialogDescription>
           </DialogHeader>
 
           {qrCodeData && (
@@ -618,8 +746,17 @@ export function UserManager() {
                 <div className="space-y-2">
                   <Label>Código PIX (Copia e Cola)</Label>
                   <div className="flex gap-2">
-                    <Input value={qrCodeData.paymentString} readOnly className="font-mono text-xs" />
-                    <Button variant="outline" size="sm" onClick={copyPixCode} className="shrink-0 bg-transparent">
+                    <Input
+                      value={qrCodeData.paymentString}
+                      readOnly
+                      className="font-mono text-xs"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyPixCode}
+                      className="shrink-0 bg-transparent"
+                    >
                       <Copy className="w-4 h-4" />
                     </Button>
                   </div>
@@ -699,7 +836,9 @@ export function UserManager() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total de Usuários</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total de Usuários
+                </p>
                 <p className="text-2xl font-bold">{users.length}</p>
               </div>
               <Users className="w-8 h-8 text-muted-foreground" />
@@ -710,8 +849,12 @@ export function UserManager() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Investidores</p>
-                <p className="text-2xl font-bold">{users.filter((u) => u.type === "investor").length}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Investidores
+                </p>
+                <p className="text-2xl font-bold">
+                  {users.filter((u) => u.type === "investor").length}
+                </p>
               </div>
               <DollarSign className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -721,9 +864,20 @@ export function UserManager() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Distribuidores</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Distribuidores
+                </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => ["distributor", "assessor", "gestor", "escritorio"].includes(u.type)).length}
+                  {
+                    users.filter((u) =>
+                      [
+                        "distributor",
+                        "assessor",
+                        "gestor",
+                        "escritorio",
+                      ].includes(u.type)
+                    ).length
+                  }
                 </p>
               </div>
               <UserCheck className="w-8 h-8 text-muted-foreground" />
@@ -734,8 +888,12 @@ export function UserManager() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold">{users.filter((u) => u.status === "pending").length}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Pendentes
+                </p>
+                <p className="text-2xl font-bold">
+                  {users.filter((u) => u.status === "pending").length}
+                </p>
               </div>
               <UserX className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -746,7 +904,9 @@ export function UserManager() {
       <Card>
         <CardHeader>
           <CardTitle>Lista de Usuários</CardTitle>
-          <CardDescription>Todos os usuários registrados na plataforma</CardDescription>
+          <CardDescription>
+            Todos os usuários registrados na plataforma
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {filteredUsers.length === 0 ? (
@@ -777,26 +937,44 @@ export function UserManager() {
                       <Badge variant="outline">{getTypeLabel(user.type)}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusColor(user.status) as any}>{getStatusLabel(user.status)}</Badge>
+                      <Badge variant={getStatusColor(user.status) as any}>
+                        {getStatusLabel(user.status)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      {user.totalInvested && user.totalInvested > 0 && formatCurrency(user.totalInvested)}
-                      {user.totalCaptured && user.totalCaptured > 0 && formatCurrency(user.totalCaptured)}
+                      {user.totalInvested &&
+                        user.totalInvested > 0 &&
+                        formatCurrency(user.totalInvested)}
+                      {user.totalCaptured &&
+                        user.totalCaptured > 0 &&
+                        formatCurrency(user.totalCaptured)}
                       {(!user.totalInvested || user.totalInvested === 0) &&
                         (!user.totalCaptured || user.totalCaptured === 0) &&
                         "-"}
                     </TableCell>
-                    <TableCell>{new Date(user.joinedAt).toLocaleDateString("pt-BR")}</TableCell>
-                    <TableCell>{new Date(user.lastActivity).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>
+                      {new Date(user.joinedAt).toLocaleDateString("pt-BR")}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(user.lastActivity).toLocaleDateString("pt-BR")}
+                    </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
                         {user.status === "pending" && (
-                          <Button variant="ghost" size="sm" onClick={() => handleApproveUser(user.id)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleApproveUser(user.id)}
+                          >
                             <UserCheck className="w-4 h-4" />
                           </Button>
                         )}
                         {user.status === "active" && (
-                          <Button variant="ghost" size="sm" onClick={() => handleSuspendUser(user.id)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSuspendUser(user.id)}
+                          >
                             <UserX className="w-4 h-4" />
                           </Button>
                         )}
@@ -810,5 +988,5 @@ export function UserManager() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
