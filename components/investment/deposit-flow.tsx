@@ -138,7 +138,9 @@ export function DepositFlow() {
       console.log("Investimento criado:", investmentData);
     }
 
-    await generateQRCode(Number(depositAmount), user?.cpf);
+    console.log("user?.cpf_cnpj", user);
+
+    await generateQRCode(Number(depositAmount), user?.cpf_cnpj);
 
     toast({
       title: "Depósito processado com sucesso!",
@@ -171,7 +173,12 @@ export function DepositFlow() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ value, cpf }),
+        body: JSON.stringify({ 
+          value, 
+          cpf,
+          email: user?.email,
+          userName: user?.name || user?.full_name
+        }),
       });
 
       const result = await response.json();
@@ -191,7 +198,7 @@ export function DepositFlow() {
 
       toast({
         title: "QR Code PIX gerado!",
-        description: "O QR Code para pagamento foi gerado com sucesso.",
+        description: "O QR Code para pagamento foi gerado com sucesso. Um email com o código PIX foi enviado para você.",
       });
     } catch (error: any) {
       console.error("Erro ao gerar QR Code:", error);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,14 +31,19 @@ import {
   Gift,
   Settings,
   FileText,
+  Key,
+  ArrowRight,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { createServerClient } from "@/lib/supabase/server";
 
 interface UserData {
   id: string;
   email: string;
+  name?: string;
   user_type: string;
   office_id?: string | null;
   role?: string | null;
@@ -47,8 +52,7 @@ interface UserData {
 export function Navbar() {
   const [user, setUser] = useState<UserData | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const router = useRouter();
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const pathname = usePathname();
   const { toast } = useToast();
 
@@ -67,6 +71,10 @@ export function Navbar() {
     }
   }, []);
 
+  const handleNewPassword = () => {
+    window.location.href = "/newPassword";
+  };
+
   const handleLogout = () => {
     console.log("Saindo...");
     toast({
@@ -76,7 +84,6 @@ export function Navbar() {
     localStorage.clear(); // Limpa todo o localStorage
     sessionStorage.clear(); // Limpa também o sessionStorage
     setUser(null); // Limpa o estado local
-    setIsUserDropdownOpen(false); // Fecha o dropdown
 
     toast({
       title: "Logout realizado",
@@ -91,8 +98,8 @@ export function Navbar() {
 
   const getUserDisplayName = () => {
     if (!user) return "";
-    // Extrai o nome do email se não houver nome completo
-    return user.name;
+    // Usa o nome se disponível, senão extrai do email
+    return user.name || user.email.split("@")[0];
   };
 
   const getUserTypeLabel = () => {
@@ -252,23 +259,14 @@ export function Navbar() {
                 </Button>
 
                 {/* User Dropdown */}
-                <DropdownMenu
-                  open={isUserDropdownOpen}
-                  onOpenChange={setIsUserDropdownOpen}
-                >
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       className="flex items-center space-x-2 hover:bg-accent/80"
                     >
                       <User className="h-4 w-4" />
-                      <span
-                        className="hidden sm:inline cursor-pointer hover:text-accent-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsUserDropdownOpen(!isUserDropdownOpen);
-                        }}
-                      >
+                      <span className="hidden sm:inline">
                         {getUserDisplayName()}
                       </span>
                       <Badge variant="secondary" className="hidden sm:inline">
@@ -336,20 +334,52 @@ export function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button variant="outline" size="sm" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sair
-                </Button>
+                {!isUserMenuOpen ? (
+                  <ChevronRight
+                    className="h-4 w-4 mr-2 cursor-pointer"
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  />
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="cursor-pointer"
+                      size="sm"
+                      onClick={handleNewPassword}
+                    >
+                      <Key className="h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="cursor-pointer"
+                      size="sm"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="h-4 mr-2" />
+                      Sair
+                    </Button>
+                    <ChevronLeft
+                      className="h-4 w-4 mr-2 cursor-pointer"
+                      onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    />
+                  </>
+                )}
               </>
             ) : (
               <div className="flex items-center space-x-2">
                 <Link href="/login">
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    className="cursor-pointer"
+                    size="sm"
+                  >
                     Entrar
                   </Button>
                 </Link>
                 <Link href="/register">
-                  <Button size="sm">Cadastrar</Button>
+                  <Button className="cursor-pointer" size="sm">
+                    Cadastrar
+                  </Button>
                 </Link>
                 <Link href="/admin/login">
                   <Button variant="ghost" size="sm">

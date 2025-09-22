@@ -32,9 +32,22 @@ interface InvestmentData {
   subordinateQuota: number;
 }
 
+interface TransactionHistoryItem {
+  id: string;
+  type: "investment" | "withdrawal" | "return";
+  amount: number;
+  status: string;
+  created_at: string;
+  quota_type?: string;
+  description?: string;
+}
+
 export function InvestorDashboard() {
   const [user, setUser] = useState<UserData | null>(null);
   const [investmentsData, setInvestmentsData] = useState<any[]>([]);
+  const [transactionHistory, setTransactionHistory] = useState<
+    TransactionHistoryItem[]
+  >([]);
   const [investments, setInvestments] = useState<InvestmentData>({
     totalInvested: 0,
     currentValue: 0,
@@ -44,6 +57,87 @@ export function InvestorDashboard() {
   });
   const [loading, setLoading] = useState(true);
 
+  const fetchTransactionHistory = async (userId: string) => {
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+
+      // Buscar investimentos
+      const { data: investmentsRaw, error: investmentsError } = await supabase
+        .from("investments")
+        .select(
+          "id, amount, quota_type, monthly_return_rate, created_at, status"
+        )
+        .eq("user_id", userId)
+        .eq("status", "active");
+
+      // Buscar transações (resgates)
+      const { data: transactionsRaw, error: transactionsError } = await supabase
+        .from("transactions")
+        .select("id, type, amount, status, created_at")
+        .eq("user_id", userId)
+        .in("type", ["withdrawal", "return"])
+        .order("created_at", { ascending: false });
+
+      if (investmentsError) {
+        console.error("[v0] Erro ao buscar investimentos:", investmentsError);
+      }
+
+      if (transactionsError) {
+        console.error("[v0] Erro ao buscar transações:", transactionsError);
+      }
+
+      const historyItems: TransactionHistoryItem[] = [];
+
+      // Adicionar investimentos
+      if (investmentsRaw) {
+        investmentsRaw.forEach((investment) => {
+          historyItems.push({
+            id: investment.id,
+            type: "investment",
+            amount: Number(investment.amount),
+            status: investment.status,
+            created_at: investment.created_at,
+            quota_type: investment.quota_type,
+            description: `Investimento - Cota ${
+              investment.quota_type === "senior" ? "Sênior" : "Subordinada"
+            }`,
+          });
+        });
+      }
+
+      // Adicionar transações (resgates e retornos)
+      if (transactionsRaw) {
+        transactionsRaw.forEach((transaction) => {
+          historyItems.push({
+            id: transaction.id,
+            type: transaction.type === "withdrawal" ? "withdrawal" : "return",
+            amount: Number(transaction.amount),
+            status: transaction.status,
+            created_at: transaction.created_at,
+            description:
+              transaction.type === "withdrawal"
+                ? "Resgate"
+                : "Retorno de investimento",
+          });
+        });
+      }
+
+      // Ordenar por data (mais recente primeiro)
+      historyItems.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setTransactionHistory(historyItems);
+      console.log("[v0] Histórico de transações carregado:", historyItems);
+    } catch (error) {
+      console.error("[v0] Erro ao carregar histórico de transações:", error);
+    }
+  };
+
   const fetchInvestmentData = async (userId: string) => {
     try {
       const supabase = createBrowserClient(
@@ -51,78 +145,93 @@ export function InvestorDashboard() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
 
-      const { data: investmentDataRaw, error } = await supabase
+      // Buscar investimentos ativos
+      const { data: investmentsRaw, error: investmentsError } = await supabase
         .from("investments")
-        .select("amount, quota_type, monthly_return_rate, created_at")
+        .select(
+          "id, amount, quota_type, monthly_return_rate, created_at, status"
+        )
         .eq("user_id", userId)
         .eq("status", "active");
 
-      if (error) {
-        console.error("[v0] Erro ao buscar investimentos:", error);
+      // Buscar resgates
+      const { data: withdrawalsRaw, error: withdrawalsError } = await supabase
+        .from("transactions")
+        .select("amount, created_at")
+        .eq("user_id", userId)
+        .eq("type", "withdrawal")
+        .eq("status", "completed");
+
+      if (investmentsError || withdrawalsError) {
+        console.error(
+          "Erro ao buscar dados:",
+          investmentsError || withdrawalsError
+        );
         return;
       }
 
-      if (!investmentDataRaw || investmentDataRaw.length === 0) {
-        console.log("[v0] Nenhum investimento encontrado para o usuário");
-        setLoading(false);
+      if (!investmentsRaw || investmentsRaw.length === 0) {
+        setInvestments({
+          totalInvested: 0,
+          currentValue: 0,
+          monthlyReturn: 0,
+          seniorQuota: 0,
+          subordinateQuota: 0,
+        });
         return;
       }
 
-      const totalInvested = investmentDataRaw.reduce(
+      // --- CALCULANDO ---
+      const today = new Date();
+
+      // Total investido bruto (sem resgates)
+      const totalInvested = investmentsRaw.reduce(
         (sum, inv) => sum + Number(inv.amount),
         0
       );
 
-      const seniorInvestments = investmentDataRaw.filter(
-        (inv) => inv.quota_type === "senior"
-      );
-      const subordinateInvestments = investmentDataRaw.filter(
-        (inv) => inv.quota_type === "subordinate"
-      );
+      // Total de resgates
+      const totalWithdrawals =
+        withdrawalsRaw?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
 
-      const seniorQuota = seniorInvestments.reduce(
-        (sum, inv) => sum + Number(inv.amount),
-        0
-      );
-      const subordinateQuota = subordinateInvestments.reduce(
-        (sum, inv) => sum + Number(inv.amount),
-        0
-      );
+      // Calcular rendimento acumulado de cada investimento
+      let totalReturn = 0;
+      investmentsRaw.forEach((inv) => {
+        const monthsPassed = Math.floor(
+          (today.getTime() - new Date(inv.created_at).getTime()) /
+            (1000 * 60 * 60 * 24 * 30)
+        );
 
-      const seniorReturn = seniorQuota * 0.03;
-      const subordinateReturn = subordinateQuota * 0.035;
+        const monthlyRate = Number(inv.monthly_return_rate) || 0.02; // 2% padrão
+        totalReturn += Number(inv.amount) * monthlyRate * monthsPassed;
+      });
 
-      // CALCULAR VALOR ATUAL BASEADO NA DATA DE INVESTIMENTO
-      // CALCULA QUANTOS MESES SE PASSARAM DESDE O INVESTIMENTO
-      const monthsPassed = Math.floor(
-        (new Date().getTime() - new Date(investmentDataRaw[0].created_at).getTime()) /
-          (1000 * 60 * 60 * 24 * 30)
-      );
+      // Separar por tipo de cota
+      const seniorQuota = investmentsRaw
+        .filter((inv) => inv.quota_type === "senior")
+        .reduce((sum, inv) => sum + Number(inv.amount), 0);
 
-      console.log("[v0] Meses passados:", monthsPassed);
+      const subordinateQuota = investmentsRaw
+        .filter((inv) => inv.quota_type === "subordinate")
+        .reduce((sum, inv) => sum + Number(inv.amount), 0);
 
-      const currentValue = totalInvested + (0.02 * totalInvested) * monthsPassed;
-      const monthlyReturn = 0.02 * totalInvested;
+      // Valor atual = total investido - resgates + retorno acumulado
+      const currentValue = totalInvested - totalWithdrawals + totalReturn;
+
+      // Retorno mensal baseado no saldo líquido
+      const monthlyReturn = (currentValue - totalWithdrawals) * 0.02; // 2% sobre saldo líquido
 
       setInvestments({
-        totalInvested,
+        totalInvested: totalInvested - totalWithdrawals,
         currentValue,
         monthlyReturn,
         seniorQuota,
         subordinateQuota,
       });
 
-      setInvestmentsData(investmentDataRaw);
-
-      console.log("[v0] Dados de investimento carregados:", {
-        totalInvested,
-        currentValue,
-        monthlyReturn,
-        seniorQuota,
-        subordinateQuota,
-      });
+      setInvestmentsData(investmentsRaw);
     } catch (error) {
-      console.error("[v0] Erro ao carregar dados de investimento:", error);
+      console.error("Erro ao carregar dados de investimento:", error);
     } finally {
       setLoading(false);
     }
@@ -136,6 +245,7 @@ export function InvestorDashboard() {
 
       if (userData.id) {
         fetchInvestmentData(userData.id);
+        fetchTransactionHistory(userData.id);
       }
     } else {
       setLoading(false);
@@ -251,55 +361,86 @@ export function InvestorDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card>
             <CardHeader>
-              <CardTitle>Histórico dos Investimentos</CardTitle>
+              <CardTitle>Histórico de Transações</CardTitle>
               <CardDescription>
-                Suas transações no Clube Agroderi
+                Seus investimentos e resgates no Clube Agroderi
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {investmentsData.length > 0 &&
-                investmentsData.map((investment) => (
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
-                    {/* <div> */}
-                    {/* <h4 className="font-semibold text-primary">Cota Sênior</h4> */}
-                    {/* <p className="text-sm text-muted-foreground">Rentabilidade: 3% a.m.</p> */}
-                    {/* </div> */}
-                    {/* <div className="text-left sm:text-right">
-                    <p className="font-bold">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(investments.seniorQuota)}
-                    </p> */}
-                    {/* <Badge variant="outline">Conservador</Badge> */}
-                    {/* </div> */}
-                    <div className="flex flex-col gap-2 w-full">
-                      <div className="flex flex-row justify-between w-full">
-                        <span>Dia do Investimento:</span>
-                        <p className="text-sm text-muted-foreground font-bold">
-                          {new Date(investment.created_at).toLocaleDateString(
-                            "pt-BR"
-                          )}
-                        </p>
+              {transactionHistory.length > 0 &&
+                transactionHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col p-4 border border-border rounded-lg space-y-2"
+                  >
+                    <div className="flex flex-row justify-between items-center w-full">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-semibold">
+                          {item.type === "investment"
+                            ? "Investimento"
+                            : item.type === "withdrawal"
+                            ? "Resgate"
+                            : "Retorno"}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {item.description}
+                        </span>
                       </div>
-
-                      <div className="flex flex-row justify-between w-full">
-                        <span>Valor do Investimento:</span>
-                        <p className="text-sm text-muted-foreground font-bold">
+                      <div className="text-right">
+                        <p
+                          className={`font-bold ${
+                            item.type === "investment"
+                              ? "text-green-600"
+                              : item.type === "withdrawal"
+                              ? "text-red-600"
+                              : "text-blue-600"
+                          }`}
+                        >
+                          {item.type === "investment"
+                            ? "+"
+                            : item.type === "withdrawal"
+                            ? "-"
+                            : "+"}
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
-                          }).format(investment.amount)}
+                          }).format(item.amount)}
                         </p>
+                        <Badge
+                          variant={
+                            item.status === "active" ||
+                            item.status === "completed"
+                              ? "default"
+                              : item.status === "pending"
+                              ? "secondary"
+                              : "destructive"
+                          }
+                          className="text-xs"
+                        >
+                          {item.status === "active"
+                            ? "Ativo"
+                            : item.status === "completed"
+                            ? "Concluído"
+                            : item.status === "pending"
+                            ? "Pendente"
+                            : "Falhou"}
+                        </Badge>
                       </div>
+                    </div>
+
+                    <div className="flex flex-row justify-between w-full text-sm text-muted-foreground">
+                      <span>Data:</span>
+                      <span>
+                        {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                      </span>
                     </div>
                   </div>
                 ))}
 
-              {investmentsData.length === 0 && (
+              {transactionHistory.length === 0 && (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">
-                    Você ainda não possui investimentos
+                    Você ainda não possui transações
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Entre em contato com seu assessor para realizar

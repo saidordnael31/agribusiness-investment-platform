@@ -44,7 +44,7 @@ export function WithdrawFlow() {
   const [step, setStep] = useState<"summary" | "confirmation" | "success">(
     "summary"
   );
-  const [withdrawType, setWithdrawType] = useState<"partial" | "total" | "monthly_return">(
+  const [withdrawType, setWithdrawType] = useState<"partial" | "total" | "monthly_return" | "monthly_return_current">(
     "monthly_return"
   );
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -105,6 +105,63 @@ export function WithdrawFlow() {
       console.error('Erro ao calcular retorno acumulado:', error, investment);
       return 0;
     }
+  };
+
+  const calculateCurrentMonthlyReturn = (investment: Investment) => {
+    try {
+      // Verifica se os dados necessários existem
+      if (!investment.amount || !investment.monthly_return_rate) {
+        console.warn('Dados incompletos do investimento:', investment);
+        return 0;
+      }
+
+      const amount = Number(investment.amount);
+      const rate = Number(investment.monthly_return_rate);
+      
+      if (isNaN(amount) || isNaN(rate)) {
+        console.warn('Valores inválidos:', { amount: investment.amount, rate: investment.monthly_return_rate });
+        return 0;
+      }
+      
+      // Retorna apenas o retorno mensal atual (não acumulado)
+      const monthlyReturn = amount * rate;
+      
+      return monthlyReturn;
+    } catch (error) {
+      console.error('Erro ao calcular retorno mensal atual:', error, investment);
+      return 0;
+    }
+  };
+
+  // Verifica se o usuário pode resgatar retorno mensal (precisa ter pelo menos 1 mês)
+  const canWithdrawMonthlyReturn = () => {
+    if (!userSummary.investments || userSummary.investments.length === 0) {
+      return false;
+    }
+
+    return userSummary.investments.some(investment => {
+      const createdDate = new Date(investment.created_at);
+      const currentDate = new Date();
+      const monthsElapsed = (currentDate.getFullYear() - createdDate.getFullYear()) * 12 + 
+                           (currentDate.getMonth() - createdDate.getMonth());
+      return monthsElapsed >= 1;
+    });
+  };
+
+  // Verifica se há retorno acumulado disponível para resgate
+  const hasAccumulatedReturn = () => {
+    return userSummary.totalAccumulatedReturn > 0;
+  };
+
+  // Verifica se há retorno mensal atual disponível para resgate
+  const hasCurrentMonthlyReturn = () => {
+    return userSummary.totalMonthlyReturn > 0;
+  };
+
+  // Valida se o valor de resgate parcial é válido
+  const isValidPartialWithdrawal = (amount: string) => {
+    const numAmount = Number(amount);
+    return !isNaN(numAmount) && numAmount >= 1000 && numAmount <= userSummary.totalInvested;
   };
 
   const fetchUserInvestments = async () => {
@@ -196,6 +253,9 @@ export function WithdrawFlow() {
       if (withdrawType === "monthly_return") {
         return userSummary.totalAccumulatedReturn || 0;
       }
+      if (withdrawType === "monthly_return_current") {
+        return userSummary.totalMonthlyReturn || 0;
+      }
       if (withdrawType === "total") {
         return userSummary.totalInvested || 0;
       }
@@ -209,7 +269,7 @@ export function WithdrawFlow() {
 
   const calculatePenaltyAmount = () => {
     try {
-      if (withdrawType === "monthly_return") {
+      if (withdrawType === "monthly_return" || withdrawType === "monthly_return_current") {
         return 0; // Sem multa para retorno mensal
       }
       
@@ -282,6 +342,7 @@ export function WithdrawFlow() {
     try {
       if (withdrawType === "total") return 0;
       if (withdrawType === "monthly_return") return userSummary.totalAccumulatedReturn || 0;
+      if (withdrawType === "monthly_return_current") return userSummary.totalMonthlyReturn || 0;
 
       const totalInvested = userSummary.totalInvested || 0;
       const amount = withdrawAmount || 0;
@@ -324,16 +385,16 @@ export function WithdrawFlow() {
                   <span className="text-gray-600">Tipo de Resgate:</span>
                   <Badge
                     variant={
-                      withdrawType === "total" ? "destructive" : "secondary"
+                      withdrawType === "total" ? "destructive" : 
+                      withdrawType === "monthly_return" ? "default" :
+                      withdrawType === "monthly_return_current" ? "default" : "secondary"
                     }
                   >
-                    {withdrawType === "total" ? "Total" : "Parcial"}
+                    {withdrawType === "total" ? "Total" : 
+                     withdrawType === "monthly_return" ? "Retorno Acumulado" :
+                     withdrawType === "monthly_return_current" ? "Retorno Mensal" : "Parcial"}
                   </Badge>
                 </div>
-                <p className="mt-1 text-sm text-red-600">
-                  Resgates antes do prazo terão multa de <strong>20%</strong> +
-                  perda da rentabilidade.
-                </p>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Valor do Resgate:</span>
                   <span className="font-semibold">
@@ -367,7 +428,7 @@ export function WithdrawFlow() {
               </div>
             </div>
 
-            <div className="bg-amber-50 p-4 rounded-lg">
+            {/* <div className="bg-amber-50 p-4 rounded-lg">
               <div className="flex items-start space-x-3">
                 <Clock className="w-5 h-5 text-amber-600 mt-0.5" />
                 <div>
@@ -380,7 +441,7 @@ export function WithdrawFlow() {
                   </p>
                 </div>
               </div>
-            </div>
+            </div> */}
 
             <div className="flex space-x-4">
               <Button
@@ -448,14 +509,16 @@ export function WithdrawFlow() {
                   <Badge
                     variant={
                       withdrawType === "total" ? "destructive" : 
-                      withdrawType === "monthly_return" ? "default" : "secondary"
+                      withdrawType === "monthly_return" ? "default" :
+                      withdrawType === "monthly_return_current" ? "default" : "secondary"
                     }
                   >
                     {withdrawType === "total" ? "Total" : 
-                     withdrawType === "monthly_return" ? "Retorno Acumulado" : "Parcial"}
+                     withdrawType === "monthly_return" ? "Retorno Acumulado" :
+                     withdrawType === "monthly_return_current" ? "Retorno Mensal" : "Parcial"}
                   </Badge>
                 </div>
-                {withdrawType !== "monthly_return" && (
+                {withdrawType !== "monthly_return" && withdrawType !== "monthly_return_current" && (
                   <p className="mt-1 text-sm text-red-600">
                     Resgates antes do prazo terão multa de <strong>20%</strong> +
                     perda da rentabilidade.
@@ -547,7 +610,7 @@ export function WithdrawFlow() {
               </div>
             )}
 
-            <div className="bg-amber-50 p-4 rounded-lg">
+            {/* <div className="bg-amber-50 p-4 rounded-lg">
               <div className="flex items-start space-x-3">
                 <Clock className="w-5 h-5 text-amber-600 mt-0.5" />
                 <div>
@@ -560,7 +623,7 @@ export function WithdrawFlow() {
                   </p>
                 </div>
               </div>
-            </div>
+            </div> */}
 
             <Button
               onClick={handleWithdrawConfirm}
@@ -573,7 +636,8 @@ export function WithdrawFlow() {
                 ? "Processando..."
                 : `Confirmar Resgate ${
                     withdrawType === "total" ? "Total" : 
-                    withdrawType === "monthly_return" ? "Retorno Acumulado" : "Parcial"
+                    withdrawType === "monthly_return" ? "Retorno Acumulado" :
+                    withdrawType === "monthly_return_current" ? "Retorno Mensal" : "Parcial"
                   }`}
             </Button>
           </CardContent>
@@ -674,33 +738,94 @@ export function WithdrawFlow() {
           <CardContent className="space-y-6">
             <RadioGroup
               value={withdrawType}
-              onValueChange={(value: "partial" | "total" | "monthly_return") =>
+              onValueChange={(value: "partial" | "total" | "monthly_return" | "monthly_return_current") =>
                 setWithdrawType(value)
               }
             >
-              <div className="flex items-center space-x-2 p-4 border rounded-lg">
-                <RadioGroupItem value="monthly_return" id="monthly_return" />
+              <div className={`flex items-center space-x-2 p-4 border rounded-lg ${
+                !canWithdrawMonthlyReturn() || !hasAccumulatedReturn() 
+                  ? 'opacity-50 cursor-not-allowed bg-gray-50' 
+                  : 'hover:bg-gray-50'
+              }`}>
+                <RadioGroupItem 
+                  value="monthly_return" 
+                  id="monthly_return" 
+                  disabled={!canWithdrawMonthlyReturn() || !hasAccumulatedReturn()}
+                />
                 <Label htmlFor="monthly_return" className="flex-1 cursor-pointer">
                   <div>
-                    <p className="font-medium">Resgate do Retorno Acumulado</p>
+                    <p className="font-medium flex items-center">
+                      Resgate do Retorno Acumulado
+                      {(!canWithdrawMonthlyReturn() || !hasAccumulatedReturn()) && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          Indisponível
+                        </Badge>
+                      )}
+                    </p>
                     <p className="text-sm text-gray-600">
                       Resgatar apenas o retorno acumulado dos meses completos (sem multa)
                     </p>
+                    {!canWithdrawMonthlyReturn() && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Você precisa ter pelo menos 1 mês de investimento para resgatar retornos
+                      </p>
+                    )}
+                    {canWithdrawMonthlyReturn() && !hasAccumulatedReturn() && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Não há retorno acumulado disponível para resgate
+                      </p>
+                    )}
                   </div>
                 </Label>
               </div>
-              <div className="flex items-center space-x-2 p-4 border rounded-lg">
+              <div className={`flex items-center space-x-2 p-4 border rounded-lg ${
+                !canWithdrawMonthlyReturn() || !hasCurrentMonthlyReturn() 
+                  ? 'opacity-50 cursor-not-allowed bg-gray-50' 
+                  : 'hover:bg-gray-50'
+              }`}>
+                <RadioGroupItem 
+                  value="monthly_return_current" 
+                  id="monthly_return_current" 
+                  disabled={!canWithdrawMonthlyReturn() || !hasCurrentMonthlyReturn()}
+                />
+                <Label htmlFor="monthly_return_current" className="flex-1 cursor-pointer">
+                  <div>
+                    <p className="font-medium flex items-center">
+                      Resgate do Retorno Mensal
+                      {(!canWithdrawMonthlyReturn() || !hasCurrentMonthlyReturn()) && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          Indisponível
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Resgatar apenas o retorno mensal atual (sem multa)
+                    </p>
+                    {!canWithdrawMonthlyReturn() && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Você precisa ter pelo menos 1 mês de investimento para resgatar retornos
+                      </p>
+                    )}
+                    {canWithdrawMonthlyReturn() && !hasCurrentMonthlyReturn() && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Não há retorno mensal disponível para resgate
+                      </p>
+                    )}
+                  </div>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-gray-50">
                 <RadioGroupItem value="partial" id="partial" />
                 <Label htmlFor="partial" className="flex-1 cursor-pointer">
                   <div>
                     <p className="font-medium">Resgate Parcial</p>
                     <p className="text-sm text-gray-600">
-                      Resgatar apenas parte do valor investido
+                      Resgatar apenas parte do valor investido (mínimo R$ 1.000,00)
                     </p>
                   </div>
                 </Label>
               </div>
-              <div className="flex items-center space-x-2 p-4 border rounded-lg">
+              <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-gray-50">
                 <RadioGroupItem value="total" id="total" />
                 <Label htmlFor="total" className="flex-1 cursor-pointer">
                   <div>
@@ -725,16 +850,29 @@ export function WithdrawFlow() {
                   min="1000"
                   max={userSummary.totalInvested}
                   step="1000"
+                  className={withdrawAmount && !isValidPartialWithdrawal(withdrawAmount) ? 'border-red-500' : ''}
                 />
-                <p className="text-sm text-gray-600 mt-1">
-                  Valor mínimo: R$ 1.000,00 | Máximo disponível:{" "}
-                  {formatCurrency(userSummary.totalInvested)}
-                </p>
+                <div className="mt-1 space-y-1">
+                  <p className="text-sm text-gray-600">
+                    Valor mínimo: R$ 1.000,00 | Máximo disponível:{" "}
+                    {formatCurrency(userSummary.totalInvested)}
+                  </p>
+                  {withdrawAmount && !isValidPartialWithdrawal(withdrawAmount) && (
+                    <p className="text-sm text-red-600">
+                      {Number(withdrawAmount) < 1000 
+                        ? "Valor mínimo para resgate parcial é R$ 1.000,00"
+                        : Number(withdrawAmount) > userSummary.totalInvested
+                        ? `Valor máximo disponível é ${formatCurrency(userSummary.totalInvested)}`
+                        : "Valor inválido"
+                      }
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Aviso sobre multas */}
-            {withdrawType !== "monthly_return" && (
+            {withdrawType !== "monthly_return" && withdrawType !== "monthly_return_current" && (
               <div className="bg-red-50 p-4 rounded-lg">
                 <div className="flex items-start space-x-3">
                   <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
@@ -751,9 +889,10 @@ export function WithdrawFlow() {
             )}
 
             {/* Resumo do Resgate */}
-            {(withdrawType === "monthly_return" || 
+            {((withdrawType === "monthly_return" && canWithdrawMonthlyReturn() && hasAccumulatedReturn()) || 
+              (withdrawType === "monthly_return_current" && canWithdrawMonthlyReturn() && hasCurrentMonthlyReturn()) ||
               withdrawType === "total" || 
-              (withdrawType === "partial" && withdrawAmount && Number(withdrawAmount) >= 1000)) && (
+              (withdrawType === "partial" && withdrawAmount && isValidPartialWithdrawal(withdrawAmount))) && (
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h4 className="font-semibold text-blue-800 mb-2">
                   Resumo do Resgate
@@ -806,14 +945,22 @@ export function WithdrawFlow() {
             <Button
               onClick={() => setStep("confirmation")}
               disabled={
-                withdrawType === "partial" &&
-                (!withdrawAmount || Number(withdrawAmount) < 1000)
+                (withdrawType === "partial" && (!withdrawAmount || !isValidPartialWithdrawal(withdrawAmount))) ||
+                (withdrawType === "monthly_return" && (!canWithdrawMonthlyReturn() || !hasAccumulatedReturn())) ||
+                (withdrawType === "monthly_return_current" && (!canWithdrawMonthlyReturn() || !hasCurrentMonthlyReturn()))
               }
               className="w-full"
               size="lg"
               variant={withdrawType === "total" ? "destructive" : "default"}
             >
-              Continuar
+              {withdrawType === "monthly_return" && (!canWithdrawMonthlyReturn() || !hasAccumulatedReturn()) && "Retorno Acumulado Indisponível"}
+              {withdrawType === "monthly_return_current" && (!canWithdrawMonthlyReturn() || !hasCurrentMonthlyReturn()) && "Retorno Mensal Indisponível"}
+              {withdrawType === "partial" && (!withdrawAmount || !isValidPartialWithdrawal(withdrawAmount)) && "Valor Inválido"}
+              {!(
+                (withdrawType === "partial" && (!withdrawAmount || !isValidPartialWithdrawal(withdrawAmount))) ||
+                (withdrawType === "monthly_return" && (!canWithdrawMonthlyReturn() || !hasAccumulatedReturn())) ||
+                (withdrawType === "monthly_return_current" && (!canWithdrawMonthlyReturn() || !hasCurrentMonthlyReturn()))
+              ) && "Continuar"}
             </Button>
           </CardContent>
         </Card>

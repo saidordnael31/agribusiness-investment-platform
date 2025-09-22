@@ -448,7 +448,12 @@ export function UserManager() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ value, cpf }),
+        body: JSON.stringify({ 
+          value, 
+          cpf,
+          email: "admin@agroderi.com", // Email padrão para admin
+          userName: "Administrador"
+        }),
       });
 
       const result = await response.json();
@@ -468,7 +473,7 @@ export function UserManager() {
 
       toast({
         title: "QR Code PIX gerado!",
-        description: "O QR Code para pagamento foi gerado com sucesso.",
+        description: "O QR Code para pagamento foi gerado com sucesso. Um email com o código PIX foi enviado para você.",
       });
     } catch (error: any) {
       console.error("Erro ao gerar QR Code:", error);

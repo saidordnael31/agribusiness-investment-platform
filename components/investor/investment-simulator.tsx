@@ -33,54 +33,7 @@ interface Bonification {
   isActive: boolean;
 }
 
-const mockBonifications: Bonification[] = [
-  {
-    id: "1",
-    type: "value",
-    name: "Investimento Premium",
-    description: "Para investimentos acima de R$ 100.000",
-    bonus: 0.5,
-    minValue: 100000,
-    isActive: true,
-  },
-  {
-    id: "2",
-    type: "value",
-    name: "Investimento VIP",
-    description: "Para investimentos acima de R$ 500.000",
-    bonus: 1.0,
-    minValue: 500000,
-    isActive: true,
-  },
-  {
-    id: "3",
-    type: "commitment",
-    name: "Compromisso 12 meses",
-    description: "Sem resgate por 12 meses",
-    bonus: 0.3,
-    minCommitment: 12,
-    isActive: true,
-  },
-  {
-    id: "4",
-    type: "commitment",
-    name: "Compromisso 24 meses",
-    description: "Sem resgate por 24 meses",
-    bonus: 0.7,
-    minCommitment: 24,
-    isActive: true,
-  },
-  {
-    id: "5",
-    type: "promotion",
-    name: "Promoção Lançamento",
-    description: "Bônus especial para novos investidores",
-    bonus: 0.2,
-    isActive: true,
-  },
-];
-
-export function InvestmentSimulator() {
+export function InvestmentSimulator({ title }: { title?: string }) {
   const [user, setUser] = useState<null>(null);
   const [amount, setAmount] = useState("");
   const [period, setPeriod] = useState("");
@@ -102,29 +55,29 @@ export function InvestmentSimulator() {
     }
   }, []);
 
-  const getApplicableBonifications = (
-    investmentAmount: number,
-    commitment: number
-  ): Bonification[] => {
-    return mockBonifications.filter((bonification) => {
-      if (!bonification.isActive) return false;
+  // const getApplicableBonifications = (
+  //   investmentAmount: number,
+  //   commitment: number
+  // ): Bonification[] => {
+  //   return mockBonifications.filter((bonification) => {
+  //     if (!bonification.isActive) return false;
 
-      switch (bonification.type) {
-        case "value":
-          return bonification.minValue
-            ? investmentAmount >= bonification.minValue
-            : true;
-        case "commitment":
-          return bonification.minCommitment
-            ? commitment >= bonification.minCommitment
-            : true;
-        case "promotion":
-          return true;
-        default:
-          return false;
-      }
-    });
-  };
+  //     switch (bonification.type) {
+  //       case "value":
+  //         return bonification.minValue
+  //           ? investmentAmount >= bonification.minValue
+  //           : true;
+  //       case "commitment":
+  //         return bonification.minCommitment
+  //           ? commitment >= bonification.minCommitment
+  //           : true;
+  //       case "promotion":
+  //         return true;
+  //       default:
+  //         return false;
+  //     }
+  //   });
+  // };
 
   const calculateReturns = () => {
     const investmentAmount = Number.parseFloat(amount);
@@ -157,12 +110,6 @@ export function InvestmentSimulator() {
       totalReturn = finalAmount - investmentAmount;
     }
 
-    console.log("[v0] Com resgate:", isWithRescue);
-    console.log("[v0] Retorno mensal:", monthlyReturn);
-    console.log("[v0] meses:", months);
-    console.log("[v0] Retorno total:", totalReturn);
-    console.log("[v0] Valor final:", finalAmount);
-
     setResults({
       monthlyReturn,
       totalReturn,
@@ -178,12 +125,14 @@ export function InvestmentSimulator() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Calculator className="h-5 w-5" />
-          Simulador de Investimentos
+          {title || "Simulador de Investimentos"}
         </CardTitle>
-        <CardDescription>
-          Simule os retornos do seu investimento no Clube de Investimentos
-          Privado do Agronegócio (2% ao mês)
-        </CardDescription>
+        {!title && (
+          <CardDescription>
+            Simule os retornos do seu investimento no Clube de Investimentos
+            Privado do Agronegócio
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

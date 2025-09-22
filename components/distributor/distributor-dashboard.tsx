@@ -34,6 +34,8 @@ import {
   QrCode,
   Copy,
   Search,
+  Award,
+  UserCheck,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
@@ -46,12 +48,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InvestmentSimulator } from "../investor/investment-simulator";
 
 interface UserData {
   id: string;
   name: string;
   email: string;
   user_type: string;
+  role: string;
 }
 
 interface Investor {
@@ -66,6 +70,19 @@ interface Investor {
   lastActivity: string;
 }
 
+interface Advisor {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  cpf?: string;
+  totalCaptured: number;
+  status: string;
+  joinedAt: string;
+  lastActivity: string;
+  investorsCount: number;
+}
+
 interface QRCodeData {
   qrCode: string;
   paymentString: string;
@@ -76,8 +93,11 @@ export function DistributorDashboard() {
   const { toast } = useToast();
   const [user, setUser] = useState<UserData | null>(null);
   const [myInvestors, setMyInvestors] = useState<Investor[]>([]);
+  const [myAdvisors, setMyAdvisors] = useState<Advisor[]>([]);
   const [loadingInvestors, setLoadingInvestors] = useState(true);
+  const [loadingAdvisors, setLoadingAdvisors] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchAdvisorTerm, setSearchAdvisorTerm] = useState("");
 
   const [showInvestorModal, setShowInvestorModal] = useState(false);
   const [investorForm, setInvestorForm] = useState({
@@ -85,6 +105,12 @@ export function DistributorDashboard() {
     email: "",
     phone: "",
     cpf: "",
+    rg: "",
+    nationality: "",
+    maritalStatus: "",
+    profession: "",
+    address: "",
+    pixKey: "",
     password: "",
     confirmPassword: "",
     investmentValue: "",
@@ -122,7 +148,7 @@ export function DistributorDashboard() {
   });
 
   useEffect(() => {
-    if (myInvestors.length === 0) return;
+    if (myInvestors.length === 0 || !user) return;
 
     const totalCaptured = myInvestors.reduce(
       (sum, inv) => sum + inv.totalInvested,
@@ -132,9 +158,9 @@ export function DistributorDashboard() {
     const advisorShare = totalCaptured * 0.02; // Exemplo
     const officeShare = totalCaptured * 0.01;
 
-    const baseCommissionRate = user?.role === "escritorio" ? 0.01 : 0.03 // 3% monthly
-    const monthlyCommission = totalCaptured * baseCommissionRate
-    const annualCommission = monthlyCommission * 12
+    const baseCommissionRate = user.role === "escritorio" ? 0.01 : 0.03; // 3% monthly
+    const monthlyCommission = totalCaptured * baseCommissionRate;
+    const annualCommission = monthlyCommission * 12;
 
     setDistributorData((prev) => ({
       ...prev,
@@ -167,6 +193,7 @@ export function DistributorDashboard() {
       const userData = JSON.parse(userStr);
       setUser(userData);
       fetchMyInvestors(userData.id);
+      fetchMyAdvisors(userData.id);
     }
   }, []);
 
@@ -198,8 +225,6 @@ export function DistributorDashboard() {
           investments: investments?.filter((inv) => inv.user_id === profile.id),
         }));
         profilesWithInvestments = profilesWithInvestmentsMapped;
-
-        console.log("AQUI", profilesWithInvestments);
       }
 
       if (profilesError) {
@@ -239,6 +264,90 @@ export function DistributorDashboard() {
     }
   };
 
+  const fetchMyAdvisors = async (distributorId: string) => {
+    try {
+      setLoadingAdvisors(true);
+      const supabase = createClient();
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_type", "distributor")
+        .eq("parent_id", distributorId)
+        .order("created_at", { ascending: false });
+
+      if (profilesError) {
+        console.error("Erro ao buscar assessores:", profilesError);
+        return;
+      }
+
+      if (!profiles || profiles.length === 0) {
+        setMyAdvisors([]);
+        return;
+      }
+
+      const profileIds = profiles.map((p) => p.id);
+
+      // Buscar investimentos dos assessores
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select("*")
+        .eq("status", "active")
+        .in("user_id", profileIds);
+
+      // Buscar investidores de cada assessor
+      const { data: advisorInvestors, error: advisorInvestorsError } =
+        await supabase
+          .from("profiles")
+          .select("id, parent_id")
+          .eq("user_type", "investor")
+          .in("parent_id", profileIds);
+
+      if (advisorInvestorsError) {
+        console.error(
+          "Erro ao buscar investidores dos assessores:",
+          advisorInvestorsError
+        );
+      }
+
+      // Transformar os dados dos assessores
+      const transformedAdvisors: Advisor[] = profiles.map((profile) => {
+        const advisorInvestments =
+          investments?.filter((inv) => inv.user_id === profile.id) || [];
+
+        const advisorInvestorsCount =
+          advisorInvestors?.filter((inv) => inv.parent_id === profile.id)
+            .length || 0;
+
+        const totalCaptured = advisorInvestments.reduce(
+          (sum: number, inv: any) => sum + (inv.amount || 0),
+          0
+        );
+
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email.split("@")[0],
+          email: profile.email,
+          phone: profile.phone,
+          cpf: profile.notes?.includes("CPF:")
+            ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim()
+            : "",
+          totalCaptured,
+          status: profile.is_active ? "active" : "inactive",
+          joinedAt: profile.created_at,
+          lastActivity: profile.updated_at || profile.created_at,
+          investorsCount: advisorInvestorsCount,
+        };
+      });
+
+      setMyAdvisors(transformedAdvisors);
+    } catch (error) {
+      console.error("Erro ao buscar assessores:", error);
+    } finally {
+      setLoadingAdvisors(false);
+    }
+  };
+
   const handleCreateInvestor = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -246,12 +355,18 @@ export function DistributorDashboard() {
       !investorForm.fullName ||
       !investorForm.email ||
       !investorForm.password ||
-      !investorForm.investmentValue
+      !investorForm.investmentValue ||
+      !investorForm.rg ||
+      !investorForm.nationality ||
+      !investorForm.maritalStatus ||
+      !investorForm.profession ||
+      !investorForm.address ||
+      !investorForm.pixKey
     ) {
       toast({
         title: "Campos obrigatórios",
         description:
-          "Preencha todos os campos obrigatórios incluindo o valor do investimento.",
+          "Preencha todos os campos obrigatórios incluindo RG, nacionalidade, estado civil, profissão, endereço e chave PIX/USDT.",
         variant: "destructive",
       });
       return;
@@ -334,7 +449,6 @@ export function DistributorDashboard() {
 
       const supabase = createClient();
 
-      console.log("[v0] Criando usuário no Supabase Auth...");
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: investorForm.email,
         password: investorForm.password,
@@ -387,10 +501,16 @@ export function DistributorDashboard() {
             parent_id: authData.user.user_metadata.parent_id || null,
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
-            notes: "Cadastro de profile via login",
+            notes: `Usuário criádo via dashboard do assessor ${user?.name}`,
             hierarchy_level: "advisor",
             rescue_type: investorForm.rescueTerm,
             is_active: true,
+            rg: investorForm.rg,
+            nationality: investorForm.nationality,
+            marital_status: investorForm.maritalStatus,
+            profession: investorForm.profession,
+            address: investorForm.address,
+            pix_usdt_key: investorForm.pixKey,
           },
         ])
         .select()
@@ -433,6 +553,12 @@ export function DistributorDashboard() {
         email: "",
         phone: "",
         cpf: "",
+        rg: "",
+        nationality: "",
+        maritalStatus: "",
+        profession: "",
+        address: "",
+        pixKey: "",
         password: "",
         confirmPassword: "",
         investmentValue: "",
@@ -457,7 +583,6 @@ export function DistributorDashboard() {
     }
   };
 
-  
   const generateQRCode = async (value: number, cpf: string) => {
     try {
       setGeneratingQR(true);
@@ -469,7 +594,12 @@ export function DistributorDashboard() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ value, cpf }),
+        body: JSON.stringify({ 
+          value, 
+          cpf,
+          email: user?.email,
+          userName: user?.name
+        }),
       });
 
       const result = await response.json();
@@ -489,7 +619,7 @@ export function DistributorDashboard() {
 
       toast({
         title: "QR Code PIX gerado!",
-        description: "O QR Code para pagamento foi gerado com sucesso.",
+        description: "O QR Code para pagamento foi gerado com sucesso. Um email com o código PIX foi enviado para você.",
       });
     } catch (error: any) {
       console.error("Erro ao gerar QR Code:", error);
@@ -531,6 +661,12 @@ export function DistributorDashboard() {
       investor.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const filteredAdvisors = myAdvisors.filter(
+    (advisor) =>
+      advisor.name.toLowerCase().includes(searchAdvisorTerm.toLowerCase()) ||
+      advisor.email.toLowerCase().includes(searchAdvisorTerm.toLowerCase())
+  );
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -555,7 +691,9 @@ export function DistributorDashboard() {
         {/* Welcome Section */}
         <div className="mb-6 md:mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-            {user?.role === "escritorio" ? "Dashboard do Escritório" : "Dashboard do Investidor"}
+            {user && user.role === "escritorio"
+              ? "Dashboard do Escritório"
+              : "Dashboard do Investidor"}
           </h2>
           <p className="text-muted-foreground">
             Acompanhe suas vendas, comissões e performance
@@ -563,7 +701,7 @@ export function DistributorDashboard() {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -614,8 +752,25 @@ export function DistributorDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Meus Assessores
+              </CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl md:text-2xl font-bold text-accent">
+                {myAdvisors.length}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Assessores cadastrados por você
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Ranking</CardTitle>
-              <Trophy className="h-4 w-4 text-muted-foreground" />
+              <Award className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-xl md:text-2xl font-bold">
@@ -691,7 +846,7 @@ export function DistributorDashboard() {
             </CardContent>
           </Card>
 
-          {user.email === "felipecamargo222@gmail.com" && (
+          {user.email === "felipe@aethosconsultoria.com.br" && (
             <Card>
               <CardHeader>
                 <CardTitle>Metas de Performance</CardTitle>
@@ -861,12 +1016,15 @@ export function DistributorDashboard() {
 
         {/* Tabs Section */}
         <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="simulator" className="text-sm">
               Simulador
             </TabsTrigger>
             <TabsTrigger value="investors" className="text-sm">
               Meus Investidores
+            </TabsTrigger>
+            <TabsTrigger value="advisors" className="text-sm">
+              Meus Assessores
             </TabsTrigger>
             <TabsTrigger value="register" className="text-sm">
               Cadastrar Investidor
@@ -874,7 +1032,11 @@ export function DistributorDashboard() {
           </TabsList>
 
           <TabsContent value="simulator">
-            <CommissionSimulator />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CommissionSimulator />
+
+              <InvestmentSimulator title="Simule o investimento do cliente" />
+            </div>
           </TabsContent>
 
           <TabsContent value="investors">
@@ -971,6 +1133,96 @@ export function DistributorDashboard() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="advisors">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Meus Assessores</CardTitle>
+                    <CardDescription>
+                      Lista de assessores cadastrados por você
+                    </CardDescription>
+                  </div>
+                  <Badge variant="secondary">
+                    {myAdvisors.length} assessores
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por nome ou email..."
+                      value={searchAdvisorTerm}
+                      onChange={(e) => setSearchAdvisorTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                {loadingAdvisors ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      Carregando assessores...
+                    </p>
+                  </div>
+                ) : filteredAdvisors.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      {searchAdvisorTerm
+                        ? "Nenhum assessor encontrado"
+                        : "Você ainda não cadastrou nenhum assessor"}
+                    </p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data de Cadastro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAdvisors.map((advisor) => (
+                        <TableRow key={advisor.id}>
+                          <TableCell className="font-medium">
+                            {advisor.name}
+                          </TableCell>
+                          <TableCell>{advisor.email}</TableCell>
+                          <TableCell>{advisor.phone || "-"}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                advisor.status === "active"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {advisor.status === "active"
+                                ? "Ativo"
+                                : "Inativo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(advisor.joinedAt).toLocaleDateString(
+                              "pt-BR"
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="register">
             <Card>
               <CardHeader>
@@ -986,9 +1238,9 @@ export function DistributorDashboard() {
               <CardContent>
                 <form
                   onSubmit={handleCreateInvestor}
-                  className="space-y-4 max-w-2xl"
+                  className="space-y-4 max-w-full"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="fullName">Nome Completo *</Label>
                       <Input
@@ -1054,6 +1306,111 @@ export function DistributorDashboard() {
                     </div>
 
                     <div>
+                      <Label htmlFor="rg">RG *</Label>
+                      <Input
+                        id="rg"
+                        value={investorForm.rg}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            rg: e.target.value,
+                          }))
+                        }
+                        placeholder="00.000.000-0"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="nationality">Nacionalidade *</Label>
+                      <Input
+                        id="nationality"
+                        value={investorForm.nationality}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            nationality: e.target.value,
+                          }))
+                        }
+                        placeholder="Brasileira"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="maritalStatus">Estado Civil *</Label>
+                      <select
+                        id="maritalStatus"
+                        value={investorForm.maritalStatus}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            maritalStatus: e.target.value,
+                          }))
+                        }
+                        className="w-full border rounded-md p-2"
+                        required
+                      >
+                        <option value="">Selecione o estado civil</option>
+                        <option value="solteiro">Solteiro(a)</option>
+                        <option value="casado">Casado(a)</option>
+                        <option value="divorciado">Divorciado(a)</option>
+                        <option value="viuvo">Viúvo(a)</option>
+                        <option value="uniao_estavel">União Estável</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="profession">Profissão *</Label>
+                      <Input
+                        id="profession"
+                        value={investorForm.profession}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            profession: e.target.value,
+                          }))
+                        }
+                        placeholder="Ex: Engenheiro, Médico, Advogado..."
+                        required
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <Label htmlFor="address">Endereço Completo *</Label>
+                      <Input
+                        id="address"
+                        value={investorForm.address}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            address: e.target.value,
+                          }))
+                        }
+                        placeholder="Rua, número, bairro, cidade, estado, CEP"
+                        required
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <Label htmlFor="pixKey">
+                        Chave PIX ou Endereço USDT *
+                      </Label>
+                      <Input
+                        id="pixKey"
+                        value={investorForm.pixKey}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            pixKey: e.target.value,
+                          }))
+                        }
+                        placeholder="Chave PIX (CPF, email, telefone) ou endereço USDT"
+                        required
+                      />
+                    </div>
+
+                    <div>
                       <Label htmlFor="investmentValue">
                         Valor do Investimento * (mínimo R$ 5.000,00)
                       </Label>
@@ -1109,6 +1466,12 @@ export function DistributorDashboard() {
                         <option value="D+180">D+180</option>
                         <option value="D+360">D+360</option>
                       </select>
+
+                      {/* Aviso de multa */}
+                      <p className="mt-1 text-sm text-red-600">
+                        Resgates antes do prazo terão multa de{" "}
+                        <strong>20%</strong> + perda da rentabilidade.
+                      </p>
                     </div>
 
                     {/* Exibir rentabilidade dinâmica */}
@@ -1122,12 +1485,6 @@ export function DistributorDashboard() {
                         Escolha um prazo de resgate
                       </p>
                     )} */}
-
-                    {/* Aviso de multa */}
-                    <p className="mt-1 text-sm text-red-600">
-                      Resgates antes do prazo terão multa de{" "}
-                      <strong>20%</strong> + perda da rentabilidade.
-                    </p>
 
                     <div>
                       <Label htmlFor="password">Senha *</Label>
@@ -1176,6 +1533,12 @@ export function DistributorDashboard() {
                           email: "",
                           phone: "",
                           cpf: "",
+                          rg: "",
+                          nationality: "",
+                          maritalStatus: "",
+                          profession: "",
+                          address: "",
+                          pixKey: "",
                           password: "",
                           confirmPassword: "",
                           investmentValue: "",

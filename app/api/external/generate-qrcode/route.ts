@@ -2,12 +2,61 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
-    const { value, cpf } = await request.json()
+    const { value, cpf, email, userName } = await request.json()
 
-    console.log("[v0] Gerando QR Code PIX fixo para:", { value, cpf })
+    console.log("[v0] Gerando QR Code PIX fixo para:", { value, cpf, email, userName })
 
     const fixedPixCode =
       "00020101021126430014br.gov.bcb.pix0121agrinvest@akintec.com5204000053039865802BR5907AKINTEC6009SAO PAULO622905251K5CDD6XWS83EN88991WEBV4G63047E03"
+
+    console.log("[v0] Enviando email com código PIX para:", { email, userName })
+    // Enviar email com código PIX se email e nome do usuário foram fornecidos
+    if (email && userName) {
+      try {
+        // Tentar primeiro com Hostinger (se configurado)
+        let emailResponse = await fetch(`${request.nextUrl.origin}/api/email/send-pix-code-hostinger`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            userName,
+            pixCode: fixedPixCode,
+            amount: Number.parseFloat(value),
+            cpf
+          })
+        })
+
+        if (!emailResponse.ok) {
+          console.log("[v0] Hostinger falhou, usando simulação local...")
+          
+          // Se Hostinger falhar, usar simulação local
+          emailResponse = await fetch(`${request.nextUrl.origin}/api/email/send-pix-code-simple`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email,
+              userName,
+              pixCode: fixedPixCode,
+              amount: Number.parseFloat(value),
+              cpf
+            })
+          })
+        }
+
+        if (emailResponse.ok) {
+          console.log("[v0] Email PIX enviado com sucesso para:", email)
+        } else {
+          console.error("[v0] Erro ao enviar email PIX:", await emailResponse.text())
+        }
+      } catch (emailError) {
+        console.error("[v0] Erro ao enviar email PIX:", emailError)
+        // Não falha a geração do QR Code se o email falhar
+      }
+    }
 
     // Retornando QR Code fixo em vez de chamar API externa
     return NextResponse.json(

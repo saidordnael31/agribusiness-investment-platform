@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-api";
+import Link from "next/link";
 
 export function LoginForm() {
   const auth = useAuth();
@@ -26,7 +27,13 @@ export function LoginForm() {
       console.log("[v0] Password length:", password.length);
 
       const demoCredentials = {
-        "investidor@akintec.com": { type: "investor", name: "João Silva", rescue_type: "D+2" },
+        "investidor@akintec.com": {
+          type: "investor",
+          name: "João Silva",
+          rescue_type: "D+2",
+          office_id: null,
+          role: "office",
+        },
         "distributor@akintec.com": {
           type: "distributor",
           name: "Maria Santos",
@@ -41,7 +48,13 @@ export function LoginForm() {
           role: "advisor",
           rescue_type: "D+2",
         },
-        "admin@akintec.com": { type: "admin", name: "Administrador" },
+        "admin@akintec.com": {
+          type: "admin",
+          name: "Administrador",
+          office_id: null,
+          role: "admin",
+          rescue_type: "D+2",
+        },
       };
 
       // Normalizar email para comparação
@@ -181,9 +194,17 @@ export function LoginForm() {
       }
 
       if (!profiles || profiles.length === 0) {
-        // CADASTRAR PERFIL NO SUPABASE
-        console.log(authData);
-        const identity = authData.user.identities[0].identity_data;
+        const identity = authData.user.identities?.[0].identity_data;
+
+        if (!identity) {
+          toast({
+            title: "Erro no login",
+            description:
+              "Identidade do usuário não encontrada. Entre em contato com o suporte.",
+            variant: "destructive",
+          });
+          return;
+        }
 
         const { data, error } = await supabase
           .from("profiles")
@@ -209,10 +230,10 @@ export function LoginForm() {
         // console.log("[v0] User registered successfully:", user);
 
         // console.log("[v0] No profile found for user")
-        if (data && !error) {
-          handleSubmit(e);
-          return;
-        }
+        // if (data && !error) {
+        //   handleSubmit(e);
+        //   return;
+        // }
 
         toast({
           title: "Erro no login",
@@ -233,6 +254,7 @@ export function LoginForm() {
         user_type: profile.user_type,
         office_id: profile.office_id || null,
         role: profile.role || null,
+        cpf_cnpj: profile.cnpj || null,
         rescue_type: profile.rescue_type || null,
       };
 
@@ -283,7 +305,7 @@ export function LoginForm() {
         <Input
           id="email"
           type="email"
-          placeholder="investidor@akintec.com"
+          placeholder="seu@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -294,11 +316,19 @@ export function LoginForm() {
         <Input
           id="password"
           type="password"
-          placeholder="demo123"
+          placeholder="********"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
+      </div>
+      <div className="text-right">
+        <Link
+          href="/resetPassword"
+          className="text-sm text-primary hover:underline"
+        >
+          Esqueceu sua senha?
+        </Link>
       </div>
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? "Entrando..." : "Entrar"}

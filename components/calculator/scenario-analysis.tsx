@@ -1,14 +1,27 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { BarChart3, Target, TrendingUp } from "lucide-react"
 
+interface UserData {
+  email: string
+}
+
 export function ScenarioAnalysis() {
+  const [user, setUser] = useState<UserData | null>(null);
   const [selectedAnalysis, setSelectedAnalysis] = useState<"growth" | "targets" | "timeline">("growth")
+
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      setUser(JSON.parse(userStr))
+    }
+  }, [])
 
   // Growth trajectory analysis
   const growthData = [
@@ -191,7 +204,7 @@ export function ScenarioAnalysis() {
         )}
 
         {/* Target Achievement Analysis */}
-        {selectedAnalysis === "targets" && (
+        {selectedAnalysis === "targets" && user && user.email === "felipe@aethosconsultoria.com.br" && (
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-semibold mb-2">Impacto das Metas de Performance</h3>

@@ -368,6 +368,7 @@ export function AdminDashboard() {
               </CardContent>
             </Card>
 
+          {user.email === "felipe@aethosconsultoria.com.br" && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -397,6 +398,7 @@ export function AdminDashboard() {
                 </Button>
               </CardContent>
             </Card>
+          )}
           </div>
 
           <Card>

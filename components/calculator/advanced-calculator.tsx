@@ -1,22 +1,32 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Badge } from "@/components/ui/badge"
-import { Calculator, DollarSign, Trophy, Gift, TrendingUp } from "lucide-react"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Calculator, DollarSign, Trophy, Gift, TrendingUp } from "lucide-react";
+
+interface UserData {
+  email: string;
+}
 
 interface PromotionalBonus {
-  id: string
-  name: string
-  description: string
-  bonus: number
-  minValue?: number
-  isActive: boolean
-  expiresAt?: string
+  id: string;
+  name: string;
+  description: string;
+  bonus: number;
+  minValue?: number;
+  isActive: boolean;
+  expiresAt?: string;
 }
 
 const mockPromotionalBonuses: PromotionalBonus[] = [
@@ -46,56 +56,68 @@ const mockPromotionalBonuses: PromotionalBonus[] = [
     isActive: true,
     expiresAt: "2024-03-31",
   },
-]
+];
 
 export function AdvancedCalculator() {
-  const [capturedAmount, setCapturedAmount] = useState(100000)
-  const [timeHorizon, setTimeHorizon] = useState([12])
-  const [poolParticipation, setPoolParticipation] = useState([5])
-  const [results, setResults] = useState<any>(null)
-  const [activePromotions, setActivePromotions] = useState<PromotionalBonus[]>([])
+  const [user, setUser] = useState<UserData | null>(null);
+  const [capturedAmount, setCapturedAmount] = useState(100000);
+  const [timeHorizon, setTimeHorizon] = useState([12]);
+  const [poolParticipation, setPoolParticipation] = useState([5]);
+  const [results, setResults] = useState<any>(null);
+  const [activePromotions, setActivePromotions] = useState<PromotionalBonus[]>(
+    []
+  );
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      setUser(JSON.parse(userStr));
+    }
+  }, []);
 
   useEffect(() => {
     const currentPromotions = mockPromotionalBonuses.filter(
-      (promo) => promo.isActive && (!promo.minValue || capturedAmount >= promo.minValue),
-    )
-    setActivePromotions(currentPromotions)
-  }, [capturedAmount])
+      (promo) =>
+        promo.isActive && (!promo.minValue || capturedAmount >= promo.minValue)
+    );
+    setActivePromotions(currentPromotions);
+  }, [capturedAmount]);
 
   const calculateCommissions = () => {
-    const amount = capturedAmount
-    const months = timeHorizon[0]
-    const poolShare = poolParticipation[0]
+    const amount = capturedAmount;
+    const months = timeHorizon[0];
+    const poolShare = poolParticipation[0];
 
     // Base commission calculation
-    const monthlyCommissionRate = 0.04
-    const monthlyCommission = amount * monthlyCommissionRate
-    const totalCommission = monthlyCommission * months
+    const monthlyCommissionRate = 0.04;
+    const monthlyCommission = amount * monthlyCommissionRate;
+    const totalCommission = monthlyCommission * months;
 
     // Performance bonus calculation
-    let performanceBonus = 0
-    let bonusDescription = "Nenhum bônus"
+    let performanceBonus = 0;
+    let bonusDescription = "Nenhum bônus";
 
     if (amount >= 1000000) {
-      performanceBonus = amount * 0.03 * months // +3% additional (1% + 2%)
-      bonusDescription = "Meta 2 atingida: +3% adicional"
+      performanceBonus = amount * 0.03 * months; // +3% additional (1% + 2%)
+      bonusDescription = "Meta 2 atingida: +3% adicional";
     } else if (amount >= 500000) {
-      performanceBonus = amount * 0.01 * months // +1% additional
-      bonusDescription = "Meta 1 atingida: +1% adicional"
+      performanceBonus = amount * 0.01 * months; // +1% additional
+      bonusDescription = "Meta 1 atingida: +1% adicional";
     }
 
     const promotionalBonus = activePromotions.reduce((total, promo) => {
-      return total + amount * (promo.bonus / 100) * months
-    }, 0)
+      return total + amount * (promo.bonus / 100) * months;
+    }, 0);
 
     // Division calculation
-    const advisorShare = (totalCommission) * 0.75
-    const officeShare = (totalCommission) * 0.25
+    const advisorShare = totalCommission * 0.75;
+    const officeShare = totalCommission * 0.25;
 
     // Pool calculation (annual)
-    const annualPoolShare = (amount * 0.003 * 12 * poolShare) / 100 // 0.3% of annual commission * pool %
+    const annualPoolShare = (amount * 0.003 * 12 * poolShare) / 100; // 0.3% of annual commission * pool %
 
-    const totalWithBonus = totalCommission + performanceBonus + promotionalBonus + annualPoolShare
+    const totalWithBonus =
+      totalCommission + performanceBonus + promotionalBonus + annualPoolShare;
 
     setResults({
       monthlyCommission,
@@ -109,8 +131,8 @@ export function AdvancedCalculator() {
       totalWithBonus,
       months,
       effectiveRate: ((totalWithBonus / amount / months) * 100).toFixed(2),
-    })
-  }
+    });
+  };
 
   return (
     <Card>
@@ -119,7 +141,9 @@ export function AdvancedCalculator() {
           <Calculator className="h-5 w-5" />
           Calculadora Avançada
         </CardTitle>
-        <CardDescription>Configure todos os parâmetros para uma simulação detalhada</CardDescription>
+        <CardDescription>
+          Configure todos os parâmetros para uma simulação detalhada
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* {activePromotions.length > 0 && (
@@ -151,7 +175,7 @@ export function AdvancedCalculator() {
         )} */}
 
         {/* Input Controls */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-1 gap-6">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="amount">Valor Total Captado (R$)</Label>
@@ -159,7 +183,9 @@ export function AdvancedCalculator() {
                 id="amount"
                 type="number"
                 value={capturedAmount}
-                onChange={(e) => setCapturedAmount(Number.parseFloat(e.target.value) || 0)}
+                onChange={(e) =>
+                  setCapturedAmount(Number.parseFloat(e.target.value) || 0)
+                }
                 min="0"
                 step="10000"
               />
@@ -167,7 +193,14 @@ export function AdvancedCalculator() {
 
             <div className="space-y-2">
               <Label>Horizonte de Tempo: {timeHorizon[0]} meses</Label>
-              <Slider value={timeHorizon} onValueChange={setTimeHorizon} max={36} min={1} step={1} className="w-full" />
+              <Slider
+                value={timeHorizon}
+                onValueChange={setTimeHorizon}
+                max={36}
+                min={1}
+                step={1}
+                className="w-full"
+              />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>1 mês</span>
                 <span>36 meses</span>
@@ -192,48 +225,70 @@ export function AdvancedCalculator() {
           </div>
 
           <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg">
-              <h4 className="font-semibold mb-2">Status das Metas</h4>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 1 (R$ 3M):</span>
-                  <Badge variant={capturedAmount >= 3000000 ? "default" : "secondary"}>
-                    {capturedAmount >= 3000000 ? "Atingida" : "Não atingida"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 2 (R$ 7M):</span>
-                  <Badge variant={capturedAmount >= 7000000 ? "default" : "secondary"}>
-                    {capturedAmount >= 7000000 ? "Atingida" : "Não atingida"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 3 (R$ 15M):</span>
-                  <Badge variant={capturedAmount >= 15000000 ? "default" : "secondary"}>
-                    {capturedAmount >= 15000000 ? "Atingida" : "Não atingida"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 4 (R$ 30M):</span>
-                  <Badge variant={capturedAmount >= 30000000 ? "default" : "secondary"}>
-                    {capturedAmount >= 30000000 ? "Atingida" : "Não atingida"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Meta 5 (R$ 50M):</span>
-                  <Badge variant={capturedAmount >= 50000000 ? "default" : "secondary"}>
-                    {capturedAmount >= 50000000 ? "Atingida" : "Não atingida"}
-                  </Badge>
+            {user && user.email === "felipe@aethosconsultoria.com.br" && (
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-semibold mb-2">Status das Metas</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Meta 1 (R$ 3M):</span>
+                    <Badge
+                      variant={
+                        capturedAmount >= 3000000 ? "default" : "secondary"
+                      }
+                    >
+                      {capturedAmount >= 3000000 ? "Atingida" : "Não atingida"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Meta 2 (R$ 7M):</span>
+                    <Badge
+                      variant={
+                        capturedAmount >= 7000000 ? "default" : "secondary"
+                      }
+                    >
+                      {capturedAmount >= 7000000 ? "Atingida" : "Não atingida"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Meta 3 (R$ 15M):</span>
+                    <Badge
+                      variant={
+                        capturedAmount >= 15000000 ? "default" : "secondary"
+                      }
+                    >
+                      {capturedAmount >= 15000000 ? "Atingida" : "Não atingida"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Meta 4 (R$ 30M):</span>
+                    <Badge
+                      variant={
+                        capturedAmount >= 30000000 ? "default" : "secondary"
+                      }
+                    >
+                      {capturedAmount >= 30000000 ? "Atingida" : "Não atingida"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Meta 5 (R$ 50M):</span>
+                    <Badge
+                      variant={
+                        capturedAmount >= 50000000 ? "default" : "secondary"
+                      }
+                    >
+                      {capturedAmount >= 50000000 ? "Atingida" : "Não atingida"}
+                    </Badge>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <Button onClick={calculateCommissions} className="w-full" size="lg">
-              <Calculator className="h-4 w-4 mr-2" />
-              Calcular Comissões
-            </Button>
+            )}
           </div>
         </div>
+
+        <Button onClick={calculateCommissions} className="w-full" size="lg">
+          <Calculator className="h-4 w-4 mr-2" />
+          Calcular Comissões
+        </Button>
 
         {/* Results */}
         {results && (
@@ -243,7 +298,9 @@ export function AdvancedCalculator() {
             <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-muted-foreground">Comissão Mensal</CardTitle>
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Comissão Mensal
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold text-primary">
@@ -252,13 +309,17 @@ export function AdvancedCalculator() {
                       currency: "BRL",
                     }).format(results.monthlyCommission)}
                   </p>
-                  <p className="text-xs text-muted-foreground">3% sobre base investida</p>
+                  <p className="text-xs text-muted-foreground">
+                    3% sobre base investida
+                  </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-muted-foreground">Comissão Total</CardTitle>
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Comissão Total
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold text-secondary">
@@ -267,7 +328,9 @@ export function AdvancedCalculator() {
                       currency: "BRL",
                     }).format(results.totalCommission)}
                   </p>
-                  <p className="text-xs text-muted-foreground">{results.months} meses</p>
+                  <p className="text-xs text-muted-foreground">
+                    {results.months} meses
+                  </p>
                 </CardContent>
               </Card>
 
@@ -359,7 +422,7 @@ export function AdvancedCalculator() {
                   Valor total considerando comissões base, bônus de performance
                   {results.promotionalBonus > 0 ? ", promoções ativas" : ""} e participação no pool nacional
                 </p> */}
-                {/* {results.promotionalBonus > 0 && (
+            {/* {results.promotionalBonus > 0 && (
                   <div className="mt-4 p-3 bg-accent/5 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
                       <TrendingUp className="h-4 w-4 text-accent" />
@@ -374,12 +437,11 @@ export function AdvancedCalculator() {
                     <p className="text-xs text-muted-foreground">Promoções ativas aplicadas ao período</p>
                   </div>
                 )} */}
-              {/* </CardContent>
+            {/* </CardContent>
             </Card> */}
-            
           </div>
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
