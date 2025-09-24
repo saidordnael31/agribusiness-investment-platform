@@ -32,7 +32,7 @@ interface RecurrenceCalculation {
   officeName: string
   officeId: string
   investmentAmount: number
-  baseCommissionRate: number // 3% base
+  baseCommissionRate: number // Taxa base por role
   bonusRate: number // bonificações aplicadas
   totalCommissionRate: number
   monthlyCommission: number
@@ -160,8 +160,8 @@ export function RecurrenceCalculator() {
         type: "withdrawal" as const,
         description: `Resgate pendente - ${withdrawal.user?.full_name || "Usuário"}`,
         impactDate: withdrawal.created_at,
-        monthlyImpact: -(withdrawal.amount * 0.03),
-        totalImpact: -(withdrawal.amount * 0.03 * 12),
+        monthlyImpact: -(withdrawal.amount * 0.02), // Média ponderada por role
+        totalImpact: -(withdrawal.amount * 0.02 * 12),
         affectedRecurrences: 1,
       }))
 

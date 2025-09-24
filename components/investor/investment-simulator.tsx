@@ -87,12 +87,9 @@ export function InvestmentSimulator({ title }: { title?: string }) {
 
     if (!investmentAmount || !months) return;
 
-    const baseMonthlyRate =
-      user?.user_type === "investor"
-        ? 0.02
-        : user?.user_type === "escritorio"
-        ? 0.01
-        : 0.03;
+    // Para o simulador de investimento do cliente, sempre usar taxa de investidor (2%)
+    // pois estamos simulando o retorno que o cliente receberá
+    const baseMonthlyRate = 0.02; // 2% - taxa do investidor
 
     let monthlyReturn: number;
     let totalReturn: number;

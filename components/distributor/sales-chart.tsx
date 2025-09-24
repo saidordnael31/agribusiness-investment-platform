@@ -140,7 +140,7 @@ export function SalesChart({ distributorId }: SalesChartProps) {
 
           monthlyData[monthKey].captured += investmentValue;
           monthlyData[monthKey].commission +=
-            investmentValue * (user?.role === "escritorio" ? 0.01 : 0.03);
+            investmentValue * (user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03);
         }
       });
 

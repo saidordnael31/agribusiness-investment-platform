@@ -89,34 +89,42 @@ export function CommissionCalculator() {
         {/* Commission Structure Overview */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Estrutura de Comissões</CardTitle>
-            <CardDescription>Entenda como funcionam as comissões e bônus</CardDescription>
+            <CardTitle>Estrutura de Comissões por Role</CardTitle>
+            <CardDescription>Entenda como funcionam as comissões baseadas na posição/role</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-2">
-              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <h4 className="font-semibold text-primary mb-2">Comissão Base</h4>
-                <p className="text-2xl font-bold text-primary">4%</p>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="font-semibold text-blue-600 mb-2">Investidor</h4>
+                <p className="text-2xl font-bold text-blue-600">2%</p>
                 <p className="text-xs text-muted-foreground">ao mês sobre valor investido</p>
               </div>
 
-              <div className="p-4 bg-secondary/5 rounded-lg border border-secondary/20">
-                <h4 className="font-semibold text-secondary mb-2">Divisão</h4>
-                <p className="text-lg font-bold text-secondary">3% / 1%</p>
-                <p className="text-xs text-muted-foreground">Assessor / Escritório</p>
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <h4 className="font-semibold text-green-600 mb-2">Escritório</h4>
+                <p className="text-2xl font-bold text-green-600">1%</p>
+                <p className="text-xs text-muted-foreground">ao mês sobre valor investido</p>
               </div>
 
-              {/* <div className="p-4 bg-accent/5 rounded-lg border border-accent/20">
-                <h4 className="font-semibold text-accent mb-2">Bônus Meta 1</h4>
-                <p className="text-lg font-bold text-accent">+1%</p>
-                <p className="text-xs text-muted-foreground">R$ 500k captados</p>
+              <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <h4 className="font-semibold text-purple-600 mb-2">Assessor</h4>
+                <p className="text-2xl font-bold text-purple-600">3%</p>
+                <p className="text-xs text-muted-foreground">ao mês sobre valor investido</p>
               </div>
-
-              <div className="p-4 bg-muted rounded-lg border">
-                <h4 className="font-semibold mb-2">Bônus Meta 2</h4>
-                <p className="text-lg font-bold">+2%</p>
-                <p className="text-xs text-muted-foreground">R$ 1M captados</p>
-              </div> */}
+            </div>
+            
+            <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+              <h4 className="font-semibold mb-2">Bônus de Performance</h4>
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>Meta 1 (R$ 500k):</span>
+                  <Badge variant="outline" className="text-orange-600">+1% adicional</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Meta 2 (R$ 1M):</span>
+                  <Badge variant="outline" className="text-red-600">+3% adicional</Badge>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

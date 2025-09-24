@@ -2,7 +2,8 @@
 
 import { CardDescription } from "@/components/ui/card"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useNotifications } from "@/hooks/use-notifications"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -54,6 +55,9 @@ interface Notification {
     amount?: number
     campaignName?: string
     impactAmount?: number
+    quotaType?: string
+    commitmentPeriod?: number
+    monthlyReturnRate?: number
   }
   actions?: {
     approve?: boolean
@@ -91,119 +95,11 @@ interface NotificationTemplate {
 
 export function NotificationSystem() {
   const { toast } = useToast()
+  const { notifications, loading, error, refetch, processInvestmentAction } = useNotifications()
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "1",
-      type: "withdrawal_request",
-      title: "Solicitação de Resgate - João Silva",
-      message:
-        "Investidor João Silva solicitou resgate total de R$ 100.000. Isso afetará a comissão recorrente do assessor Carlos Santos.",
-      priority: "high",
-      recipients: ["carlos@alphainvest.com", "admin@alphainvest.com"],
-      recipientType: "office",
-      status: "pending",
-      createdAt: "2025-01-27T10:30:00Z",
-      relatedData: {
-        investorName: "João Silva",
-        advisorName: "Carlos Santos",
-        officeName: "Alpha Investimentos",
-        amount: 100000,
-        impactAmount: -3500,
-      },
-      actions: { approve: true, reject: true },
-    },
-    {
-      id: "2",
-      type: "campaign_expiry",
-      title: "Campanha Expirando em 3 dias",
-      message: "A campanha 'Promoção Ano Novo' expira em 3 dias. Isso afetará 15 recorrências ativas.",
-      priority: "medium",
-      recipients: ["admin@agroderi.com"],
-      recipientType: "admin",
-      status: "sent",
-      createdAt: "2025-01-27T08:00:00Z",
-      scheduledFor: "2025-01-30T23:59:59Z",
-      relatedData: {
-        campaignName: "Promoção Ano Novo",
-        impactAmount: -18900,
-      },
-      actions: { acknowledge: true },
-    },
-    {
-      id: "3",
-      type: "performance_goal",
-      title: "Meta de Performance Atingida!",
-      message: "Parabéns! O assessor Ana Santos atingiu a meta de R$ 500K em captação.",
-      priority: "low",
-      recipients: ["ana@alphainvest.com", "admin@alphainvest.com"],
-      recipientType: "advisor",
-      status: "read",
-      createdAt: "2025-01-26T16:45:00Z",
-      relatedData: {
-        advisorName: "Ana Santos",
-        amount: 500000,
-      },
-      actions: { acknowledge: true },
-    },
-  ])
+  const [alertRules, setAlertRules] = useState<AlertRule[]>([])
 
-  const [alertRules, setAlertRules] = useState<AlertRule[]>([
-    {
-      id: "1",
-      name: "Resgate Alto Valor",
-      description: "Alerta quando resgate for superior a R$ 50.000",
-      trigger: "withdrawal_request",
-      conditions: { amount: 50000 },
-      recipients: ["admin@agroderi.com"],
-      isActive: true,
-      triggerCount: 5,
-      lastTriggered: "2025-01-27T10:30:00Z",
-    },
-    {
-      id: "2",
-      name: "Campanha Expirando",
-      description: "Alerta 7 dias antes da campanha expirar",
-      trigger: "campaign_expiry",
-      conditions: { daysBeforeExpiry: 7 },
-      recipients: ["admin@agroderi.com"],
-      isActive: true,
-      triggerCount: 12,
-      lastTriggered: "2025-01-25T08:00:00Z",
-    },
-    {
-      id: "3",
-      name: "Recorrência em Risco",
-      description: "Alerta quando recorrência tem alta probabilidade de cancelamento",
-      trigger: "recurrence_at_risk",
-      conditions: { riskThreshold: 70 },
-      recipients: ["admin@agroderi.com"],
-      isActive: true,
-      triggerCount: 3,
-      lastTriggered: "2025-01-26T14:20:00Z",
-    },
-  ])
-
-  const [templates, setTemplates] = useState<NotificationTemplate[]>([
-    {
-      id: "1",
-      name: "Solicitação de Resgate",
-      type: "withdrawal_request",
-      subject: "Solicitação de Resgate - {{investorName}}",
-      body: "O investidor {{investorName}} solicitou resgate de {{amount}}. Isso impactará sua comissão recorrente em {{impactAmount}} mensais.",
-      variables: ["investorName", "amount", "impactAmount", "advisorName"],
-      isActive: true,
-    },
-    {
-      id: "2",
-      name: "Meta Atingida",
-      type: "performance_goal",
-      subject: "Parabéns! Meta de {{amount}} atingida",
-      body: "Você atingiu a meta de captação de {{amount}}! Seu bônus adicional já está ativo.",
-      variables: ["amount", "advisorName", "bonusRate"],
-      isActive: true,
-    },
-  ])
+  const [templates, setTemplates] = useState<NotificationTemplate[]>([])
 
   const [selectedFilter, setSelectedFilter] = useState<string>("all")
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false)
@@ -213,7 +109,7 @@ export function NotificationSystem() {
   const totalNotifications = notifications.length
   const pendingNotifications = notifications.filter((n) => n.status === "pending").length
   const highPriorityNotifications = notifications.filter(
-    (n) => n.priority === "high" || n.priority === "critical",
+    (n) => n.priority === "high",
   ).length
   const activeRules = alertRules.filter((r) => r.isActive).length
 
@@ -262,17 +158,28 @@ export function NotificationSystem() {
     }
   }
 
-  const handleNotificationAction = (notificationId: string, action: string) => {
-    setNotifications(
-      notifications.map((n) =>
-        n.id === notificationId ? { ...n, status: action === "approve" ? "read" : ("dismissed" as any) } : n,
-      ),
-    )
+  const handleNotificationAction = async (notificationId: string, action: string) => {
+    try {
+      // Extrair o ID real do investimento do ID da notificação
+      const realId = notificationId.replace(/^investment_/, '')
+      
+      // Processar a ação na API
+      await processInvestmentAction(realId, action as 'approve' | 'reject')
 
-    toast({
-      title: "Ação realizada!",
-      description: `Notificação ${action === "approve" ? "aprovada" : "rejeitada"} com sucesso.`,
-    })
+      toast({
+        title: "Ação realizada!",
+        description: action === "approve" 
+          ? "Investimento aprovado com sucesso." 
+          : "Investimento rejeitado e removido com sucesso.",
+      })
+    } catch (error) {
+      console.error('Error handling notification action:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao processar a ação. Tente novamente.",
+        variant: "destructive"
+      })
+    }
   }
 
   const sendBulkNotification = () => {
@@ -296,9 +203,9 @@ export function NotificationSystem() {
           <p className="text-muted-foreground">Gerencie notificações automáticas e alertas da plataforma</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={sendBulkNotification}>
+          <Button variant="outline" onClick={refetch} disabled={loading}>
             <Send className="w-4 h-4 mr-2" />
-            Enviar Pendentes
+            {loading ? "Carregando..." : "Atualizar"}
           </Button>
           <Button className="bg-orange-600 hover:bg-orange-700">
             <Plus className="w-4 h-4 mr-2" />
@@ -386,8 +293,38 @@ export function NotificationSystem() {
               <CardDescription>Gerencie todas as notificações e alertas do sistema</CardDescription>
             </CardHeader>
             <CardContent>
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-600 text-sm">
+                    Erro ao carregar notificações: {error}
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={refetch}
+                    className="mt-2"
+                  >
+                    Tentar novamente
+                  </Button>
+                </div>
+              )}
+              
+              {loading && (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+                  <p className="text-muted-foreground mt-2">Carregando notificações...</p>
+                </div>
+              )}
+
+              {!loading && !error && filteredNotifications.length === 0 && (
+                <div className="text-center py-8">
+                  <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhuma notificação encontrada</p>
+                </div>
+              )}
+
               <div className="space-y-4">
-                {filteredNotifications.map((notification) => (
+                {!loading && !error && filteredNotifications.map((notification) => (
                   <div key={notification.id} className="border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-start gap-3">
@@ -401,7 +338,7 @@ export function NotificationSystem() {
                           <p className="text-sm text-muted-foreground mb-2">{notification.message}</p>
 
                           {notification.relatedData && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs bg-gray-50 p-2 rounded">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs bg-gray-50 p-3 rounded">
                               {notification.relatedData.investorName && (
                                 <div>
                                   <span className="text-muted-foreground">Investidor:</span>
@@ -416,13 +353,23 @@ export function NotificationSystem() {
                                   </span>
                                 </div>
                               )}
-                              {notification.relatedData.impactAmount && (
+                              {(notification.relatedData as any).quotaType && (
                                 <div>
-                                  <span className="text-muted-foreground">Impacto:</span>
-                                  <span
-                                    className={`ml-1 font-medium ${notification.relatedData.impactAmount < 0 ? "text-red-600" : "text-emerald-600"}`}
-                                  >
-                                    {formatCurrency(notification.relatedData.impactAmount)}
+                                  <span className="text-muted-foreground">Tipo:</span>
+                                  <span className="ml-1 font-medium capitalize">{(notification.relatedData as any).quotaType}</span>
+                                </div>
+                              )}
+                              {(notification.relatedData as any).commitmentPeriod && (
+                                <div>
+                                  <span className="text-muted-foreground">Período:</span>
+                                  <span className="ml-1 font-medium">{(notification.relatedData as any).commitmentPeriod} meses</span>
+                                </div>
+                              )}
+                              {(notification.relatedData as any).monthlyReturnRate && (
+                                <div>
+                                  <span className="text-muted-foreground">Taxa:</span>
+                                  <span className="ml-1 font-medium text-emerald-600">
+                                    {((notification.relatedData as any).monthlyReturnRate * 100).toFixed(2)}% a.m.
                                   </span>
                                 </div>
                               )}
@@ -739,22 +686,22 @@ export function NotificationSystem() {
                     <span className="font-medium">{notifications.filter((n) => n.status !== "pending").length}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Lidas</span>
-                    <span className="font-medium">{notifications.filter((n) => n.status === "read").length}</span>
+                    <span className="text-muted-foreground">Processadas</span>
+                    <span className="font-medium">{notifications.filter((n) => n.status !== "pending").length}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Com Ação</span>
                     <span className="font-medium">
-                      {notifications.filter((n) => n.status === "read" && n.actions).length}
+                      {notifications.filter((n) => n.actions).length}
                     </span>
                   </div>
                   <div className="border-t pt-2">
                     <div className="flex justify-between">
-                      <span className="font-medium">Taxa de Engajamento</span>
+                      <span className="font-medium">Taxa de Processamento</span>
                       <span className="font-bold text-emerald-600">
                         {notifications.length > 0
                           ? (
-                              (notifications.filter((n) => n.status === "read").length / notifications.length) *
+                              (notifications.filter((n) => n.status !== "pending").length / notifications.length) *
                               100
                             ).toFixed(1)
                           : 0}

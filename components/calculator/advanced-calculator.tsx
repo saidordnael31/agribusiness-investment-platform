@@ -13,10 +13,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, DollarSign, Trophy, Gift, TrendingUp } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calculator, DollarSign, Trophy, Gift, TrendingUp, User } from "lucide-react";
+import { 
+  calculateRoleCommission, 
+  calculateCommissionWithBonus, 
+  calculateCommissionBreakdown,
+  getAvailableRoles,
+  isValidRole,
+  type CommissionCalculation 
+} from "@/lib/commission-calculator";
 
 interface UserData {
   email: string;
+  user_type?: string;
 }
 
 interface PromotionalBonus {
@@ -62,8 +72,12 @@ export function AdvancedCalculator() {
   const [user, setUser] = useState<UserData | null>(null);
   const [capturedAmount, setCapturedAmount] = useState(100000);
   const [timeHorizon, setTimeHorizon] = useState([12]);
-  const [poolParticipation, setPoolParticipation] = useState([5]);
-  const [results, setResults] = useState<any>(null);
+  const [selectedRole, setSelectedRole] = useState<"investor" | "escritorio" | "assessor">("assessor");
+  const [results, setResults] = useState<CommissionCalculation & { 
+    performanceBonus: number; 
+    bonusDescription: string;
+    breakdown: ReturnType<typeof calculateCommissionBreakdown>;
+  } | null>(null);
   const [activePromotions, setActivePromotions] = useState<PromotionalBonus[]>(
     []
   );
@@ -71,7 +85,17 @@ export function AdvancedCalculator() {
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     if (userStr) {
-      setUser(JSON.parse(userStr));
+      const userData = JSON.parse(userStr);
+      setUser(userData);
+      
+      // Definir role baseado no tipo de usuário
+      if (userData.user_type === "investor") {
+        setSelectedRole("investor");
+      } else if (userData.user_type === "escritorio") {
+        setSelectedRole("escritorio");
+      } else if (userData.user_type === "assessor") {
+        setSelectedRole("assessor");
+      }
     }
   }, []);
 
@@ -86,51 +110,16 @@ export function AdvancedCalculator() {
   const calculateCommissions = () => {
     const amount = capturedAmount;
     const months = timeHorizon[0];
-    const poolShare = poolParticipation[0];
 
-    // Base commission calculation
-    const monthlyCommissionRate = 0.04;
-    const monthlyCommission = amount * monthlyCommissionRate;
-    const totalCommission = monthlyCommission * months;
-
-    // Performance bonus calculation
-    let performanceBonus = 0;
-    let bonusDescription = "Nenhum bônus";
-
-    if (amount >= 1000000) {
-      performanceBonus = amount * 0.03 * months; // +3% additional (1% + 2%)
-      bonusDescription = "Meta 2 atingida: +3% adicional";
-    } else if (amount >= 500000) {
-      performanceBonus = amount * 0.01 * months; // +1% additional
-      bonusDescription = "Meta 1 atingida: +1% adicional";
-    }
-
-    const promotionalBonus = activePromotions.reduce((total, promo) => {
-      return total + amount * (promo.bonus / 100) * months;
-    }, 0);
-
-    // Division calculation
-    const advisorShare = totalCommission * 0.75;
-    const officeShare = totalCommission * 0.25;
-
-    // Pool calculation (annual)
-    const annualPoolShare = (amount * 0.003 * 12 * poolShare) / 100; // 0.3% of annual commission * pool %
-
-    const totalWithBonus =
-      totalCommission + performanceBonus + promotionalBonus + annualPoolShare;
+    // Calcular comissão baseada no role selecionado
+    const roleCalculation = calculateCommissionWithBonus(amount, selectedRole, months);
+    
+    // Calcular breakdown completo de comissões
+    const breakdown = calculateCommissionBreakdown(amount, months);
 
     setResults({
-      monthlyCommission,
-      totalCommission,
-      performanceBonus,
-      bonusDescription,
-      promotionalBonus,
-      advisorShare,
-      officeShare,
-      annualPoolShare,
-      totalWithBonus,
-      months,
-      effectiveRate: ((totalWithBonus / amount / months) * 100).toFixed(2),
+      ...roleCalculation,
+      breakdown,
     });
   };
 
@@ -189,6 +178,26 @@ export function AdvancedCalculator() {
                 min="0"
                 step="10000"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role">Role/Posição</Label>
+              <Select value={selectedRole} onValueChange={(value: "investor" | "escritorio" | "assessor") => setSelectedRole(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAvailableRoles().map((role) => (
+                    <SelectItem key={role.key} value={role.key}>
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        <span>{role.name}</span>
+                        <Badge variant="outline" className="ml-2">{role.rate}</Badge>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -310,7 +319,7 @@ export function AdvancedCalculator() {
                     }).format(results.monthlyCommission)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    3% sobre base investida
+                    {results.roleName} - {(results.roleRate * 100).toFixed(0)}% sobre base investida
                   </p>
                 </CardContent>
               </Card>
@@ -350,61 +359,71 @@ export function AdvancedCalculator() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4" />
-                    Divisão de Comissões
+                    Divisão de Comissões por Role
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-                    <span className="font-medium">Assessor</span>
-                    <span className="font-bold text-primary">
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <span className="font-medium">Investidor (2%)</span>
+                    <span className="font-bold text-blue-600">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
-                      }).format(results.advisorShare)}
+                      }).format(results.breakdown.investorCommission)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-secondary/5 rounded-lg">
-                    <span className="font-medium">Escritório</span>
-                    <span className="font-bold text-secondary">
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                    <span className="font-medium">Escritório (1%)</span>
+                    <span className="font-bold text-green-600">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
-                      }).format(results.officeShare)}
+                      }).format(results.breakdown.escritorioCommission)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <span className="font-medium">Assessor (3%)</span>
+                    <span className="font-bold text-purple-600">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(results.breakdown.assessorCommission)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <span className="font-medium">Total Geral</span>
+                    <span className="font-bold text-gray-700">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(results.breakdown.totalCommission)}
                     </span>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Trophy className="h-4 w-4" />
-                    Bônus e Incentivos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-3 bg-accent/5 rounded-lg">
-                    <span className="text-sm text-muted-foreground">Bônus de Performance</span>
-                    <p className="font-bold text-accent">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(results.performanceBonus)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{results.bonusDescription}</p>
-                  </div>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <span className="text-sm text-muted-foreground">Pool Nacional</span>
-                    <p className="font-bold">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(results.annualPoolShare)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{poolParticipation[0]}% do pool anual</p>
-                  </div>
-                </CardContent>
-              </Card> */}
+              {results.performanceBonus > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Trophy className="h-4 w-4" />
+                      Bônus de Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-3 bg-accent/5 rounded-lg">
+                      <span className="text-sm text-muted-foreground">Bônus de Performance</span>
+                      <p className="font-bold text-accent">
+                        {new Intl.NumberFormat("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        }).format(results.performanceBonus)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{results.bonusDescription}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* <Card className="border-2 border-primary">

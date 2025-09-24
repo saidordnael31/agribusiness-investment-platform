@@ -5,7 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Users, DollarSign, TrendingUp, Gift, Target, BarChart3, Shield, AlertCircle } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Users, DollarSign, TrendingUp, Gift, Target, BarChart3, Shield, AlertCircle, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import { PromotionManager } from "./promotion-manager"
 import { BonificationManager } from "./bonification-manager"
 import { UserManager } from "./user-manager"
@@ -35,14 +39,26 @@ interface PlatformStats {
 
 interface RecentActivity {
   id: string
-  type: "investment" | "withdrawal" | "goal_achieved"
+  type: "investment" | "withdrawal" | "goal_achieved" | "pending_investment" | "user_created"
   title: string
   description: string
   timestamp: string
   color: string
+  actions?: {
+    approve?: boolean
+    reject?: boolean
+  }
+  relatedData?: {
+    investmentId?: string
+    amount?: number
+    quotaType?: string
+    commitmentPeriod?: number
+    monthlyReturnRate?: number
+  }
 }
 
 export function AdminDashboard() {
+  const { toast } = useToast()
   const [user, setUser] = useState<UserData | null>(null)
   const [stats, setStats] = useState<PlatformStats>({
     totalUsers: 0,
@@ -55,93 +71,272 @@ export function AdminDashboard() {
   })
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Estados para filtros e paginação
+  const [activityFilters, setActivityFilters] = useState({
+    type: "all",
+    dateFrom: "",
+    dateTo: ""
+  })
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalActivities, setTotalActivities] = useState(0)
+  const itemsPerPage = 10
 
-  const fetchRecentActivities = async () => {
+  const fetchRecentActivities = async (page: number = 1, filters: typeof activityFilters = activityFilters) => {
     try {
-      const supabase = createClient()
       const activities: RecentActivity[] = []
+      const limit = itemsPerPage
+      const offset = (page - 1) * limit
 
-      // Buscar investimentos recentes
-      const { data: investments, error: investmentsError } = await supabase
-        .from("investments")
-        .select(`
-          id,
-          amount,
-          created_at,
-          profiles!inner(full_name)
-        `)
-        .order("created_at", { ascending: false })
-        .limit(5)
-
-      if (!investmentsError && investments) {
-        investments.forEach((inv) => {
-          activities.push({
-            id: `inv-${inv.id}`,
-            type: "investment",
-            title: `Novo investimento de ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
-            description: `${inv.profiles?.full_name || "Usuário"} - Investimento realizado`,
-            timestamp: new Date(inv.created_at).toLocaleString("pt-BR"),
-            color: "bg-emerald-500",
-          })
-        })
+      // Função para aplicar filtro de data
+      const applyDateFilter = (dateStr: string) => {
+        if (!filters.dateFrom && !filters.dateTo) return true
+        const activityDate = new Date(dateStr)
+        const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : null
+        const toDate = filters.dateTo ? new Date(filters.dateTo + "T23:59:59") : null
+        
+        if (fromDate && activityDate < fromDate) return false
+        if (toDate && activityDate > toDate) return false
+        return true
       }
 
-      // Buscar resgates recentes
-      const { data: withdrawals, error: withdrawalsError } = await supabase
-        .from("transaction_approvals")
-        .select(`
-          id,
-          amount,
-          status,
-          created_at,
-          profiles!inner(full_name)
-        `)
-        .eq("transaction_type", "withdrawal")
-        .order("created_at", { ascending: false })
-        .limit(5)
+      // Buscar investimentos pendentes usando a API (mesmo modelo das notificações)
+      if (filters.type === "all" || filters.type === "pending_investment" || filters.type === "investment") {
+        try {
+          const investmentsResponse = await fetch('/api/investments?status=pending')
+          const investmentsData = await investmentsResponse.json()
 
-      if (!withdrawalsError && withdrawals) {
-        withdrawals.forEach((withdrawal) => {
-          activities.push({
-            id: `with-${withdrawal.id}`,
-            type: "withdrawal",
-            title: `Resgate solicitado - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(withdrawal.amount)}`,
-            description: `${withdrawal.profiles?.full_name || "Usuário"} - ${withdrawal.status === "pending" ? "Aguardando aprovação" : "Processado"}`,
-            timestamp: new Date(withdrawal.created_at).toLocaleString("pt-BR"),
-            color: "bg-blue-500",
-          })
-        })
+          if (investmentsData.success && investmentsData.data) {
+            investmentsData.data
+              .filter((inv: any) => applyDateFilter(inv.created_at))
+              .forEach((inv: any) => {
+                const investorName = inv.profiles?.full_name || `Investidor ${inv.user_id?.slice(0, 8) || 'N/A'}`
+                activities.push({
+                  id: `pending-inv-${inv.id}`,
+                  type: "pending_investment",
+                  title: `Investimento pendente - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
+                  description: `${investorName} - ${inv.quota_type || 'Tipo não especificado'} - Aguardando aprovação`,
+                  timestamp: new Date(inv.created_at).toLocaleString("pt-BR"),
+                  color: "bg-orange-500",
+                  actions: {
+                    approve: true,
+                    reject: true
+                  },
+                  relatedData: {
+                    investmentId: inv.id,
+                    amount: inv.amount,
+                    quotaType: inv.quota_type,
+                    commitmentPeriod: inv.commitment_period,
+                    monthlyReturnRate: inv.monthly_return_rate
+                  }
+                })
+              })
+          }
+        } catch (error) {
+          console.error("Erro ao buscar investimentos pendentes:", error)
+        }
+      }
+
+
+      // Buscar investimentos ativos (status active) usando a API
+      if (filters.type === "all" || filters.type === "investment") {
+        try {
+          const activeResponse = await fetch('/api/investments?status=active')
+          const activeData = await activeResponse.json()
+
+          console.log("Investimentos ativos encontrados:", activeData)
+
+          if (activeData.success && activeData.data) {
+            activeData.data
+              .filter((inv: any) => applyDateFilter(inv.updated_at || inv.created_at))
+              .forEach((inv: any) => {
+                activities.push({
+                  id: `active-inv-${inv.id}`,
+                  type: "investment",
+                  title: `Investimento ativo - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
+                  description: `${inv.profiles?.full_name || "Usuário"} - ${inv.quota_type || 'Tipo não especificado'} - Investimento ativo`,
+                  timestamp: new Date(inv.updated_at || inv.created_at).toLocaleString("pt-BR"),
+                  color: "bg-green-500",
+                  relatedData: {
+                    investmentId: inv.id,
+                    amount: inv.amount,
+                    quotaType: inv.quota_type,
+                    commitmentPeriod: inv.commitment_period,
+                    monthlyReturnRate: inv.monthly_return_rate
+                  }
+                })
+              })
+          }
+        } catch (error) {
+          console.error("Erro ao buscar investimentos ativos:", error)
+        }
+      }
+
+      // Buscar transações pendentes e aprovadas
+      if (filters.type === "all" || filters.type === "withdrawal") {
+        try {
+          const supabase = createClient()
+          
+          // Buscar transações pendentes
+          const { data: pendingTransactions, error: pendingError } = await supabase
+            .from("transactions")
+            .select(`
+              id,
+              amount,
+              transaction_type,
+              status,
+              created_at,
+              user_id,
+              profiles!inner(full_name)
+            `)
+            .eq("status", "pending")
+            .order("created_at", { ascending: false })
+
+          if (!pendingError && pendingTransactions) {
+            pendingTransactions
+              .filter(tx => applyDateFilter(tx.created_at))
+              .forEach((tx) => {
+                const transactionType = tx.transaction_type === 'withdrawal' ? 'Resgate' : 'Depósito'
+                activities.push({
+                  id: `pending-tx-${tx.id}`,
+                  type: "withdrawal",
+                  title: `${transactionType} pendente - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(tx.amount)}`,
+                  description: `${(tx.profiles as any)?.full_name || "Usuário"} - Aguardando aprovação`,
+                  timestamp: new Date(tx.created_at).toLocaleString("pt-BR"),
+                  color: "bg-yellow-500",
+                })
+              })
+          }
+
+          // Buscar transações aprovadas recentes
+          const { data: approvedTransactions, error: approvedError } = await supabase
+            .from("transactions")
+            .select(`
+              id,
+              amount,
+              transaction_type,
+              status,
+              created_at,
+              processed_at,
+              user_id,
+              profiles!inner(full_name)
+            `)
+            .eq("status", "completed")
+            .order("processed_at", { ascending: false })
+
+          if (!approvedError && approvedTransactions) {
+            approvedTransactions
+              .filter(tx => applyDateFilter(tx.processed_at || tx.created_at))
+              .forEach((tx) => {
+                const transactionType = tx.transaction_type === 'withdrawal' ? 'Resgate' : 'Depósito'
+                activities.push({
+                  id: `approved-tx-${tx.id}`,
+                  type: "withdrawal",
+                  title: `${transactionType} aprovado - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(tx.amount)}`,
+                  description: `${(tx.profiles as any)?.full_name || "Usuário"} - Processado`,
+                  timestamp: new Date(tx.processed_at || tx.created_at).toLocaleString("pt-BR"),
+                  color: "bg-blue-500",
+                })
+              })
+          }
+        } catch (error) {
+          console.error("Erro ao buscar transações:", error)
+        }
+      }
+
+      // Buscar usuários criados recentemente
+      if (filters.type === "all" || filters.type === "user_created") {
+        try {
+          const supabase = createClient()
+          const { data: newUsers, error: newUsersError } = await supabase
+            .from("profiles")
+            .select(`
+              id,
+              full_name,
+              user_type,
+              created_at,
+              parent_id,
+              parent:parent_id(full_name)
+            `)
+            .order("created_at", { ascending: false })
+
+          if (!newUsersError && newUsers) {
+            newUsers
+              .filter(user => applyDateFilter(user.created_at))
+              .forEach((user) => {
+                const userTypeLabel = user.user_type === "investor" ? "Investidor" : 
+                                     user.user_type === "distributor" ? "Distribuidor" :
+                                     user.user_type === "assessor" ? "Assessor" :
+                                     user.user_type === "lider" ? "Líder" :
+                                     user.user_type === "gestor" ? "Gestor" :
+                                     user.user_type === "escritorio" ? "Escritório" : "Usuário"
+                
+                const createdBy = (user.parent as any)?.full_name || "Sistema"
+                
+                activities.push({
+                  id: `user-${user.id}`,
+                  type: "user_created",
+                  title: `${userTypeLabel} ${user.full_name} foi criado`,
+                  description: `Criado por ${createdBy}`,
+                  timestamp: new Date(user.created_at).toLocaleString("pt-BR"),
+                  color: "bg-indigo-500",
+                })
+              })
+          }
+        } catch (error) {
+          console.error("Erro ao buscar usuários:", error)
+        }
       }
 
       // Buscar metas atingidas recentes
-      const { data: goals, error: goalsError } = await supabase
-        .from("performance_goals")
-        .select(`
-          id,
-          target_amount,
-          achieved_at,
-          profiles!inner(full_name)
-        `)
-        .not("achieved_at", "is", null)
-        .order("achieved_at", { ascending: false })
-        .limit(3)
+      if (filters.type === "all" || filters.type === "goal_achieved") {
+        try {
+          const supabase = createClient()
+          const { data: goals, error: goalsError } = await supabase
+            .from("performance_goals")
+            .select(`
+              id,
+              target_amount,
+              achieved_at,
+              profiles!inner(full_name)
+            `)
+            .not("achieved_at", "is", null)
+            .order("achieved_at", { ascending: false })
 
-      if (!goalsError && goals) {
-        goals.forEach((goal) => {
-          activities.push({
-            id: `goal-${goal.id}`,
-            type: "goal_achieved",
-            title: "Meta atingida por distribuidor",
-            description: `${goal.profiles?.full_name || "Usuário"} - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(goal.target_amount)} captados`,
-            timestamp: new Date(goal.achieved_at).toLocaleString("pt-BR"),
-            color: "bg-purple-500",
-          })
-        })
+          if (!goalsError && goals) {
+            goals
+              .filter(goal => applyDateFilter(goal.achieved_at))
+              .forEach((goal) => {
+                activities.push({
+                  id: `goal-${goal.id}`,
+                  type: "goal_achieved",
+                  title: "Meta atingida por distribuidor",
+                  description: `${(goal.profiles as any)?.full_name || "Usuário"} - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(goal.target_amount)} captados`,
+                  timestamp: new Date(goal.achieved_at).toLocaleString("pt-BR"),
+                  color: "bg-purple-500",
+                })
+              })
+          }
+        } catch (error) {
+          console.error("Erro ao buscar metas:", error)
+        }
       }
 
-      // Ordenar por timestamp e pegar apenas os 5 mais recentes
+      // Ordenar por timestamp
       activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      setRecentActivities(activities.slice(0, 5))
+      
+      // Debug: log das atividades encontradas
+      console.log("Atividades encontradas:", activities.length, activities)
+      
+      // Calcular paginação
+      const totalItems = activities.length
+      const totalPagesCount = Math.ceil(totalItems / itemsPerPage)
+      const paginatedActivities = activities.slice(offset, offset + limit)
+      
+      setTotalActivities(totalItems)
+      setTotalPages(totalPagesCount)
+      setRecentActivities(paginatedActivities)
     } catch (error) {
       console.error("Erro ao buscar atividades recentes:", error)
     }
@@ -213,6 +408,71 @@ export function AdminDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Funções para lidar com filtros e paginação
+  const handleFilterChange = (newFilters: Partial<typeof activityFilters>) => {
+    const updatedFilters = { ...activityFilters, ...newFilters }
+    setActivityFilters(updatedFilters)
+    setCurrentPage(1) // Reset para primeira página ao filtrar
+    fetchRecentActivities(1, updatedFilters)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+    fetchRecentActivities(newPage, activityFilters)
+  }
+
+  const clearFilters = () => {
+    const clearedFilters = { type: "all", dateFrom: "", dateTo: "" }
+    setActivityFilters(clearedFilters)
+    setCurrentPage(1)
+    fetchRecentActivities(1, clearedFilters)
+  }
+
+  // Função para processar ações de investimento (igual ao sistema de notificações)
+  const processInvestmentAction = async (investmentId: string, action: 'approve' | 'reject') => {
+    try {
+      const response = await fetch('/api/investments/action', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          investmentId,
+          action,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao processar ação')
+      }
+
+      toast({
+        title: "Ação realizada!",
+        description: action === "approve" 
+          ? "Investimento aprovado com sucesso." 
+          : "Investimento rejeitado e removido com sucesso.",
+      })
+
+      // Recarregar as atividades
+      fetchRecentActivities(currentPage, activityFilters)
+    } catch (error) {
+      console.error('Error processing investment action:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao processar a ação. Tente novamente.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleActivityAction = async (activityId: string, action: 'approve' | 'reject') => {
+    // Extrair o ID real do investimento do ID da atividade
+    const realId = activityId.replace(/^pending-inv-/, '')
+    await processInvestmentAction(realId, action)
   }
 
   useEffect(() => {
@@ -403,30 +663,261 @@ export function AdminDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Atividade Recente
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Atividade Recente
+                </CardTitle>
+                <Badge variant="outline">
+                  {totalActivities} atividades
+                </Badge>
+              </div>
+              
+              {/* Filtros */}
+              <div className="flex flex-wrap gap-4 mt-4 p-4 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4" />
+                  <Label className="text-sm font-medium">Filtros:</Label>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Tipo:</Label>
+                  <Select 
+                    value={activityFilters.type} 
+                    onValueChange={(value) => handleFilterChange({ type: value })}
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="investment">Investimentos</SelectItem>
+                      <SelectItem value="pending_investment">Investimentos Pendentes</SelectItem>
+                      <SelectItem value="withdrawal">Transações</SelectItem>
+                      <SelectItem value="user_created">Usuários</SelectItem>
+                      <SelectItem value="goal_achieved">Metas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">De:</Label>
+                  <Input
+                    type="date"
+                    value={activityFilters.dateFrom}
+                    onChange={(e) => handleFilterChange({ dateFrom: e.target.value })}
+                    className="w-40"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Até:</Label>
+                  <Input
+                    type="date"
+                    value={activityFilters.dateTo}
+                    onChange={(e) => handleFilterChange({ dateTo: e.target.value })}
+                    className="w-40"
+                  />
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={clearFilters}
+                  className="ml-auto"
+                >
+                  Limpar Filtros
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {recentActivities.length > 0 ? (
                 <div className="space-y-4">
                   {recentActivities.map((activity) => (
-                    <div key={activity.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 ${activity.color} rounded-full`}></div>
-                        <div>
-                          <p className="font-medium">{activity.title}</p>
-                          <p className="text-sm text-muted-foreground">{activity.description}</p>
+                    <div key={activity.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-start gap-3">
+                          <div className={`w-2 h-2 ${activity.color} rounded-full mt-2`}></div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium">{activity.title}</p>
+                              {activity.type === "investment" && activity.id.startsWith("active-inv-") && (
+                                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                                  ✓ Ativo
+                                </Badge>
+                              )}
+                              {activity.type === "pending_investment" && (
+                                <Badge variant="secondary" className="bg-orange-100 text-orange-800 border-orange-200">
+                                  ⏳ Pendente
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-2">{activity.description}</p>
+                            
+                            {/* Informações adicionais para investimentos pendentes */}
+                            {activity.type === "pending_investment" && activity.relatedData && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs bg-orange-50 p-3 rounded border border-orange-200">
+                                <div>
+                                  <span className="text-muted-foreground">Valor:</span>
+                                  <span className="ml-1 font-medium">
+                                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(activity.relatedData.amount || 0)}
+                                  </span>
+                                </div>
+                                {activity.relatedData.quotaType && (
+                                  <div>
+                                    <span className="text-muted-foreground">Tipo:</span>
+                                    <span className="ml-1 font-medium capitalize">{activity.relatedData.quotaType}</span>
+                                  </div>
+                                )}
+                                {activity.relatedData.commitmentPeriod && (
+                                  <div>
+                                    <span className="text-muted-foreground">Período:</span>
+                                    <span className="ml-1 font-medium">{activity.relatedData.commitmentPeriod} meses</span>
+                                  </div>
+                                )}
+                                {activity.relatedData.monthlyReturnRate && (
+                                  <div>
+                                    <span className="text-muted-foreground">Taxa:</span>
+                                    <span className="ml-1 font-medium text-emerald-600">
+                                      {(activity.relatedData.monthlyReturnRate * 100).toFixed(2)}% a.m.
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Informações adicionais para investimentos ativos */}
+                            {activity.type === "investment" && activity.id.startsWith("active-inv-") && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs bg-green-50 p-3 rounded border border-green-200">
+                                <div>
+                                  <span className="text-muted-foreground">Status:</span>
+                                  <span className="ml-1 font-medium text-green-700">✓ Ativo</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Valor:</span>
+                                  <span className="ml-1 font-medium">
+                                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(activity.relatedData?.amount || 0)}
+                                  </span>
+                                </div>
+                                {activity.relatedData?.quotaType && (
+                                  <div>
+                                    <span className="text-muted-foreground">Tipo:</span>
+                                    <span className="ml-1 font-medium capitalize">{activity.relatedData.quotaType}</span>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-muted-foreground">Ação:</span>
+                                  <span className="ml-1 font-medium text-green-600">Processado</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">
+                            {activity.timestamp}
+                          </span>
+                          
+                          {/* Botões de ação para investimentos pendentes */}
+                          {activity.actions && activity.type === "pending_investment" && (
+                            <div className="flex gap-1">
+                              {activity.actions.approve && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-emerald-600 border-emerald-600 bg-transparent hover:bg-emerald-50"
+                                  onClick={() => handleActivityAction(activity.id, "approve")}
+                                >
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Aprovar
+                                </Button>
+                              )}
+                              {activity.actions.reject && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 border-red-600 bg-transparent hover:bg-red-50"
+                                  onClick={() => handleActivityAction(activity.id, "reject")}
+                                >
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Rejeitar
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <span className="text-sm text-muted-foreground">{activity.timestamp}</span>
                     </div>
                   ))}
+                  
+                  {/* Controles de Paginação */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Página {currentPage} de {totalPages} ({totalActivities} atividades)
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          Anterior
+                        </Button>
+                        
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i
+                            if (pageNum > totalPages) return null
+                            
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={pageNum === currentPage ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => handlePageChange(pageNum)}
+                                className="w-8 h-8 p-0"
+                              >
+                                {pageNum}
+                              </Button>
+                            )
+                          })}
+                        </div>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                        >
+                          Próxima
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">Nenhuma atividade recente encontrada</p>
+                  <p className="text-muted-foreground">
+                    {activityFilters.type !== "all" || activityFilters.dateFrom || activityFilters.dateTo
+                      ? "Nenhuma atividade encontrada com os filtros aplicados"
+                      : "Nenhuma atividade recente encontrada"
+                    }
+                  </p>
+                  {(activityFilters.type !== "all" || activityFilters.dateFrom || activityFilters.dateTo) && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={clearFilters}
+                      className="mt-2"
+                    >
+                      Limpar Filtros
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>

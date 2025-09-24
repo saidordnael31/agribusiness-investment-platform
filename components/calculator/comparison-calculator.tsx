@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { TrendingUp } from "lucide-react"
+import { calculateCommissionBreakdown } from "@/lib/commission-calculator"
 
 export function ComparisonCalculator() {
   const [scenarios, setScenarios] = useState([
@@ -16,9 +17,10 @@ export function ComparisonCalculator() {
   ])
 
   const calculateScenario = (amount: number) => {
-    const monthlyCommission = amount * 0.03
-    const annualCommission = monthlyCommission * 12
-
+    // Calcular breakdown de comissões por role
+    const breakdown = calculateCommissionBreakdown(amount, 12)
+    
+    // Calcular bônus de performance
     let performanceBonus = 0
     if (amount >= 1000000) {
       performanceBonus = amount * 0.03 * 12 // +3% additional
@@ -26,15 +28,14 @@ export function ComparisonCalculator() {
       performanceBonus = amount * 0.01 * 12 // +1% additional
     }
 
-    const advisorShare = (annualCommission) * 0.03
-    const totalWithBonus = annualCommission
-
     return {
-      monthlyCommission,
-      annualCommission,
+      monthlyCommission: breakdown.totalCommission / 12,
+      annualCommission: breakdown.totalCommission,
       performanceBonus,
-      advisorShare,
-      totalWithBonus,
+      investorCommission: breakdown.investorCommission,
+      escritorioCommission: breakdown.escritorioCommission,
+      assessorCommission: breakdown.assessorCommission,
+      totalWithBonus: breakdown.totalCommission + performanceBonus,
     }
   }
 
@@ -52,7 +53,9 @@ export function ComparisonCalculator() {
       monthly: calc.monthlyCommission,
       annual: calc.annualCommission,
       total: calc.totalWithBonus,
-      advisor: calc.advisorShare,
+      investor: calc.investorCommission,
+      escritorio: calc.escritorioCommission,
+      assessor: calc.assessorCommission,
     }
   })
 
@@ -114,8 +117,10 @@ export function ComparisonCalculator() {
                   borderRadius: "8px",
                 }}
               />
-              <Bar dataKey="annual" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="bonus" fill="hsl(var(--secondary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="investor" fill="#3b82f6" name="Investidor (2%)" />
+              <Bar dataKey="escritorio" fill="#10b981" name="Escritório (1%)" />
+              <Bar dataKey="assessor" fill="#8b5cf6" name="Assessor (3%)" />
+              <Bar dataKey="total" fill="#f59e0b" name="Total com Bônus" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -139,36 +144,36 @@ export function ComparisonCalculator() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Mensal</span>
-                      <p className="font-bold">
+                      <span className="text-muted-foreground text-blue-600">Investidor (2%)</span>
+                      <p className="font-bold text-blue-600">
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",
                           currency: "BRL",
-                        }).format(data.monthly)}
+                        }).format(data.investor)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Anual</span>
-                      <p className="font-bold">
+                      <span className="text-muted-foreground text-green-600">Escritório (1%)</span>
+                      <p className="font-bold text-green-600">
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",
                           currency: "BRL",
-                        }).format(data.annual)}
+                        }).format(data.escritorio)}
                       </p>
                     </div>
-                    {/* <div>
-                      <span className="text-muted-foreground">Bônus</span>
-                      <p className="font-bold text-secondary">
+                    <div>
+                      <span className="text-muted-foreground text-purple-600">Assessor (3%)</span>
+                      <p className="font-bold text-purple-600">
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",
                           currency: "BRL",
-                        }).format(data.bonus)}
+                        }).format(data.assessor)}
                       </p>
-                    </div> */}
+                    </div>
                     <div>
-                      <span className="text-muted-foreground">Total</span>
+                      <span className="text-muted-foreground">Total com Bônus</span>
                       <p className="font-bold text-primary">
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",

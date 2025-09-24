@@ -158,7 +158,7 @@ export function DistributorDashboard() {
     const advisorShare = totalCaptured * 0.02; // Exemplo
     const officeShare = totalCaptured * 0.01;
 
-    const baseCommissionRate = user.role === "escritorio" ? 0.01 : 0.03; // 3% monthly
+    const baseCommissionRate = user.role === "escritorio" ? 0.01 : user.role === "investor" ? 0.02 : 0.03; // Baseado no role
     const monthlyCommission = totalCaptured * baseCommissionRate;
     const annualCommission = monthlyCommission * 12;
 
@@ -531,7 +531,7 @@ export function DistributorDashboard() {
           p_amount: Number(investmentValue),
           p_status: "pending",
           p_quota_type: "senior",
-          p_monthly_return_rate: 0.03,
+          p_monthly_return_rate: user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03,
           p_commitment_period: 12,
         });
 
@@ -547,24 +547,6 @@ export function DistributorDashboard() {
       });
 
       await generateQRCode(investmentValue, investorForm.cpf);
-
-      setInvestorForm({
-        fullName: "",
-        email: "",
-        phone: "",
-        cpf: "",
-        rg: "",
-        nationality: "",
-        maritalStatus: "",
-        profession: "",
-        address: "",
-        pixKey: "",
-        password: "",
-        confirmPassword: "",
-        investmentValue: "",
-        rescueTerm: "",
-        profitability: "",
-      });
       setShowInvestorModal(false);
 
       if (user?.id) {
@@ -587,22 +569,38 @@ export function DistributorDashboard() {
     try {
       setGeneratingQR(true);
 
-      console.log("[v0] Gerando QR Code PIX para:", { value, cpf });
-
       const response = await fetch("/api/external/generate-qrcode", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-          value, 
+        body: JSON.stringify({
+          value,
           cpf,
-          email: user?.email,
-          userName: user?.name
+          email: investorForm.email,
+          userName: investorForm.fullName,
         }),
       });
 
       const result = await response.json();
+
+      setInvestorForm({
+        fullName: "",
+        email: "",
+        phone: "",
+        cpf: "",
+        rg: "",
+        nationality: "",
+        maritalStatus: "",
+        profession: "",
+        address: "",
+        pixKey: "",
+        password: "",
+        confirmPassword: "",
+        investmentValue: "",
+        rescueTerm: "",
+        profitability: "",
+      });
 
       if (!result.success) {
         throw new Error(result.error || "Erro ao gerar QR Code PIX");
@@ -619,7 +617,8 @@ export function DistributorDashboard() {
 
       toast({
         title: "QR Code PIX gerado!",
-        description: "O QR Code para pagamento foi gerado com sucesso. Um email com o código PIX foi enviado para você.",
+        description:
+          "O QR Code para pagamento foi gerado com sucesso. Um email com o código PIX foi enviado para você.",
       });
     } catch (error: any) {
       console.error("Erro ao gerar QR Code:", error);
@@ -693,7 +692,7 @@ export function DistributorDashboard() {
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
             {user && user.role === "escritorio"
               ? "Dashboard do Escritório"
-              : "Dashboard do Investidor"}
+              : "Dashboard do Assessor"}
           </h2>
           <p className="text-muted-foreground">
             Acompanhe suas vendas, comissões e performance
@@ -1445,7 +1444,7 @@ export function DistributorDashboard() {
                               profitability = "2,5% a.m.";
                               break;
                             case "D+180":
-                              profitability = "3% a.m.";
+                              profitability = user.role === "escritorio" ? "1% a.m." : user.role === "investor" ? "2% a.m." : "3% a.m.";
                               break;
                             case "D+360":
                               profitability = "3,5% a.m.";

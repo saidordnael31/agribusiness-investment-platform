@@ -7,38 +7,29 @@ const marketData = [
   { name: "Selic/Tesouro", min: 0.8, max: 1.0, avg: 0.9 },
   { name: "CDBs/Fundos RF", min: 1.0, max: 1.2, avg: 1.1 },
   { name: "Fundos Multi", min: 1.5, max: 2.0, avg: 1.75 },
-  { name: "Clube Akintec", min: 2.0, max: 3.0, avg: 2.50 },
+  { name: "Agrinvest", min: 2.0, max: 3.0, avg: 2.50 },
 ]
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(value, max));
-}
 
-// Função para variar um valor +/- 0.2 dentro do intervalo e limitar a 2 casas decimais
-function vary(value: number, min: number, max: number, delta = 0.2) {
-  const variation = (Math.random() * 2 - 1) * delta; // -delta a +delta
-  const result = clamp(value + variation, min, max);
-  return Math.round(result * 100) / 100; // limita a 2 casas decimais
-}
 
 const highlights = {
   opsAtivas: 18,
   volume30d: 12800000,
   proj: {
     "12m": { 
-      conservador: vary(2.0, 2.0, 3.0),
+      conservador: 2.0,
       base: 2.4,
-      otimista: vary(3.0, 2.0, 3.0),
+      otimista: 3.0,
     },
     "24m": { 
-      conservador: vary(2.1, 2.0, 3.0),
+      conservador: 2.1,
       base: 2.5,
-      otimista: vary(3.0, 2.0, 3.0),
+      otimista: 3.2,
     },
     "36m": { 
-      conservador: vary(2.4, 2.0, 3.0),
-      base: vary(3.0, 2.0, 3.0),
-      otimista: vary(3.0, 2.0, 3.0),
+      conservador: 3.5,
+      base: 3.0,
+      otimista: 3.0,
     },
   },
 };
@@ -86,9 +77,6 @@ export default function HomePage() {
                 <Calendar className="w-4 h-4 mr-2" />
                 Agendar Reunião
               </a>
-            </Button>
-            <Button size="lg" variant="outline" className="w-full sm:w-auto bg-transparent" asChild>
-              <a href="/login">Sou Distribuidor</a>
             </Button>
           </div>
         </div>
@@ -254,7 +242,7 @@ export default function HomePage() {
             <div className="flex items-start gap-3">
               <FileText className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-yellow-800 leading-relaxed">
-                Este produto NÃO é um FIDC regulado pela CVM. Trata-se de um Clube de Investimento Privado, restrito a
+                Este produto NÃO é um FIDC regulado pela CVM. Trata-se de um Agrinvest - Clube de Investimento Privado, restrito a
                 participantes convidados e qualificados, com base em contratos civis de sociedade em conta de
                 participação. Rentabilidade apresentada é alvo/esperada, não garantida. Há riscos de mercado, crédito e
                 liquidez. Resgates e liquidez respeitam prazos contratuais.
@@ -262,7 +250,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="text-center">
-            <p className="text-muted-foreground">© 2024 Akintec Platform. Todos os direitos reservados.</p>
+            <p className="text-muted-foreground">Todos direitos reservados. 2025 Agrinvest</p>
           </div>
         </div>
       </footer>

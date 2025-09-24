@@ -105,7 +105,7 @@ export function HierarchyManager() {
         )
 
         const totalInvested = officeInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
-        const monthlyCommission = totalInvested * 0.03 * 0.3 // 3% ao mês, 30% para escritório
+        const monthlyCommission = totalInvested * 0.01 // 1% ao mês para escritório
 
         return {
           id: office.id,
@@ -126,7 +126,7 @@ export function HierarchyManager() {
         const office = officesData?.find((o) => o.id === advisor.office_id)
 
         const totalInvested = advisorInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
-        const monthlyCommission = totalInvested * 0.03 * 0.7 // 3% ao mês, 70% para assessor
+        const monthlyCommission = totalInvested * 0.03 // 3% ao mês para assessor
 
         return {
           id: advisor.id,
@@ -146,7 +146,7 @@ export function HierarchyManager() {
       const processedFlows: CommissionFlow[] = (investmentsData || []).map((investment) => {
         const advisor = advisorsData?.find((a) => a.id === investment.advisor_id)
         const office = officesData?.find((o) => o.id === advisor?.office_id)
-        const monthlyCommission = (investment.amount || 0) * 0.03
+        const monthlyCommission = (investment.amount || 0) * 0.02 // Média ponderada por role
 
         return {
           id: investment.id,

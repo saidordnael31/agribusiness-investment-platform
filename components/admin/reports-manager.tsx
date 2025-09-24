@@ -142,8 +142,8 @@ export function ReportsManager() {
       const activeCampaigns = campaigns?.filter((c) => c.is_active).length || 0
       const pendingApprovals = approvals?.filter((a) => a.status === "pending").length || 0
 
-      // Calcular comissões baseadas nos investimentos (3% média)
-      const monthlyCommissions = totalInvestments * 0.03
+      // Calcular comissões baseadas nos investimentos (média ponderada por role)
+      const monthlyCommissions = totalInvestments * 0.02 // Média ponderada: (2% + 1% + 3%) / 3 = 2%
       const distributorCommissions = monthlyCommissions * 0.7
       const officeCommissions = monthlyCommissions * 0.3
 
@@ -658,7 +658,7 @@ export function ReportsManager() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold">{formatCurrency(analyticsData.investments.seniorQuota)}</p>
-                      <Badge variant="secondary">3% a.m.</Badge>
+                      <Badge variant="secondary">2% a.m. (média)</Badge>
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg">

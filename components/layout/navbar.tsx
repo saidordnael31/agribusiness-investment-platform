@@ -141,7 +141,7 @@ export function Navbar() {
           <Link href="/" className="flex items-center space-x-2">
             <TrendingUp className="h-8 w-8 text-primary" />
             <span className="text-xl font-bold text-card-foreground">
-              Akintec Platform
+              Agrinvest
             </span>
           </Link>
 
@@ -374,17 +374,6 @@ export function Navbar() {
                     size="sm"
                   >
                     Entrar
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button className="cursor-pointer" size="sm">
-                    Cadastrar
-                  </Button>
-                </Link>
-                <Link href="/admin/login">
-                  <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4 mr-1" />
-                    Admin
                   </Button>
                 </Link>
               </div>

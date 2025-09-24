@@ -106,9 +106,11 @@ export function ClientsList() {
               {new Intl.NumberFormat("pt-BR", {
                 style: "currency",
                 currency: "BRL",
-              }).format(totalInvested * 0.03)}
+              }).format(totalInvested * (user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03))}
             </div>
-            <p className="text-xs text-muted-foreground">3% sobre base</p>
+            <p className="text-xs text-muted-foreground">
+              {user?.role === "escritorio" ? "1%" : user?.role === "investor" ? "2%" : "3%"} sobre base
+            </p>
           </CardContent>
         </Card>
       </div>

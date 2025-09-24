@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/client"
 
 export async function POST(request: NextRequest) {
   try {
     const depositData = await request.json()
-    const supabase = createServerClient()
+    const supabase = createClient()
 
     const { data, error } = await supabase
       .from("transactions")
