@@ -43,11 +43,6 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    if (formData.role && formData.role !== "escritorio") {
-      loadParentOptions();
-    }
-  }, [formData.role]);
 
   const validatePersonalEmail = (email: string) => {
     const personalDomains = [
@@ -127,22 +122,29 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
   };
 
   const getProfiles = async () => {
-    const supabase = createClient();
-    const { data, error } = await supabase.from("profiles").select("*");
-    console.log(data, error);
-    if (!data) return;
-    setParentOptions(
-      data.map((item) => ({
-        id: item.id,
-        name: item.full_name,
-        role: item.role,
-      }))
-    );
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from("profiles").select("*");
+      console.log(data, error);
+      if (!data) return;
+      setParentOptions(
+        data.map((item) => ({
+          id: item.id,
+          name: item.full_name,
+          role: item.role,
+        }))
+      );
+    } catch (error) {
+      console.error("Erro ao carregar perfis:", error);
+    }
   };
 
   useEffect(() => {
-    getProfiles();
-  }, []);
+    // Só carrega os perfis quando necessário (quando o role não é escritorio)
+    if (formData.role && formData.role !== "escritorio") {
+      getProfiles();
+    }
+  }, [formData.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

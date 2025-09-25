@@ -1,3 +1,5 @@
+"use client";
+
 import { RegisterForm } from "@/components/auth/register-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp } from "lucide-react"
