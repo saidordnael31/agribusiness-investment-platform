@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
 
+// Força a rota a ser dinâmica para permitir uso de cookies
+export const dynamic = "force-dynamic"
+
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
