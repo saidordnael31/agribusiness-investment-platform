@@ -96,7 +96,7 @@ export default function DocumentsPage() {
         </h1>
         <p className="text-muted-foreground text-lg">
           Acesse todos os documentos oficiais, relatórios de auditoria e lâminas
-          de investimento do Clube de Investimentos Privado Agroderi.
+          de investimento do Clube de Investimentos Privado Agrinvest.
         </p>
         {user && (
           <div className="mt-4 p-3 bg-muted rounded-lg">
@@ -212,7 +212,7 @@ export default function DocumentsPage() {
                 onClick={() => handleDownload("Contrato_SCP_Akintec_Investidor.pdf")}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download PDF
+                Clique aqui
               </Button>
             </CardContent>
           </Card>
@@ -240,10 +240,10 @@ export default function DocumentsPage() {
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Regulamento_Clube_Agroderi.pdf")}
+                onClick={() => handleDownload("Regulamento_Clube_Agrinvest.pdf")}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download PDF
+                Clique aqui
               </Button>
             </CardContent>
           </Card>
@@ -263,11 +263,11 @@ export default function DocumentsPage() {
                 variant="outline"
                 className="w-full bg-transparent"
                 onClick={() =>
-                  handleDownload("Politica_Investimentos_Agroderi.pdf")
+                  handleDownload("Politica_Investimentos_Agrinvest.pdf")
                 }
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download PDF
+                Clique aqui
               </Button>
             </CardContent>
           </Card>
@@ -284,10 +284,10 @@ export default function DocumentsPage() {
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
-                onClick={() => handleDownload("Codigo_Etica_Agroderi.pdf")}
+                onClick={() => handleDownload("Codigo_Etica_Agrinvest.pdf")}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download PDF
+                Clique aqui
               </Button>
             </CardContent>
           </Card>
@@ -370,7 +370,7 @@ export default function DocumentsPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Cota Sênior</CardTitle>
+              <CardTitle>Renda Agro</CardTitle>
               <CardDescription>
                 Informações detalhadas sobre a cota sênior
               </CardDescription>
@@ -379,7 +379,7 @@ export default function DocumentsPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Rentabilidade alvo:</span>
-                  <span className="font-medium text-primary">3% a.m.</span>
+                  <span className="font-medium text-primary">5% a.m.</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Perfil:</span>
@@ -387,25 +387,25 @@ export default function DocumentsPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Liquidez:</span>
-                  <span className="font-medium">D+2</span>
+                  <span className="font-medium">12m</span>
                 </div>
               </div>
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
                 onClick={() =>
-                  handleDownload("Lamina_Cota_Senior_Agroderi.pdf")
+                  handleDownload("Lamina_Renda_Agro_Agrinvest.pdf")
                 }
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Lâmina
+                Clique aqui
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Cota Subordinada</CardTitle>
+              <CardTitle>Equity</CardTitle>
               <CardDescription>
                 Informações detalhadas sobre a cota subordinada
               </CardDescription>
@@ -414,7 +414,7 @@ export default function DocumentsPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Rentabilidade alvo:</span>
-                  <span className="font-medium text-secondary">3,5% a.m.</span>
+                  <span className="font-medium text-secondary">5% a.m.</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Perfil:</span>
@@ -422,18 +422,18 @@ export default function DocumentsPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Liquidez:</span>
-                  <span className="font-medium">D+2</span>
+                  <span className="font-medium">12m</span>
                 </div>
               </div>
               <Button
                 variant="outline"
                 className="w-full bg-transparent"
                 onClick={() =>
-                  handleDownload("Lamina_Cota_Subordinada_Agroderi.pdf")
+                  handleDownload("Lamina_Equity_Agrinvest.pdf")
                 }
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Lâmina
+                Clique aqui
               </Button>
             </CardContent>
           </Card>
@@ -463,7 +463,7 @@ export default function DocumentsPage() {
                   variant="outline"
                   className="w-full bg-transparent"
                   onClick={() =>
-                    handleDownload("Manual_Escritorio_Agroderi.pdf")
+                    handleDownload("Manual_Escritorio_Agrinvest.pdf")
                   }
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -487,7 +487,7 @@ export default function DocumentsPage() {
                   variant="outline"
                   className="w-full bg-transparent"
                   onClick={() =>
-                    handleDownload("Contratos_Parceria_Agroderi.zip")
+                    handleDownload("Contratos_Parceria_Agrinvest.zip")
                   }
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -511,7 +511,7 @@ export default function DocumentsPage() {
                   variant="outline"
                   className="w-full bg-transparent"
                   onClick={() =>
-                    handleDownload("Templates_Relatorios_Agroderi.zip")
+                    handleDownload("Templates_Relatorios_Agrinvest.zip")
                   }
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -726,7 +726,7 @@ export default function DocumentsPage() {
                   variant="outline"
                   className="w-full bg-transparent"
                   onClick={() =>
-                    handleDownload("Tabela_Comissoes_Agroderi.pdf")
+                    handleDownload("Tabela_Comissoes_Agrinvest.pdf")
                   }
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -749,7 +749,7 @@ export default function DocumentsPage() {
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Material_Vendas_Agroderi.zip")}
+                  onClick={() => handleDownload("Material_Vendas_Agrinvest.zip")}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP
@@ -771,7 +771,7 @@ export default function DocumentsPage() {
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Scripts_Vendas_Agroderi.pdf")}
+                  onClick={() => handleDownload("Scripts_Vendas_Agrinvest.pdf")}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -793,7 +793,7 @@ export default function DocumentsPage() {
                 <Button
                   variant="outline"
                   className="w-full bg-transparent"
-                  onClick={() => handleDownload("Treinamentos_Agroderi.zip")}
+                  onClick={() => handleDownload("Treinamentos_Agrinvest.zip")}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download ZIP

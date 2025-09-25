@@ -36,9 +36,8 @@ interface Bonification {
 export function InvestmentSimulator({ title }: { title?: string }) {
   const [user, setUser] = useState<null>(null);
   const [amount, setAmount] = useState("");
-  const [period, setPeriod] = useState("");
   const [commitmentPeriod, setCommitmentPeriod] = useState("");
-  const [withRescue, setWithRescue] = useState("");
+  const [liquidity, setLiquidity] = useState("");
   const [results, setResults] = useState<{
     monthlyReturn: number;
     totalReturn: number;
@@ -79,33 +78,67 @@ export function InvestmentSimulator({ title }: { title?: string }) {
   //   });
   // };
 
+  // Função para obter a taxa baseada no prazo e liquidez
+  const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
+    const rates: { [key: string]: { [key: string]: number } } = {
+      "3": {
+        "mensal": 0.018, // 1.8%
+      },
+      "6": {
+        "mensal": 0.019, // 1.9%
+        "semestral": 0.02, // 2%
+      },
+      "12": {
+        "mensal": 0.021, // 2.1%
+        "semestral": 0.022, // 2.2%
+        "anual": 0.025, // 2.5%
+      },
+      "24": {
+        "mensal": 0.023, // 2.3%
+        "semestral": 0.025, // 2.5%
+        "anual": 0.027, // 2.7%
+        "bienal": 0.03, // 3%
+      },
+      "36": {
+        "mensal": 0.024, // 2.4%
+        "semestral": 0.026, // 2.6%
+        "anual": 0.03, // 3%
+        "bienal": 0.035, // 3.5%
+      },
+    };
+
+    return rates[period.toString()]?.[liquidity] || 0;
+  };
+
+  // Função para obter opções de liquidez disponíveis baseadas no prazo
+  const getAvailableLiquidityOptions = (period: number): string[] => {
+    const options: { [key: string]: string[] } = {
+      "3": ["mensal"],
+      "6": ["mensal", "semestral"],
+      "12": ["mensal", "semestral", "anual"],
+      "24": ["mensal", "semestral", "anual", "bienal"],
+      "36": ["mensal", "semestral", "anual", "bienal"],
+    };
+
+    return options[period.toString()] || [];
+  };
+
   const calculateReturns = () => {
     const investmentAmount = Number.parseFloat(amount);
-    const months = Number.parseInt(period);
-    const commitment = Number.parseInt(commitmentPeriod) || 0;
-    const isWithRescue = withRescue === "sim";
+    const period = Number.parseInt(commitmentPeriod);
+    const selectedLiquidity = liquidity;
 
-    if (!investmentAmount || !months) return;
+    if (!investmentAmount || !period || !selectedLiquidity) return;
 
-    // Para o simulador de investimento do cliente, sempre usar taxa de investidor (2%)
-    // pois estamos simulando o retorno que o cliente receberá
-    const baseMonthlyRate = 0.02; // 2% - taxa do investidor
+    // Obter a taxa baseada no prazo e liquidez selecionados
+    const monthlyRate = getRateByPeriodAndLiquidity(period, selectedLiquidity);
 
-    let monthlyReturn: number;
-    let totalReturn: number;
-    let finalAmount: number;
+    if (monthlyRate === 0) return;
 
-    if (isWithRescue) {
-      // Juros simples - retorno mensal fixo sobre o valor inicial
-      monthlyReturn = investmentAmount * baseMonthlyRate;
-      totalReturn = monthlyReturn * months;
-      finalAmount = investmentAmount + totalReturn;
-    } else {
-      // Juros compostos - retorno mensal sobre o valor acumulado
-      monthlyReturn = investmentAmount * baseMonthlyRate;
-      finalAmount = investmentAmount * Math.pow(1 + baseMonthlyRate, months);
-      totalReturn = finalAmount - investmentAmount;
-    }
+    // Calcular juros compostos mensais
+    const finalAmount = investmentAmount * Math.pow(1 + monthlyRate, period);
+    const totalReturn = finalAmount - investmentAmount;
+    const monthlyReturn = investmentAmount * monthlyRate;
 
     setResults({
       monthlyReturn,
@@ -132,7 +165,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
         )}
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label htmlFor="amount">Valor do Investimento</Label>
             <Input
@@ -147,44 +180,43 @@ export function InvestmentSimulator({ title }: { title?: string }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="period">Período (meses)</Label>
-            <Input
-              id="period"
-              type="number"
-              placeholder="12"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              min="1"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="commitment">Compromisso (meses)</Label>
+            <Label htmlFor="commitment">Prazo</Label>
             <Select
               value={commitmentPeriod}
-              onValueChange={setCommitmentPeriod}
+              onValueChange={(value) => {
+                setCommitmentPeriod(value);
+                setLiquidity(""); // Reset liquidez quando mudar o prazo
+              }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Sem compromisso" />
+                <SelectValue placeholder="Selecione o prazo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="2">2 meses</SelectItem>
                 <SelectItem value="3">3 meses</SelectItem>
                 <SelectItem value="6">6 meses</SelectItem>
                 <SelectItem value="12">12 meses</SelectItem>
+                <SelectItem value="24">24 meses</SelectItem>
+                <SelectItem value="36">36 meses</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="withRescue">Com Resgate</Label>
-            <Select value={withRescue} onValueChange={setWithRescue}>
+            <Label htmlFor="liquidity">Liquidez da Rentabilidade</Label>
+            <Select 
+              value={liquidity} 
+              onValueChange={setLiquidity}
+              disabled={!commitmentPeriod}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
+                <SelectValue placeholder="Selecione a liquidez" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sim">Sim</SelectItem>
-                <SelectItem value="nao">Não</SelectItem>
+                {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -217,6 +249,19 @@ export function InvestmentSimulator({ title }: { title?: string }) {
               </div>
             )} */}
 
+            <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <h4 className="font-semibold text-primary">Taxa Aplicada</h4>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Prazo: {commitmentPeriod} meses | Liquidez: {liquidity.charAt(0).toUpperCase() + liquidity.slice(1)}
+              </p>
+              <p className="text-lg font-bold text-primary">
+                {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-card rounded-lg border">
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Retorno Mensal</p>
@@ -226,18 +271,6 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                     currency: "BRL",
                   }).format(results.monthlyReturn)}
                 </p>
-                {/* {results.totalBonusRate > 0 && (
-                  <p className="text-xs text-primary">
-                    <TrendingUp className="h-3 w-3 inline mr-1" />+
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(
-                      results.monthlyReturn - Number.parseFloat(amount) * 0.02,
-                    )}{" "}
-                    bônus
-                  </p>
-                )} */}
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Retorno Total</p>
@@ -248,15 +281,6 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                   }).format(results.totalReturn)}
                 </p>
               </div>
-              {/* <div className="text-center">
-                <p className="text-sm text-muted-foreground">Bônus Total</p>
-                <p className="text-2xl font-bold text-accent">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(results.bonusReturn)}
-                </p>
-              </div> */}
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Valor Final</p>
                 <p className="text-2xl font-bold text-foreground">

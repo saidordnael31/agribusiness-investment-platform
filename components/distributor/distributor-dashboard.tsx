@@ -158,7 +158,12 @@ export function DistributorDashboard() {
     const advisorShare = totalCaptured * 0.02; // Exemplo
     const officeShare = totalCaptured * 0.01;
 
-    const baseCommissionRate = user.role === "escritorio" ? 0.01 : user.role === "investor" ? 0.02 : 0.03; // Baseado no role
+    const baseCommissionRate =
+      user.role === "escritorio"
+        ? 0.01
+        : user.role === "investor"
+        ? 0.02
+        : 0.03; // Baseado no role
     const monthlyCommission = totalCaptured * baseCommissionRate;
     const annualCommission = monthlyCommission * 12;
 
@@ -531,7 +536,12 @@ export function DistributorDashboard() {
           p_amount: Number(investmentValue),
           p_status: "pending",
           p_quota_type: "senior",
-          p_monthly_return_rate: user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03,
+          p_monthly_return_rate:
+            user?.role === "escritorio"
+              ? 0.01
+              : user?.role === "investor"
+              ? 0.02
+              : 0.03,
           p_commitment_period: 12,
         });
 
@@ -1015,16 +1025,18 @@ export function DistributorDashboard() {
 
         {/* Tabs Section */}
         <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full grid-cols-${user.role === "escritorio" ? 4 : 3}`}	>
             <TabsTrigger value="simulator" className="text-sm">
               Simulador
             </TabsTrigger>
             <TabsTrigger value="investors" className="text-sm">
               Meus Investidores
             </TabsTrigger>
-            <TabsTrigger value="advisors" className="text-sm">
-              Meus Assessores
-            </TabsTrigger>
+            {user.role === "escritorio" && (
+              <TabsTrigger value="advisors" className="text-sm">
+                Meus Assessores
+              </TabsTrigger>
+            )}
             <TabsTrigger value="register" className="text-sm">
               Cadastrar Investidor
             </TabsTrigger>
@@ -1132,95 +1144,97 @@ export function DistributorDashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="advisors">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Meus Assessores</CardTitle>
-                    <CardDescription>
-                      Lista de assessores cadastrados por você
-                    </CardDescription>
+          {user.role === "escritorio" && (
+            <TabsContent value="advisors">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Meus Assessores</CardTitle>
+                      <CardDescription>
+                        Lista de assessores cadastrados por você
+                      </CardDescription>
+                    </div>
+                    <Badge variant="secondary">
+                      {myAdvisors.length} assessores
+                    </Badge>
                   </div>
-                  <Badge variant="secondary">
-                    {myAdvisors.length} assessores
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nome ou email..."
-                      value={searchAdvisorTerm}
-                      onChange={(e) => setSearchAdvisorTerm(e.target.value)}
-                      className="pl-10"
-                    />
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar por nome ou email..."
+                        value={searchAdvisorTerm}
+                        onChange={(e) => setSearchAdvisorTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {loadingAdvisors ? (
-                  <div className="text-center py-8">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      Carregando assessores...
-                    </p>
-                  </div>
-                ) : filteredAdvisors.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      {searchAdvisorTerm
-                        ? "Nenhum assessor encontrado"
-                        : "Você ainda não cadastrou nenhum assessor"}
-                    </p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Telefone</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data de Cadastro</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAdvisors.map((advisor) => (
-                        <TableRow key={advisor.id}>
-                          <TableCell className="font-medium">
-                            {advisor.name}
-                          </TableCell>
-                          <TableCell>{advisor.email}</TableCell>
-                          <TableCell>{advisor.phone || "-"}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                advisor.status === "active"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {advisor.status === "active"
-                                ? "Ativo"
-                                : "Inativo"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {new Date(advisor.joinedAt).toLocaleDateString(
-                              "pt-BR"
-                            )}
-                          </TableCell>
+                  {loadingAdvisors ? (
+                    <div className="text-center py-8">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                      <p className="text-muted-foreground">
+                        Carregando assessores...
+                      </p>
+                    </div>
+                  ) : filteredAdvisors.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">
+                        {searchAdvisorTerm
+                          ? "Nenhum assessor encontrado"
+                          : "Você ainda não cadastrou nenhum assessor"}
+                      </p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Data de Cadastro</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredAdvisors.map((advisor) => (
+                          <TableRow key={advisor.id}>
+                            <TableCell className="font-medium">
+                              {advisor.name}
+                            </TableCell>
+                            <TableCell>{advisor.email}</TableCell>
+                            <TableCell>{advisor.phone || "-"}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  advisor.status === "active"
+                                    ? "default"
+                                    : "secondary"
+                                }
+                              >
+                                {advisor.status === "active"
+                                  ? "Ativo"
+                                  : "Inativo"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(advisor.joinedAt).toLocaleDateString(
+                                "pt-BR"
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
           <TabsContent value="register">
             <Card>
@@ -1444,7 +1458,12 @@ export function DistributorDashboard() {
                               profitability = "2,5% a.m.";
                               break;
                             case "D+180":
-                              profitability = user.role === "escritorio" ? "1% a.m." : user.role === "investor" ? "2% a.m." : "3% a.m.";
+                              profitability =
+                                user.role === "escritorio"
+                                  ? "1% a.m."
+                                  : user.role === "investor"
+                                  ? "2% a.m."
+                                  : "3% a.m.";
                               break;
                             case "D+360":
                               profitability = "3,5% a.m.";

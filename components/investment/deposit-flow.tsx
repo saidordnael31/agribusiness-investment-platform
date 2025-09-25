@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   Plus,
   TrendingUp,
@@ -52,6 +59,8 @@ export function DepositFlow() {
   const [selectedInvestment, setSelectedInvestment] =
     useState<Investment | null>(null);
   const [depositAmount, setDepositAmount] = useState("");
+  const [commitmentPeriod, setCommitmentPeriod] = useState("");
+  const [liquidity, setLiquidity] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [showQRModal, setShowQRModal] = useState(false);
@@ -93,7 +102,6 @@ export function DepositFlow() {
   const fetchInvestments = async () => {
     const supabase = createClient();
     const { data, error } = await supabase.from("investments").select("*");
-    console.log(data, error);
     if (!data) return;
     const allInvestmentsValues = data.reduce(
       (acc, curr) => acc + curr.amount,
@@ -119,7 +127,6 @@ export function DepositFlow() {
 
     const supabase = createClient();
 
-    console.log("[v0] Criando investimento na tabela investments...");
     const { data: investmentData, error: investmentError } = await supabase.rpc(
       "create_investment_for_user",
       {
@@ -127,18 +134,15 @@ export function DepositFlow() {
         p_amount: Number(depositAmount),
         p_status: "pending",
         p_quota_type: "senior",
-        p_monthly_return_rate: 0.03,
-        p_commitment_period: 12,
+        p_monthly_return_rate: getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity),
+        p_commitment_period: Number(commitmentPeriod),
+        p_profitability_liquidity: liquidity,
       }
     );
 
     if (investmentError) {
       console.error("Erro ao criar investimento:", investmentError);
-    } else {
-      console.log("Investimento criado:", investmentData);
     }
-
-    console.log("user?.cpf_cnpj", user);
 
     await generateQRCode(Number(depositAmount), user?.cpf_cnpj);
 
@@ -166,7 +170,6 @@ export function DepositFlow() {
     try {
       setGeneratingQR(true);
 
-      console.log("[v0] Gerando QR Code PIX para:", { value, cpf });
 
       const response = await fetch("/api/external/generate-qrcode", {
         method: "POST",
@@ -187,7 +190,6 @@ export function DepositFlow() {
         throw new Error(result.error || "Erro ao gerar QR Code PIX");
       }
 
-      console.log("[v0] QR Code gerado com sucesso:", result);
 
       setQRCodeData({
         qrCode: result.qrCode,
@@ -222,6 +224,51 @@ export function DepositFlow() {
     const rate = 0.03;
     const newTotal = investment + additionalAmount;
     return newTotal * rate;
+  };
+
+  // Função para obter a taxa baseada no prazo e liquidez
+  const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
+    const rates: { [key: string]: { [key: string]: number } } = {
+      "3": {
+        "Mensal": 0.018, // 1.8%
+      },
+      "6": {
+        "Mensal": 0.019, // 1.9%
+        "Semestral": 0.02, // 2%
+      },
+      "12": {
+        "Mensal": 0.021, // 2.1%
+        "Semestral": 0.022, // 2.2%
+        "Anual": 0.025, // 2.5%
+      },
+      "24": {
+        "Mensal": 0.023, // 2.3%
+        "Semestral": 0.025, // 2.5%
+        "Anual": 0.027, // 2.7%
+        "Bienal": 0.03, // 3%
+      },
+      "36": {
+        "Mensal": 0.024, // 2.4%
+        "Semestral": 0.026, // 2.6%
+        "Anual": 0.03, // 3%
+        "Bienal": 0.035, // 3.5%
+      },
+    };
+
+    return rates[period.toString()]?.[liquidity] || 0;
+  };
+
+  // Função para obter opções de liquidez disponíveis baseadas no prazo
+  const getAvailableLiquidityOptions = (period: number): string[] => {
+    const options: { [key: string]: string[] } = {
+      "3": ["Mensal"],
+      "6": ["Mensal", "Semestral"],
+      "12": ["Mensal", "Semestral", "Anual"],
+      "24": ["Mensal", "Semestral", "Anual", "Bienal"],
+      "36": ["Mensal", "Semestral", "Anual", "Bienal"],
+    };
+
+    return options[period.toString()] || [];
   };
 
   if (step === "success") {
@@ -275,8 +322,7 @@ export function DepositFlow() {
                   </p>
                   <p className="text-sm text-blue-600">
                     Seu depósito será processado em até 1 dia útil. Os
-                    rendimentos começam a contar a partir da data de
-                    processamento.
+                    rendimentos serão iniciados 30 dias após a data do depósito.
                   </p>
                 </div>
               </div>
@@ -295,6 +341,8 @@ export function DepositFlow() {
                   setStep("selection");
                   setSelectedInvestment(null);
                   setDepositAmount("");
+                  setCommitmentPeriod("");
+                  setLiquidity("");
                 }}
                 className="flex-1"
               >
@@ -332,88 +380,75 @@ export function DepositFlow() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* <div className="bg-gray-50 p-6 rounded-lg"> */}
-            {/* <h3 className="font-semibold mb-4">Resumo do Depósito</h3> */}
-            {/* <div className="space-y-3"> */}
-            {/* <div className="flex justify-between">
-                  <span className="text-gray-600">
-                    Investimento Selecionado:
-                  </span>
-                  <Badge
-                    variant={
-                      selectedInvestment?.type === "senior"
-                        ? "secondary"
-                        : "default"
-                    }
-                  >
-                    Cota{" "}
-                    {selectedInvestment?.type === "senior"
-                      ? "Sênior"
-                      : "Subordinada"}
-                  </Badge>
-                </div> */}
-            {/* <div className="flex justify-between">
-                  <span className="text-gray-600">Valor Atual:</span>
-                  <span>
-                    {formatCurrency(allInvestmentsValue || 0)}
-                  </span>
-                </div>
+            <div className="bg-gray-50 p-6 rounded-lg">
+              <h3 className="font-semibold mb-4">Resumo do Depósito</h3>
+              <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Valor do Depósito:</span>
                   <span className="font-semibold">
                     {formatCurrency(Number(depositAmount))}
                   </span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Valor Mínimo:</span>
+                  <span className="text-emerald-600 font-semibold">
+                    R$ 5.000,00 ✓
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-6 rounded-lg">
+              <h3 className="font-semibold text-blue-800 mb-4">
+                Condições do Investimento
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Prazo de Investimento:</span>
+                  <Badge variant="secondary">{commitmentPeriod} meses</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Liquidez da Rentabilidade:</span>
+                  <Badge variant="outline">{liquidity}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Taxa Mensal:</span>
+                  <span className="font-semibold text-blue-600">
+                    {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50 p-6 rounded-lg">
+              <h3 className="font-semibold text-emerald-800 mb-4">
+                Projeção de Retorno
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Retorno Mensal:</span>
+                  <span className="font-semibold text-emerald-600">
+                    {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Retorno Total ({commitmentPeriod} meses):</span>
+                  <span className="font-semibold text-emerald-600">
+                    {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
+                  </span>
+                </div>
                 <div className="border-t pt-3">
                   <div className="flex justify-between">
-                    <span className="font-semibold">Novo Valor Total:</span>
+                    <span className="font-semibold">Valor Final:</span>
                     <span className="font-semibold text-emerald-600">
                       {formatCurrency(
-                        (allInvestmentsValue || 0) +
-                          Number(depositAmount)
+                        Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
                       )}
                     </span>
                   </div>
                 </div>
-              </div> */}
-            {/* </div> */}
-
-            {/* <div className="bg-emerald-50 p-6 rounded-lg">
-              <h3 className="font-semibold text-emerald-800 mb-4">
-                Novo Retorno Projetado
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Retorno Mensal Atual:</span>
-                  <span>
-                    {formatCurrency(allInvestmentsReturn || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Novo Retorno Mensal:</span>
-                  <span className="font-semibold text-emerald-600">
-                    {formatCurrency(
-                      calculateNewReturn(
-                        allInvestmentsReturn,
-                        Number(depositAmount)
-                      )
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Aumento Mensal:</span>
-                  <span className="font-semibold text-emerald-600">
-                    +
-                    {formatCurrency(
-                      calculateNewReturn(
-                        allInvestmentsReturn,
-                        Number(depositAmount)
-                      ) - (allInvestmentsReturn || 0)
-                    )}
-                  </span>
-                </div>
               </div>
-            </div> */}
+            </div>
 
             <Button
               onClick={handleDepositConfirm}
@@ -591,7 +626,7 @@ export function DepositFlow() {
         {/* {selectedInvestment && ( */}
         <Card>
           <CardHeader>
-            <CardTitle>Valor do Depósito</CardTitle>
+            <CardTitle>Configuração do Depósito</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -609,6 +644,54 @@ export function DepositFlow() {
                 Valor mínimo: R$ 5.000,00
               </p>
             </div>
+
+            <div>
+              <Label htmlFor="commitment-period">Prazo de Investimento</Label>
+              <Select
+                value={commitmentPeriod}
+                onValueChange={(value) => {
+                  setCommitmentPeriod(value);
+                  setLiquidity(""); // Reset liquidez quando mudar o prazo
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o prazo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 meses</SelectItem>
+                  <SelectItem value="6">6 meses</SelectItem>
+                  <SelectItem value="12">12 meses</SelectItem>
+                  <SelectItem value="24">24 meses</SelectItem>
+                  <SelectItem value="36">36 meses</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="liquidity">Liquidez da Rentabilidade</Label>
+              <Select
+                value={liquidity}
+                onValueChange={setLiquidity}
+                disabled={!commitmentPeriod}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a liquidez" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAvailableLiquidityOptions(Number(commitmentPeriod)).map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {commitmentPeriod && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Taxa: {getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100}% a.m.
+                </p>
+              )}
+            </div>
+
 
             {/* {depositAmount && Number(depositAmount) >= 5000 && (
               <div className="bg-emerald-50 p-4 rounded-lg">
@@ -637,9 +720,41 @@ export function DepositFlow() {
               </div>
             )} */}
 
+            {depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity && (
+              <div className="bg-emerald-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-emerald-800 mb-2">
+                  Projeção do Retorno
+                </h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Retorno Mensal:</span>
+                    <span className="font-semibold text-emerald-600">
+                      {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Retorno Total ({commitmentPeriod} meses):</span>
+                    <span className="font-semibold text-emerald-600">
+                      {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
+                    </span>
+                  </div>
+                  <div className="border-t pt-2">
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Valor Final:</span>
+                      <span className="font-semibold text-emerald-600">
+                        {formatCurrency(
+                          Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Button
               onClick={() => setStep("confirmation")}
-              disabled={!depositAmount || Number(depositAmount) < 1000}
+              disabled={!depositAmount || Number(depositAmount) < 5000 || !commitmentPeriod || !liquidity}
               className="w-full"
               size="lg"
             >

@@ -157,7 +157,7 @@ export function InvestorDashboard() {
       // Buscar resgates
       const { data: withdrawalsRaw, error: withdrawalsError } = await supabase
         .from("transactions")
-        .select("amount, created_at")
+        .select("amount, created_at, investment_id")
         .eq("user_id", userId)
         .eq("type", "withdrawal")
         .eq("status", "completed");
@@ -194,7 +194,7 @@ export function InvestorDashboard() {
       const totalWithdrawals =
         withdrawalsRaw?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
 
-      // Calcular rendimento acumulado de cada investimento
+      // Calcular rendimento acumulado de cada investimento usando juros compostos
       let totalReturn = 0;
       investmentsRaw.forEach((inv) => {
         const monthsPassed = Math.floor(
@@ -203,26 +203,72 @@ export function InvestorDashboard() {
         );
 
         const monthlyRate = Number(inv.monthly_return_rate) || 0.02; // 2% padrão
-        totalReturn += Number(inv.amount) * monthlyRate * monthsPassed;
+        const amount = Number(inv.amount);
+        
+        // Calcular resgates específicos deste investimento
+        const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
+        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+        
+        // Valor disponível = valor original - resgates específicos
+        const availableAmount = Math.max(0, amount - totalWithdrawnFromInvestment);
+        
+        // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
+        const compoundValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+        const investmentReturn = compoundValue - availableAmount;
+        
+        totalReturn += investmentReturn;
       });
 
-      // Separar por tipo de cota
+      // Calcular valor atual considerando resgates por investimento
+      let currentValue = 0;
+      let totalInvestedAfterWithdrawals = 0;
+      
+      investmentsRaw.forEach((inv) => {
+        const amount = Number(inv.amount);
+        const monthlyRate = Number(inv.monthly_return_rate) || 0.02;
+        const monthsPassed = Math.floor(
+          (today.getTime() - new Date(inv.created_at).getTime()) /
+            (1000 * 60 * 60 * 24 * 30)
+        );
+        
+        // Calcular resgates específicos deste investimento
+        const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
+        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+        
+        // Valor disponível = valor original - resgates específicos
+        const availableAmount = Math.max(0, amount - totalWithdrawnFromInvestment);
+        
+        // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
+        const compoundValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+        
+        currentValue += compoundValue;
+        totalInvestedAfterWithdrawals += availableAmount;
+      });
+
+      // Separar por tipo de cota (considerando resgates)
       const seniorQuota = investmentsRaw
         .filter((inv) => inv.quota_type === "senior")
-        .reduce((sum, inv) => sum + Number(inv.amount), 0);
+        .reduce((sum, inv) => {
+          const amount = Number(inv.amount);
+          const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
+          const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+          return sum + Math.max(0, amount - totalWithdrawnFromInvestment);
+        }, 0);
 
       const subordinateQuota = investmentsRaw
         .filter((inv) => inv.quota_type === "subordinate")
-        .reduce((sum, inv) => sum + Number(inv.amount), 0);
+        .reduce((sum, inv) => {
+          const amount = Number(inv.amount);
+          const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
+          const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+          return sum + Math.max(0, amount - totalWithdrawnFromInvestment);
+        }, 0);
 
-      // Valor atual = total investido - resgates + retorno acumulado
-      const currentValue = totalInvested - totalWithdrawals + totalReturn;
-
-      // Retorno mensal baseado no saldo líquido
-      const monthlyReturn = (currentValue - totalWithdrawals) * 0.02; // 2% sobre saldo líquido
+      // Retorno mensal baseado no valor atual
+      const monthlyReturn = currentValue * 0.02; // 2% sobre valor atual
 
       setInvestments({
-        totalInvested: totalInvested - totalWithdrawals,
+        totalInvested: totalInvestedAfterWithdrawals,
         currentValue,
         monthlyReturn,
         seniorQuota,

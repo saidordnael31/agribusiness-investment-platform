@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const investmentData = await request.json()
-    const supabase = createClient()
+    const supabase = await createServerClient()
 
     const { data, error } = await supabase
       .from("investments")
