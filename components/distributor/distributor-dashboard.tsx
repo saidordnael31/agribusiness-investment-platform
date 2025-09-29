@@ -197,10 +197,15 @@ export function DistributorDashboard() {
     if (userStr) {
       const userData = JSON.parse(userStr);
       setUser(userData);
-      fetchMyInvestors(userData.id);
-      fetchMyAdvisors(userData.id);
     }
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchMyInvestors(user?.id);
+      fetchMyAdvisors(user?.id);
+    }
+  }, [user]);
 
   const fetchMyInvestors = async (distributorId: string) => {
     let profilesWithInvestments: any[] = [];
@@ -208,12 +213,23 @@ export function DistributorDashboard() {
       setLoadingInvestors(true);
       const supabase = createClient();
 
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_type", "investor")
-        .eq("parent_id", distributorId)
-        .order("created_at", { ascending: false });
+      // Se for escritório, buscar por office_id, senão buscar por parent_id
+      const query =
+        user?.role === "escritorio"
+          ? supabase
+              .from("profiles")
+              .select("*")
+              .eq("user_type", "investor")
+              .eq("office_id", distributorId)
+              .order("created_at", { ascending: false })
+          : supabase
+              .from("profiles")
+              .select("*")
+              .eq("user_type", "investor")
+              .eq("parent_id", distributorId)
+              .order("created_at", { ascending: false });
+
+      const { data: profiles, error: profilesError } = await query;
 
       if (!profilesError && profiles.length > 0) {
         const profileIds = profiles.map((p) => p.id);
@@ -274,12 +290,23 @@ export function DistributorDashboard() {
       setLoadingAdvisors(true);
       const supabase = createClient();
 
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_type", "distributor")
-        .eq("parent_id", distributorId)
-        .order("created_at", { ascending: false });
+      // Se for escritório, buscar por office_id, senão buscar por parent_id
+      const query =
+        user?.role === "escritorio"
+          ? supabase
+              .from("profiles")
+              .select("*")
+              .eq("user_type", "distributor")
+              .eq("office_id", distributorId)
+              .order("created_at", { ascending: false })
+          : supabase
+              .from("profiles")
+              .select("*")
+              .eq("user_type", "distributor")
+              .eq("parent_id", distributorId)
+              .order("created_at", { ascending: false });
+
+      const { data: profiles, error: profilesError } = await query;
 
       if (profilesError) {
         console.error("Erro ao buscar assessores:", profilesError);
@@ -1025,7 +1052,11 @@ export function DistributorDashboard() {
 
         {/* Tabs Section */}
         <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList className={`grid w-full grid-cols-${user.role === "escritorio" ? 4 : 3}`}	>
+          <TabsList
+            className={`grid w-full grid-cols-${
+              user.role === "escritorio" ? 4 : 3
+            }`}
+          >
             <TabsTrigger value="simulator" className="text-sm">
               Simulador
             </TabsTrigger>
