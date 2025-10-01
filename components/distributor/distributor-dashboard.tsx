@@ -92,6 +92,7 @@ interface QRCodeData {
 export function DistributorDashboard() {
   const { toast } = useToast();
   const [user, setUser] = useState<UserData | null>(null);
+  const [userOfficeId, setUserOfficeId] = useState<string | null>(null);
   const [myInvestors, setMyInvestors] = useState<Investor[]>([]);
   const [myAdvisors, setMyAdvisors] = useState<Advisor[]>([]);
   const [loadingInvestors, setLoadingInvestors] = useState(true);
@@ -100,6 +101,7 @@ export function DistributorDashboard() {
   const [searchAdvisorTerm, setSearchAdvisorTerm] = useState("");
 
   const [showInvestorModal, setShowInvestorModal] = useState(false);
+  const [userType, setUserType] = useState<"investor" | "advisor">("investor");
   const [investorForm, setInvestorForm] = useState({
     fullName: "",
     email: "",
@@ -200,8 +202,34 @@ export function DistributorDashboard() {
     }
   }, []);
 
+  // Função para buscar o office_id do usuário logado
+  const fetchUserOfficeId = async (userId: string) => {
+    try {
+      const supabase = createClient();
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("office_id, role")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Erro ao buscar office_id do usuário:", error);
+        return;
+      }
+
+      // Se o usuário for um escritório, seu office_id é seu próprio id
+      // Se for um assessor, usa o office_id do seu perfil
+      const officeId = profile.role === "escritorio" ? userId : profile.office_id;
+      console.log(`[v0] Office ID definido para usuário ${userId}:`, officeId, `(role: ${profile.role})`);
+      setUserOfficeId(officeId);
+    } catch (error) {
+      console.error("Erro ao buscar office_id:", error);
+    }
+  };
+
   useEffect(() => {
     if (user?.id) {
+      fetchUserOfficeId(user.id);
       fetchMyInvestors(user?.id);
       fetchMyAdvisors(user?.id);
     }
@@ -383,11 +411,11 @@ export function DistributorDashboard() {
   const handleCreateInvestor = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validações básicas para ambos os tipos
     if (
       !investorForm.fullName ||
       !investorForm.email ||
       !investorForm.password ||
-      !investorForm.investmentValue ||
       !investorForm.rg ||
       !investorForm.nationality ||
       !investorForm.maritalStatus ||
@@ -404,16 +432,28 @@ export function DistributorDashboard() {
       return;
     }
 
-    const investmentValue = Number.parseFloat(
-      investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
-    );
-    if (investmentValue < 5000) {
-      toast({
-        title: "Valor mínimo não atingido",
-        description: "O valor mínimo de investimento é R$ 5.000,00.",
-        variant: "destructive",
-      });
-      return;
+    // Validações específicas para investidor
+    if (userType === "investor") {
+      if (!investorForm.investmentValue) {
+        toast({
+          title: "Valor do investimento obrigatório",
+          description: "O valor do investimento é obrigatório para investidores.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const investmentValue = Number.parseFloat(
+        investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
+      );
+      if (investmentValue < 5000) {
+        toast({
+          title: "Valor mínimo não atingido",
+          description: "O valor mínimo de investimento é R$ 5.000,00.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (investorForm.password !== investorForm.confirmPassword) {
@@ -436,6 +476,16 @@ export function DistributorDashboard() {
 
     try {
       setSubmittingInvestor(true);
+
+      // Verificar se o office_id está disponível
+      if (!userOfficeId) {
+        toast({
+          title: "Erro de configuração",
+          description: "Office ID não encontrado. Tente fazer login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // const [firstName, ...lastNameParts] = investorForm.fullName
       //   .trim()
@@ -487,10 +537,10 @@ export function DistributorDashboard() {
         options: {
           emailRedirectTo:
             process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-            `${window.location.origin}/dashboard`,
+            `${window.location.origin}/login`,
           data: {
             full_name: investorForm.fullName,
-            user_type: "investor",
+            user_type: userType === "investor" ? "investor" : "distributor",
             phone: investorForm.phone,
             parent_id: user?.id || null,
             cpf_cnpj: investorForm.cpf,
@@ -520,6 +570,7 @@ export function DistributorDashboard() {
       console.log(
         "[v0] Perfil será criado automaticamente pelo trigger do Supabase"
       );
+      console.log("[v0] Criando perfil com office_id:", userOfficeId);
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
@@ -529,13 +580,14 @@ export function DistributorDashboard() {
             email: authData.user.email,
             full_name: authData.user.user_metadata.full_name,
             user_type: authData.user.user_metadata.user_type,
-            role: "investidor",
+            role: userType === "investor" ? "investidor" : "assessor",
             parent_id: authData.user.user_metadata.parent_id || null,
+            office_id: userOfficeId, // Usar o office_id do usuário logado
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
             notes: `Usuário criádo via dashboard do assessor ${user?.name}`,
-            hierarchy_level: "advisor",
-            rescue_type: investorForm.rescueTerm,
+            hierarchy_level: userType === "investor" ? "advisor" : "advisor",
+            rescue_type: userType === "investor" ? investorForm.rescueTerm : null,
             is_active: true,
             rg: investorForm.rg,
             nationality: investorForm.nationality,
@@ -556,45 +608,64 @@ export function DistributorDashboard() {
         console.log("Perfil criado:", profileData);
       }
 
-      console.log("[v0] Criando investimento na tabela investments...");
-      const { data: investmentData, error: investmentError } =
-        await supabase.rpc("create_investment_for_user", {
-          p_user_id: authData.user.id, // ou o id do investidor que o assessor quer criar
-          p_amount: Number(investmentValue),
-          p_status: "pending",
-          p_quota_type: "senior",
-          p_monthly_return_rate:
-            user?.role === "escritorio"
-              ? 0.01
-              : user?.role === "investor"
-              ? 0.02
-              : 0.03,
-          p_commitment_period: 12,
-        });
+      // Criar investimento apenas para investidores
+      if (userType === "investor") {
+        const investmentValue = Number.parseFloat(
+          investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
+        );
 
-      if (investmentError) {
-        console.error("Erro ao criar investimento:", investmentError);
-      } else {
-        console.log("Investimento criado:", investmentData);
+        console.log("[v0] Criando investimento na tabela investments...");
+        const { data: investmentData, error: investmentError } =
+          await supabase.rpc("create_investment_for_user", {
+            p_user_id: authData.user.id, // ou o id do investidor que o assessor quer criar
+            p_amount: Number(investmentValue),
+            p_status: "pending",
+            p_quota_type: "senior",
+            p_monthly_return_rate:
+              user?.role === "escritorio"
+                ? 0.01
+                : user?.role === "investor"
+                ? 0.02
+                : 0.03,
+            p_commitment_period: 12,
+          });
+
+        if (investmentError) {
+          console.error("Erro ao criar investimento:", investmentError);
+        } else {
+          console.log("Investimento criado:", investmentData);
+        }
       }
 
       toast({
-        title: "Investidor cadastrado!",
-        description: `${investorForm.fullName} foi cadastrado com sucesso. Gerando QR Code PIX...`,
+        title: userType === "investor" ? "Investidor cadastrado!" : "Assessor cadastrado!",
+        description: `${investorForm.fullName} foi cadastrado com sucesso.${userType === "investor" ? " Gerando QR Code PIX..." : ""}`,
       });
 
-      await generateQRCode(investmentValue, investorForm.cpf);
+      // Gerar QR Code apenas para investidores
+      if (userType === "investor") {
+        const investmentValue = Number.parseFloat(
+          investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
+        );
+        await generateQRCode(investmentValue, investorForm.cpf);
+      }
+      
       setShowInvestorModal(false);
 
       if (user?.id) {
-        setTimeout(() => fetchMyInvestors(user.id), 2000);
+        setTimeout(() => {
+          fetchMyInvestors(user.id);
+          if (user.role === "escritorio") {
+            fetchMyAdvisors(user.id);
+          }
+        }, 2000);
       }
     } catch (error: any) {
-      console.error("Erro ao cadastrar investidor:", error);
+      console.error("Erro ao cadastrar usuário:", error);
       toast({
-        title: "Erro ao cadastrar investidor",
+        title: userType === "investor" ? "Erro ao cadastrar investidor" : "Erro ao cadastrar assessor",
         description:
-          error.message || "Não foi possível cadastrar o investidor.",
+          error.message || `Não foi possível cadastrar o ${userType === "investor" ? "investidor" : "assessor"}.`,
         variant: "destructive",
       });
     } finally {
@@ -621,6 +692,7 @@ export function DistributorDashboard() {
 
       const result = await response.json();
 
+      setUserType("investor");
       setInvestorForm({
         fullName: "",
         email: "",
@@ -1069,7 +1141,7 @@ export function DistributorDashboard() {
               </TabsTrigger>
             )}
             <TabsTrigger value="register" className="text-sm">
-              Cadastrar Investidor
+              {user.role === "escritorio" ? "Cadastrar Usuário" : "Cadastrar Investidor"}
             </TabsTrigger>
           </TabsList>
 
@@ -1272,11 +1344,13 @@ export function DistributorDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <UserPlus className="w-5 h-5" />
-                  Cadastrar Novo Investidor
+                  {user.role === "escritorio" ? "Cadastrar Novo Usuário" : "Cadastrar Novo Investidor"}
                 </CardTitle>
                 <CardDescription>
-                  Cadastre um novo investidor na plataforma. Ele será
-                  automaticamente associado a você como assessor.
+                  {user.role === "escritorio" 
+                    ? "Cadastre um novo usuário na plataforma. Escolha entre investidor ou assessor."
+                    : "Cadastre um novo investidor na plataforma. Ele será automaticamente associado a você como assessor."
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1284,6 +1358,39 @@ export function DistributorDashboard() {
                   onSubmit={handleCreateInvestor}
                   className="space-y-4 max-w-full"
                 >
+                  {/* Switch para escolher tipo de usuário (apenas para escritório) */}
+                  {user.role === "escritorio" && (
+                    <div className="mb-6 p-4 border rounded-lg bg-muted/50">
+                      <Label className="text-base font-semibold mb-3 block">
+                        Tipo de Usuário
+                      </Label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="userType"
+                            value="investor"
+                            checked={userType === "investor"}
+                            onChange={(e) => setUserType(e.target.value as "investor" | "advisor")}
+                            className="w-4 h-4"
+                          />
+                          <span>Investidor</span>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="userType"
+                            value="advisor"
+                            checked={userType === "advisor"}
+                            onChange={(e) => setUserType(e.target.value as "investor" | "advisor")}
+                            className="w-4 h-4"
+                          />
+                          <span>Assessor</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="fullName">Nome Completo *</Label>
@@ -1454,74 +1561,79 @@ export function DistributorDashboard() {
                       />
                     </div>
 
-                    <div>
-                      <Label htmlFor="investmentValue">
-                        Valor do Investimento * (mínimo R$ 5.000,00)
-                      </Label>
-                      <Input
-                        id="investmentValue"
-                        value={investorForm.investmentValue}
-                        onChange={(e) => {
-                          const formatted = formatCurrencyInput(e.target.value);
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            investmentValue: formatted,
-                          }));
-                        }}
-                        placeholder="R$ 5.000,00"
-                        required
-                      />
-                    </div>
+                    {/* Campos específicos para investidores */}
+                    {userType === "investor" && (
+                      <>
+                        <div>
+                          <Label htmlFor="investmentValue">
+                            Valor do Investimento * (mínimo R$ 5.000,00)
+                          </Label>
+                          <Input
+                            id="investmentValue"
+                            value={investorForm.investmentValue}
+                            onChange={(e) => {
+                              const formatted = formatCurrencyInput(e.target.value);
+                              setInvestorForm((prev) => ({
+                                ...prev,
+                                investmentValue: formatted,
+                              }));
+                            }}
+                            placeholder="R$ 5.000,00"
+                            required
+                          />
+                        </div>
 
-                    <div>
-                      <Label htmlFor="rescueTerm">Prazo de Resgate *</Label>
-                      <select
-                        id="rescueTerm"
-                        value={investorForm.rescueTerm}
-                        onChange={(e) => {
-                          const term = e.target.value;
-                          let profitability = "";
-                          switch (term) {
-                            case "D+60":
-                              profitability = "2% a.m.";
-                              break;
-                            case "D+90":
-                              profitability = "2,5% a.m.";
-                              break;
-                            case "D+180":
-                              profitability =
-                                user.role === "escritorio"
-                                  ? "1% a.m."
-                                  : user.role === "investor"
-                                  ? "2% a.m."
-                                  : "3% a.m.";
-                              break;
-                            case "D+360":
-                              profitability = "3,5% a.m.";
-                              break;
-                          }
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            rescueTerm: term,
-                            profitability,
-                          }));
-                        }}
-                        className="w-full border rounded-md p-2"
-                        required
-                      >
-                        <option value="">Selecione o prazo</option>
-                        <option value="D+60">D+60</option>
-                        <option value="D+90">D+90</option>
-                        <option value="D+180">D+180</option>
-                        <option value="D+360">D+360</option>
-                      </select>
+                        <div>
+                          <Label htmlFor="rescueTerm">Prazo de Resgate *</Label>
+                          <select
+                            id="rescueTerm"
+                            value={investorForm.rescueTerm}
+                            onChange={(e) => {
+                              const term = e.target.value;
+                              let profitability = "";
+                              switch (term) {
+                                case "D+60":
+                                  profitability = "2% a.m.";
+                                  break;
+                                case "D+90":
+                                  profitability = "2,5% a.m.";
+                                  break;
+                                case "D+180":
+                                  profitability =
+                                    user.role === "escritorio"
+                                      ? "1% a.m."
+                                      : user.role === "investor"
+                                      ? "2% a.m."
+                                      : "3% a.m.";
+                                  break;
+                                case "D+360":
+                                  profitability = "3,5% a.m.";
+                                  break;
+                              }
+                              setInvestorForm((prev) => ({
+                                ...prev,
+                                rescueTerm: term,
+                                profitability,
+                              }));
+                            }}
+                            className="w-full border rounded-md p-2"
+                            required
+                          >
+                            <option value="">Selecione o prazo</option>
+                            <option value="D+60">D+60</option>
+                            <option value="D+90">D+90</option>
+                            <option value="D+180">D+180</option>
+                            <option value="D+360">D+360</option>
+                          </select>
 
-                      {/* Aviso de multa */}
-                      <p className="mt-1 text-sm text-red-600">
-                        Resgates antes do prazo terão multa de{" "}
-                        <strong>20%</strong> + perda da rentabilidade.
-                      </p>
-                    </div>
+                          {/* Aviso de multa */}
+                          <p className="mt-1 text-sm text-red-600">
+                            Resgates antes do prazo terão multa de{" "}
+                            <strong>20%</strong> + perda da rentabilidade.
+                          </p>
+                        </div>
+                      </>
+                    )}
 
                     {/* Exibir rentabilidade dinâmica */}
                     {/* {investorForm.profitability ? (
@@ -1577,6 +1689,7 @@ export function DistributorDashboard() {
                       type="button"
                       variant="outline"
                       onClick={() => {
+                        setUserType("investor");
                         setInvestorForm({
                           fullName: "",
                           email: "",
@@ -1609,7 +1722,7 @@ export function DistributorDashboard() {
                       ) : (
                         <>
                           <UserPlus className="w-4 h-4 mr-2" />
-                          Cadastrar Investidor
+                          {userType === "investor" ? "Cadastrar Investidor" : "Cadastrar Assessor"}
                         </>
                       )}
                     </Button>
