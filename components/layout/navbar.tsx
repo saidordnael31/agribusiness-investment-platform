@@ -341,11 +341,22 @@ export function Navbar() {
                   />
                 ) : (
                   <>
+                    <Link href="/profile">
+                      <Button
+                        variant="outline"
+                        className="cursor-pointer"
+                        size="sm"
+                        title="Meu Perfil"
+                      >
+                        <User className="h-4" />
+                      </Button>
+                    </Link>
                     <Button
                       variant="outline"
                       className="cursor-pointer"
                       size="sm"
                       onClick={handleNewPassword}
+                      title="Mudar Senha"
                     >
                       <Key className="h-4" />
                     </Button>
@@ -354,6 +365,7 @@ export function Navbar() {
                       className="cursor-pointer"
                       size="sm"
                       onClick={handleLogout}
+                      title="Sair"
                     >
                       <LogOut className="h-4 mr-2" />
                       Sair
