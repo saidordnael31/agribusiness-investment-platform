@@ -32,6 +32,10 @@ import {
   UserPlus,
   QrCode,
   Copy,
+  Eye,
+  Edit,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
@@ -45,6 +49,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RegisterForm } from "../auth/register-form";
+import { UserProfileView } from "./user-profile-view";
+import { UserProfileEdit } from "./user-profile-edit";
 
 interface User {
   id: string;
@@ -76,6 +82,11 @@ export function UserManager() {
     "all" | "active" | "inactive" | "pending"
   >("all");
 
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [totalUsers, setTotalUsers] = useState(0);
+
   const [showInvestorModal, setShowInvestorModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [investorForm, setInvestorForm] = useState({
@@ -95,8 +106,15 @@ export function UserManager() {
   const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null);
   const [generatingQR, setGeneratingQR] = useState(false);
 
+  // Estados para modais de perfil
+  const [showProfileViewModal, setShowProfileViewModal] = useState(false);
+  const [showProfileEditModal, setShowProfileEditModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserData, setSelectedUserData] = useState<User | null>(null);
+  const [loadingUserData, setLoadingUserData] = useState(false);
+
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(1, "", "all", "all");
     fetchAssessors();
   }, []);
 
@@ -127,16 +145,44 @@ export function UserManager() {
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (page: number = 1, search: string = "", typeFilter: string = "all", statusFilter: string = "all") => {
     try {
       setLoading(true);
       const supabase = createClient();
 
-      // Buscar todos os perfis de usuários
-      const { data: profiles, error } = await supabase
+      // Construir query base
+      let query = supabase
         .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("*", { count: 'exact' });
+
+      // Aplicar filtros
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+
+      if (typeFilter !== "all") {
+        query = query.eq("user_type", typeFilter);
+      }
+
+      if (statusFilter !== "all") {
+        if (statusFilter === "active") {
+          query = query.eq("is_active", true);
+        } else if (statusFilter === "inactive") {
+          query = query.eq("is_active", false);
+        } else if (statusFilter === "pending") {
+          query = query.eq("is_active", false); // Assumindo que pending = inactive
+        }
+      }
+
+      // Aplicar paginação
+      const from = (page - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+      query = query.range(from, to);
+
+      // Ordenar
+      query = query.order("created_at", { ascending: false });
+
+      const { data: profiles, error, count } = await query;
 
       if (error) {
         console.error("Erro ao buscar usuários:", error);
@@ -148,16 +194,13 @@ export function UserManager() {
         return;
       }
 
-      console.log("ON ADMIN DASHBOARD - profiles", profiles);
-      console.log("error", error);
-
       // Transformar dados do Supabase para o formato esperado
       const transformedUsers: User[] = (profiles || []).map((profile) => ({
         id: profile.id,
         name: profile.full_name || profile.email.split("@")[0],
         email: profile.email,
         type: profile.user_type || "investor",
-        status: profile.status || "active",
+        status: profile.is_active ? "active" : "inactive",
         totalInvested: profile.total_invested || 0,
         totalCaptured: profile.total_captured || 0,
         joinedAt: profile.created_at,
@@ -165,6 +208,7 @@ export function UserManager() {
       }));
 
       setUsers(transformedUsers);
+      setTotalUsers(count || 0);
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
       toast({
@@ -177,15 +221,31 @@ export function UserManager() {
     }
   };
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === "all" || user.type === filterType;
-    const matchesStatus =
-      filterStatus === "all" || user.status === filterStatus;
-    return matchesSearch && matchesType && matchesStatus;
-  });
+  // Funções para lidar com mudanças de filtros e paginação
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+    fetchUsers(1, value, filterType, filterStatus);
+  };
+
+  const handleTypeFilterChange = (value: string) => {
+    setFilterType(value as any);
+    setCurrentPage(1);
+    fetchUsers(1, searchTerm, value, filterStatus);
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    setFilterStatus(value as any);
+    setCurrentPage(1);
+    fetchUsers(1, searchTerm, filterType, value);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchUsers(page, searchTerm, filterType, filterStatus);
+  };
+
+  const totalPages = Math.ceil(totalUsers / itemsPerPage);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -509,6 +569,81 @@ export function UserManager() {
     return formattedValue;
   };
 
+  // Função para buscar dados completos do usuário
+  const fetchUserCompleteData = async (userId: string) => {
+    try {
+      setLoadingUserData(true);
+      const response = await fetch(`/api/profile?userId=${userId}`);
+      const result = await response.json();
+
+      if (result.success) {
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Erro ao carregar dados do usuário');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados completos do usuário:', error);
+      toast({
+        title: "Erro ao carregar dados",
+        description: error instanceof Error ? error.message : "Erro inesperado",
+        variant: "destructive"
+      });
+      return null;
+    } finally {
+      setLoadingUserData(false);
+    }
+  };
+
+  // Funções para gerenciar perfil do usuário
+  const handleViewProfile = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setSelectedUserData(user);
+      setSelectedUserId(userId);
+      setShowProfileViewModal(true);
+    }
+  };
+
+  const handleEditProfile = async (userId: string) => {
+    setSelectedUserId(userId);
+    setShowProfileEditModal(true);
+    
+    // Buscar dados completos do usuário
+    const completeUserData = await fetchUserCompleteData(userId);
+    if (completeUserData) {
+      setSelectedUserData(completeUserData as any);
+    }
+  };
+
+  const handleProfileSave = (updatedData: any) => {
+    // Atualizar a lista de usuários com os dados atualizados
+    setUsers(prevUsers => 
+      prevUsers.map(user => 
+        user.id === selectedUserId ? { ...user, ...updatedData } : user
+      )
+    );
+    setShowProfileEditModal(false);
+    setSelectedUserId(null);
+    setSelectedUserData(null);
+  };
+
+  const handleProfileViewClose = () => {
+    setShowProfileViewModal(false);
+    setSelectedUserId(null);
+    setSelectedUserData(null);
+  };
+
+  const handleProfileEditClose = () => {
+    setShowProfileEditModal(false);
+    setSelectedUserId(null);
+    setSelectedUserData(null);
+  };
+
+  const handleEditFromView = () => {
+    setShowProfileViewModal(false);
+    setShowProfileEditModal(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -799,7 +934,7 @@ export function UserManager() {
                 <Input
                   placeholder="Nome ou email..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -808,7 +943,7 @@ export function UserManager() {
               <label className="text-sm font-medium">Tipo de Usuário</label>
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
+                onChange={(e) => handleTypeFilterChange(e.target.value)}
                 className="w-full mt-1 px-3 py-2 border rounded-lg"
               >
                 <option value="all">Todos</option>
@@ -823,7 +958,7 @@ export function UserManager() {
               <label className="text-sm font-medium">Status</label>
               <select
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
                 className="w-full mt-1 px-3 py-2 border rounded-lg"
               >
                 <option value="all">Todos</option>
@@ -844,7 +979,7 @@ export function UserManager() {
                 <p className="text-sm font-medium text-muted-foreground">
                   Total de Usuários
                 </p>
-                <p className="text-2xl font-bold">{users.length}</p>
+                <p className="text-2xl font-bold">{totalUsers}</p>
               </div>
               <Users className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -914,7 +1049,7 @@ export function UserManager() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {filteredUsers.length === 0 ? (
+          {users.length === 0 ? (
             <div className="text-center py-8">
               <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">Nenhum usuário encontrado</p>
@@ -934,7 +1069,7 @@ export function UserManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
@@ -965,24 +1100,22 @@ export function UserManager() {
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        {user.status === "pending" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleApproveUser(user.id)}
-                          >
-                            <UserCheck className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {user.status === "active" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSuspendUser(user.id)}
-                          >
-                            <UserX className="w-4 h-4" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewProfile(user.id)}
+                          title="Ver Perfil"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditProfile(user.id)}
+                          title="Alterar Perfil"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -990,8 +1123,112 @@ export function UserManager() {
               </TableBody>
             </Table>
           )}
+
+          {/* Controles de Paginação */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Página {currentPage} de {totalPages} ({totalUsers} usuários)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Anterior
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i
+                    if (pageNum > totalPages) return null
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={pageNum === currentPage ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Próxima
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Modal para visualizar perfil */}
+      <Dialog open={showProfileViewModal} onOpenChange={setShowProfileViewModal}>
+        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Perfil do Usuário</DialogTitle>
+            <DialogDescription>
+              Visualizando informações detalhadas do usuário
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUserId && (
+            <UserProfileView
+              userId={selectedUserId}
+              onEdit={handleEditFromView}
+              onClose={handleProfileViewClose}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para editar perfil */}
+      <Dialog open={showProfileEditModal} onOpenChange={setShowProfileEditModal}>
+        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Perfil do Usuário</DialogTitle>
+            <DialogDescription>
+              Alterando informações do usuário
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUserId && (
+            loadingUserData ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+                  <p className="text-muted-foreground">Carregando dados do usuário...</p>
+                </div>
+              </div>
+            ) : selectedUserData ? (
+              <UserProfileEdit
+                userId={selectedUserId}
+                initialData={selectedUserData as any}
+                onSave={handleProfileSave}
+                onCancel={handleProfileEditClose}
+              />
+            ) : (
+              <div className="text-center p-8">
+                <p className="text-muted-foreground">Erro ao carregar dados do usuário</p>
+                <Button onClick={handleProfileEditClose} variant="outline" className="mt-4">
+                  Fechar
+                </Button>
+              </div>
+            )
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -583,18 +583,20 @@ export function AdminDashboard() {
 
       {/* Main Content */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-10">
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="akintec">Akintec</TabsTrigger>
-          <TabsTrigger value="hierarchy">Hierarquia</TabsTrigger>
-          <TabsTrigger value="recurrence">Recorrência</TabsTrigger>
-          <TabsTrigger value="notifications">Notificações</TabsTrigger>
-          <TabsTrigger value="settings">Configurações</TabsTrigger>
-          <TabsTrigger value="promotions">Promoções</TabsTrigger>
-          <TabsTrigger value="bonifications">Bonificações</TabsTrigger>
-          <TabsTrigger value="users">Usuários</TabsTrigger>
-          <TabsTrigger value="reports">Relatórios</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10 min-w-max">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Visão Geral</TabsTrigger>
+            <TabsTrigger value="akintec" className="text-xs sm:text-sm">Akintec</TabsTrigger>
+            <TabsTrigger value="hierarchy" className="text-xs sm:text-sm">Hierarquia</TabsTrigger>
+            <TabsTrigger value="recurrence" className="text-xs sm:text-sm">Recorrência</TabsTrigger>
+            <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notificações</TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs sm:text-sm">Configurações</TabsTrigger>
+            <TabsTrigger value="promotions" className="text-xs sm:text-sm">Promoções</TabsTrigger>
+            <TabsTrigger value="bonifications" className="text-xs sm:text-sm">Bonificações</TabsTrigger>
+            <TabsTrigger value="users" className="text-xs sm:text-sm">Usuários</TabsTrigger>
+            <TabsTrigger value="reports" className="text-xs sm:text-sm">Relatórios</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
