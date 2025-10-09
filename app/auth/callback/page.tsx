@@ -141,6 +141,13 @@ export default function AuthCallbackPage() {
             console.error("Dados essenciais faltando no localStorage:", parsedUser)
             throw new Error("Dados essenciais não foram salvos corretamente")
           }
+          
+          // Disparar evento customizado para notificar outros componentes
+          window.dispatchEvent(new CustomEvent("localStorageChange", {
+            detail: { key: "user", value: parsedUser }
+          }))
+          
+          console.log("Evento localStorageChange disparado")
         } else {
           throw new Error("Falha ao salvar no localStorage")
         }
