@@ -36,7 +36,6 @@ import {
   Edit,
   ChevronLeft,
   ChevronRight,
-  Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
@@ -113,7 +112,6 @@ export function UserManager() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUserData, setSelectedUserData] = useState<User | null>(null);
   const [loadingUserData, setLoadingUserData] = useState(false);
-  const [sendingMagicLink, setSendingMagicLink] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers(1, "", "all", "all");
@@ -646,39 +644,6 @@ export function UserManager() {
     setShowProfileEditModal(true);
   };
 
-  // Função para enviar magic link de login
-  const handleSendMagicLink = async (userEmail: string, userId: string) => {
-    try {
-      setSendingMagicLink(userId);
-      
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: userEmail,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Magic Link enviado!",
-        description: `Um link de login foi enviado para ${userEmail}`,
-      });
-    } catch (error: any) {
-      console.error("Erro ao enviar magic link:", error);
-      toast({
-        title: "Erro ao enviar magic link",
-        description: error.message || "Não foi possível enviar o link de login.",
-        variant: "destructive",
-      });
-    } finally {
-      setSendingMagicLink(null);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1150,19 +1115,6 @@ export function UserManager() {
                           title="Alterar Perfil"
                         >
                           <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSendMagicLink(user.email, user.id)}
-                          disabled={sendingMagicLink === user.id}
-                          title="Enviar Link de Login"
-                        >
-                          {sendingMagicLink === user.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Mail className="w-4 h-4" />
-                          )}
                         </Button>
                       </div>
                     </TableCell>

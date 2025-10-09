@@ -57,50 +57,18 @@ export function Navbar() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const checkUser = () => {
-      const userStr = localStorage.getItem("user");
-      if (userStr) {
-        try {
-          const userData = JSON.parse(userStr);
-          if (userData && userData.email && userData.user_type) {
-            setUser(userData);
-          }
-        } catch (error) {
-          console.error("Erro ao parsear dados do usuário:", error);
-          localStorage.removeItem("user");
-          setUser(null);
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        if (userData && userData.email && userData.user_type) {
+          setUser(userData);
         }
-      } else {
-        setUser(null);
+      } catch (error) {
+        console.error("Erro ao parsear dados do usuário:", error);
+        localStorage.removeItem("user");
       }
-    };
-
-    // Verificar usuário inicial
-    checkUser();
-
-    // Listener para mudanças no localStorage
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "user") {
-        checkUser();
-      }
-    };
-
-    // Listener para mudanças na mesma aba (quando localStorage é alterado programaticamente)
-    const handleStorageChangeLocal = () => {
-      checkUser();
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("localStorageChange", handleStorageChangeLocal);
-
-    // Verificar periodicamente se o usuário mudou (fallback)
-    const interval = setInterval(checkUser, 1000);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("localStorageChange", handleStorageChangeLocal);
-      clearInterval(interval);
-    };
+    }
   }, []);
 
   const handleNewPassword = () => {

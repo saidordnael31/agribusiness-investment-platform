@@ -93,11 +93,6 @@ export function LoginForm() {
 
         console.log("[v0] Saving user data:", userData);
         localStorage.setItem("user", JSON.stringify(userData));
-        
-        // Disparar evento customizado para notificar outros componentes
-        window.dispatchEvent(new CustomEvent("localStorageChange", {
-          detail: { key: "user", value: userData }
-        }));
 
         toast({
           title: "Login realizado com sucesso!",
@@ -265,11 +260,6 @@ export function LoginForm() {
 
       console.log("[v0] Saving Supabase user data:", userData);
       localStorage.setItem("user", JSON.stringify(userData));
-      
-      // Disparar evento customizado para notificar outros componentes
-      window.dispatchEvent(new CustomEvent("localStorageChange", {
-        detail: { key: "user", value: userData }
-      }));
 
       toast({
         title: "Login realizado com sucesso!",
