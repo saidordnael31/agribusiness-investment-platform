@@ -82,6 +82,7 @@ export default function AuthCallbackPage() {
       const supabase = createClient()
       
       // Buscar perfil do usuário
+      console.log("Buscando perfil para usuário:", userId)
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("*")
@@ -110,11 +111,13 @@ export default function AuthCallbackPage() {
         return
       }
 
-      // Salvar dados do usuário no localStorage
+      console.log("Perfil encontrado:", profile)
+
+      // Salvar dados do usuário no localStorage (mesmo formato do login normal)
       const userData = {
         id: userId,
         email: profile.email,
-        name: profile.full_name,
+        name: profile.full_name, // Usar full_name para consistência
         user_type: profile.user_type,
         office_id: profile.office_id || null,
         role: profile.role || null,
@@ -122,7 +125,35 @@ export default function AuthCallbackPage() {
         rescue_type: profile.rescue_type || null,
       }
 
-      localStorage.setItem("user", JSON.stringify(userData))
+      console.log("Salvando dados do usuário no localStorage:", userData)
+      
+      try {
+        localStorage.setItem("user", JSON.stringify(userData))
+        
+        // Verificar se foi salvo corretamente
+        const savedUser = localStorage.getItem("user")
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser)
+          console.log("Dados salvos no localStorage:", parsedUser)
+          
+          // Verificar se os dados essenciais estão presentes
+          if (!parsedUser.id || !parsedUser.email || !parsedUser.user_type) {
+            console.error("Dados essenciais faltando no localStorage:", parsedUser)
+            throw new Error("Dados essenciais não foram salvos corretamente")
+          }
+        } else {
+          throw new Error("Falha ao salvar no localStorage")
+        }
+      } catch (error) {
+        console.error("Erro ao salvar no localStorage:", error)
+        toast({
+          title: "Erro ao salvar dados",
+          description: "Não foi possível salvar os dados de login. Tente novamente.",
+          variant: "destructive"
+        })
+        router.push("/login")
+        return
+      }
 
       toast({
         title: "Login realizado com sucesso!",
@@ -138,8 +169,13 @@ export default function AuthCallbackPage() {
         redirectPath = "/admin"
       }
 
+      console.log("Tipo de usuário:", profile.user_type)
       console.log("Redirecionando para:", redirectPath)
-      router.push(redirectPath)
+      
+      // Aguardar um pouco para garantir que o localStorage foi salvo
+      setTimeout(() => {
+        router.push(redirectPath)
+      }, 100)
     } catch (error) {
       console.error("Erro ao redirecionar usuário:", error)
       toast({
