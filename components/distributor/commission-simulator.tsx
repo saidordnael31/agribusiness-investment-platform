@@ -37,24 +37,21 @@ export function CommissionSimulator() {
     if (!amount) return
 
     // Determinar role baseado no tipo de usuário
-    const userRole = user?.user_type === "investor" ? "investor" : 
-                     user?.user_type === "escritorio" ? "escritorio" : "assessor"
+    const userRole = user?.role === "investidor" ? "investidor" : 
+                     user?.role === "escritorio" ? "escritorio" : "assessor"
 
     // Calcular comissão baseada no role do usuário
     const roleCalculation = calculateCommissionWithBonus(amount, userRole, 12)
     
-    // Para o layout antigo, mostrar divisão assessor/escritório baseada no role
-    let advisorShare, officeShare
+    // Mostrar apenas a comissão do usuário atual
+    let advisorShare = 0, officeShare = 0
     if (userRole === "assessor") {
       advisorShare = roleCalculation.totalCommission
-      officeShare = 0
     } else if (userRole === "escritorio") {
-      advisorShare = 0
       officeShare = roleCalculation.totalCommission
-    } else {
-      // Para investidor, mostrar divisão proporcional
-      advisorShare = roleCalculation.totalCommission * 0.75
-      officeShare = roleCalculation.totalCommission * 0.25
+    } else if (userRole === "investidor") {
+      // Para investidor, mostrar sua comissão total
+      advisorShare = roleCalculation.totalCommission
     }
 
     setResults({
@@ -106,8 +103,8 @@ export function CommissionSimulator() {
                   }).format(results.monthlyCommission)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {user?.user_type === "investor" ? "2%" : 
-                   user?.user_type === "escritorio" ? "1%" : "3%"} sobre base investida
+                  {user?.role === "investidor" ? "2%" : 
+                   user?.role === "escritorio" ? "1%" : "3%"} ao mês sobre valor investido
                 </p>
               </div>
 
@@ -126,27 +123,33 @@ export function CommissionSimulator() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <p className="text-sm text-muted-foreground">
-                  {user?.user_type === "assessor" ? "Sua Comissão" : 
-                   user?.user_type === "escritorio" ? "Sua Comissão" : "Assessor (75%)"}
+                  {user?.role === "assessor" ? "Sua Comissão (Assessor)" : 
+                   user?.role === "escritorio" ? "Sua Comissão (Escritório)" : 
+                   "Sua Comissão (Investidor)"}
                 </p>
                 <p className="text-xl font-bold text-primary">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
-                  }).format(results.advisorShare)}
+                  }).format(results.advisorShare || results.officeShare)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {user?.role === "investidor" ? "2% ao mês" : 
+                   user?.role === "escritorio" ? "1% ao mês" : "3% ao mês"}
                 </p>
               </div>
 
               <div className="p-4 bg-secondary/5 rounded-lg border border-secondary/20">
-                <p className="text-sm text-muted-foreground">
-                  {user?.user_type === "assessor" ? "Escritório" : 
-                   user?.user_type === "escritorio" ? "Escritório" : "Escritório (25%)"}
-                </p>
+                <p className="text-sm text-muted-foreground">Valor Mensal</p>
                 <p className="text-xl font-bold text-secondary">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
-                  }).format(results.officeShare)}
+                  }).format(results.monthlyCommission)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {user?.role === "investidor" ? "2%" : 
+                   user?.role === "escritorio" ? "1%" : "3%"} ao mês
                 </p>
               </div>
             </div>
@@ -163,7 +166,9 @@ export function CommissionSimulator() {
                 <p className="text-xs text-muted-foreground">
                   {Number.parseFloat(capturedAmount) >= 1000000
                     ? "Meta 2 atingida: +3% adicional"
-                    : "Meta 1 atingida: +1% adicional"}
+                    : Number.parseFloat(capturedAmount) >= 500000
+                    ? "Meta 1 atingida: +1% adicional"
+                    : "Nenhum bônus aplicado"}
                 </p>
               </div>
             )}
@@ -182,11 +187,21 @@ export function CommissionSimulator() {
 
         <div className="bg-muted p-4 rounded-lg">
           <h4 className="font-semibold mb-2">Estrutura de Comissões:</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• <span className="font-medium text-blue-600">Investidor:</span> 2% ao mês sobre valor investido</li>
-            <li>• <span className="font-medium text-green-600">Escritório:</span> 1% ao mês sobre valor investido</li>
-            <li>• <span className="font-medium text-purple-600">Assessor:</span> 3% ao mês sobre valor investido</li>
-          </ul>
+          <div className="text-sm text-muted-foreground">
+            {user?.role === "investidor" ? (
+              <p>• <span className="font-medium text-blue-600">Sua Comissão (Investidor):</span> 2% ao mês sobre valor investido</p>
+            ) : user?.role === "escritorio" ? (
+              <p>• <span className="font-medium text-green-600">Sua Comissão (Escritório):</span> 1% ao mês sobre valor investido</p>
+            ) : user?.role === "assessor" ? (
+              <p>• <span className="font-medium text-purple-600">Sua Comissão (Assessor):</span> 3% ao mês sobre valor investido</p>
+            ) : (
+              <div className="space-y-1">
+                <p>• <span className="font-medium text-blue-600">Investidor:</span> 2% ao mês sobre valor investido</p>
+                <p>• <span className="font-medium text-green-600">Escritório:</span> 1% ao mês sobre valor investido</p>
+                <p>• <span className="font-medium text-purple-600">Assessor:</span> 3% ao mês sobre valor investido</p>
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

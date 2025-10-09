@@ -3,13 +3,13 @@
  */
 
 export interface CommissionRates {
-  investor: number;    // 2%
+  investidor: number;    // 2%
   escritorio: number;  // 1%
   assessor: number;    // 3%
 }
 
 export const COMMISSION_RATES: CommissionRates = {
-  investor: 0.02,    // 2%
+  investidor: 0.02,    // 2%
   escritorio: 0.01,  // 1%
   assessor: 0.03,    // 3%
 };
@@ -24,7 +24,7 @@ export interface CommissionCalculation {
 }
 
 export interface CommissionBreakdown {
-  investorCommission: number;
+  investidorCommission: number;
   escritorioCommission: number;
   assessorCommission: number;
   totalCommission: number;
@@ -61,14 +61,14 @@ export function calculateCommissionBreakdown(
   amount: number,
   months: number = 12
 ): CommissionBreakdown {
-  const investorCommission = amount * COMMISSION_RATES.investor * months;
+  const investidorCommission = amount * COMMISSION_RATES.investidor * months;
   const escritorioCommission = amount * COMMISSION_RATES.escritorio * months;
   const assessorCommission = amount * COMMISSION_RATES.assessor * months;
   
-  const totalCommission = investorCommission + escritorioCommission + assessorCommission;
+  const totalCommission = investidorCommission + escritorioCommission + assessorCommission;
 
   return {
-    investorCommission,
+    investidorCommission,
     escritorioCommission,
     assessorCommission,
     totalCommission,
@@ -80,7 +80,7 @@ export function calculateCommissionBreakdown(
  */
 export function getRoleDisplayName(role: keyof CommissionRates): string {
   const roleNames = {
-    investor: "Investidor",
+    investidor: "Investidor",
     escritorio: "Escritório",
     assessor: "Assessor",
   };
