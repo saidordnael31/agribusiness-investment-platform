@@ -28,26 +28,39 @@ export default function AuthCallbackPage() {
           return
         }
 
-        // Tentar trocar o código por uma sessão
-        console.log("Tentando trocar código por sessão...")
-        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+        // Verificar se há parâmetros de código na URL
+        const urlParams = new URLSearchParams(window.location.search)
+        const code = urlParams.get("code")
+        const type = urlParams.get("type")
         
-        if (error) {
-          console.error("Erro ao trocar código por sessão:", error)
-          toast({
-            title: "Erro na autenticação",
-            description: "Não foi possível completar o login. Tente novamente.",
-            variant: "destructive"
-          })
-          router.push("/login")
-          return
-        }
+        console.log("Parâmetros da URL:", { code, type })
+        console.log("URL completa:", window.location.href)
 
-        if (data?.user) {
-          console.log("Autenticação bem-sucedida:", data.user.id)
-          await redirectUser(data.user.id)
+        if (code && type === "magiclink") {
+          // Tentar trocar o código por uma sessão
+          console.log("Tentando trocar código por sessão...")
+          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+          
+          if (error) {
+            console.error("Erro ao trocar código por sessão:", error)
+            toast({
+              title: "Erro na autenticação",
+              description: "Não foi possível completar o login. Tente novamente.",
+              variant: "destructive"
+            })
+            router.push("/login")
+            return
+          }
+
+          if (data?.user) {
+            console.log("Autenticação bem-sucedida:", data.user.id)
+            await redirectUser(data.user.id)
+          } else {
+            console.log("Nenhum usuário encontrado após autenticação")
+            router.push("/login")
+          }
         } else {
-          console.log("Nenhum usuário encontrado após autenticação")
+          console.log("Nenhum código de autenticação encontrado na URL")
           router.push("/login")
         }
       } catch (error) {

@@ -652,14 +652,25 @@ export function UserManager() {
       setSendingMagicLink(userId);
       
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
+      
+      // Determinar a URL base correta
+      const baseUrl = window.location.origin;
+      const redirectUrl = `${baseUrl}/auth/callback`;
+      
+      console.log("Enviando magic link para:", userEmail);
+      console.log("URL de redirecionamento:", redirectUrl);
+      
+      const { data, error } = await supabase.auth.signInWithOtp({
         email: userEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectUrl,
         },
       });
 
+      console.log("Resposta do Supabase:", data);
+
       if (error) {
+        console.error("Erro do Supabase:", error);
         throw error;
       }
 
