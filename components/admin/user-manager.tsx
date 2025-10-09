@@ -651,26 +651,17 @@ export function UserManager() {
     try {
       setSendingMagicLink(userId);
       
-      console.log("Enviando magic link para:", userEmail);
-      
-      // Usar API route para enviar magic link sem contexto de usuário
-      const response = await fetch('/api/auth/send-magic-link', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email: userEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
-        body: JSON.stringify({
-          email: userEmail,
-        }),
       });
 
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Erro ao enviar magic link');
+      if (error) {
+        throw error;
       }
-
-      console.log("Magic link enviado com sucesso:", result);
 
       toast({
         title: "Magic Link enviado!",

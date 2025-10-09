@@ -15,10 +15,6 @@ export default function AuthCallbackPage() {
       try {
         const supabase = createClient()
         
-        // Detectar se é dispositivo móvel
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-        console.log("Dispositivo móvel detectado:", isMobile)
-        
         // Verificar se já existe uma sessão ativa
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
         
@@ -39,56 +35,29 @@ export default function AuthCallbackPage() {
         
         console.log("Parâmetros da URL:", { code, type })
         console.log("URL completa:", window.location.href)
-        console.log("Search params:", window.location.search)
 
         if (code && type === "magiclink") {
           // Tentar trocar o código por uma sessão
           console.log("Tentando trocar código por sessão...")
+          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href)
           
-          // Para mobile, tentar múltiplas vezes se necessário
-          let attempts = 0
-          const maxAttempts = isMobile ? 3 : 1
-          
-          while (attempts < maxAttempts) {
-            try {
-              const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href)
-              
-              if (error) {
-                console.error(`Tentativa ${attempts + 1} - Erro ao trocar código por sessão:`, error)
-                
-                if (attempts === maxAttempts - 1) {
-                  toast({
-                    title: "Erro na autenticação",
-                    description: "Não foi possível completar o login. Tente novamente.",
-                    variant: "destructive"
-                  })
-                  router.push("/login")
-                  return
-                }
-                
-                // Aguardar antes da próxima tentativa
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                attempts++
-                continue
-              }
+          if (error) {
+            console.error("Erro ao trocar código por sessão:", error)
+            toast({
+              title: "Erro na autenticação",
+              description: "Não foi possível completar o login. Tente novamente.",
+              variant: "destructive"
+            })
+            router.push("/login")
+            return
+          }
 
-              if (data?.user) {
-                console.log("Autenticação bem-sucedida:", data.user.id)
-                await redirectUser(data.user.id)
-                return
-              } else {
-                console.log("Nenhum usuário encontrado após autenticação")
-                router.push("/login")
-                return
-              }
-            } catch (error) {
-              console.error(`Tentativa ${attempts + 1} - Erro inesperado:`, error)
-              if (attempts === maxAttempts - 1) {
-                throw error
-              }
-              await new Promise(resolve => setTimeout(resolve, 1000))
-              attempts++
-            }
+          if (data?.user) {
+            console.log("Autenticação bem-sucedida:", data.user.id)
+            await redirectUser(data.user.id)
+          } else {
+            console.log("Nenhum usuário encontrado após autenticação")
+            router.push("/login")
           }
         } else {
           console.log("Nenhum código de autenticação encontrado na URL")
@@ -105,8 +74,7 @@ export default function AuthCallbackPage() {
       }
     }
 
-    // Aguardar um pouco para garantir que a página carregou completamente
-    setTimeout(handleAuth, 100)
+    handleAuth()
   }, [router, toast])
 
   const redirectUser = async (userId: string) => {
@@ -213,16 +181,7 @@ export default function AuthCallbackPage() {
       
       // Aguardar um pouco para garantir que o localStorage foi salvo
       setTimeout(() => {
-        // Para mobile, usar window.location.href para forçar redirecionamento
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-        
-        if (isMobile) {
-          console.log("Redirecionando via window.location.href para mobile")
-          window.location.href = redirectPath
-        } else {
-          console.log("Redirecionando via router.push para desktop")
-          router.push(redirectPath)
-        }
+        router.push(redirectPath)
       }, 100)
     } catch (error) {
       console.error("Erro ao redirecionar usuário:", error)
