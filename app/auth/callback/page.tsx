@@ -39,6 +39,7 @@ export default function AuthCallbackPage() {
         
         console.log("Parâmetros da URL:", { code, type })
         console.log("URL completa:", window.location.href)
+        console.log("Search params:", window.location.search)
 
         if (code && type === "magiclink") {
           // Tentar trocar o código por uma sessão

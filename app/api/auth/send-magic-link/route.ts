@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 
 export const dynamic = "force-dynamic"
 
@@ -14,16 +14,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log("Enviando magic link para:", email)
+
     // Criar cliente Supabase sem contexto de usuário
-    const supabase = createAdminClient()
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    // Determinar URL de redirecionamento
+    const redirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.agrinvest.app'}/auth/callback`
+    console.log("URL de redirecionamento:", redirectUrl)
 
     // Enviar magic link para o email especificado
-    const { error } = await supabase.auth.signInWithOtp({
+    const { data, error } = await supabase.auth.signInWithOtp({
       email: email,
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.agrinvest.app'}/auth/callback`,
+        emailRedirectTo: redirectUrl,
       },
     })
+
+    console.log("Resposta do Supabase:", { data, error })
 
     if (error) {
       console.error("Erro ao enviar magic link:", error)
@@ -35,7 +46,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Magic link enviado com sucesso"
+      message: "Magic link enviado com sucesso",
+      data: data
     })
 
   } catch (error: any) {

@@ -9,11 +9,15 @@ export async function middleware(request: NextRequest) {
     const code = searchParams.get("code")
     const type = searchParams.get("type")
     
+    console.log("Middleware - Interceptando magic link:", { code, type, pathname })
+    
     // Se for um magic link, redirecionar para o callback
     if (code && type === "magiclink") {
       const callbackUrl = new URL("/auth/callback", request.url)
       callbackUrl.searchParams.set("code", code)
       callbackUrl.searchParams.set("type", type)
+      
+      console.log("Middleware - Redirecionando para:", callbackUrl.toString())
       
       // Detectar se é dispositivo móvel
       const userAgent = request.headers.get("user-agent") || ""
