@@ -111,12 +111,21 @@ export function DistributorDashboard() {
     nationality: "",
     maritalStatus: "",
     profession: "",
-    address: "",
+    // Campos de endereço separados
+    street: "",
+    number: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    zipCode: "",
     pixKey: "",
     password: "",
     confirmPassword: "",
+    // Campos de investimento
     investmentValue: "",
     rescueTerm: "",
+    commitmentPeriod: "",
+    liquidity: "",
     profitability: "",
   });
 
@@ -420,13 +429,18 @@ export function DistributorDashboard() {
       !investorForm.nationality ||
       !investorForm.maritalStatus ||
       !investorForm.profession ||
-      !investorForm.address ||
+      !investorForm.street ||
+      !investorForm.number ||
+      !investorForm.neighborhood ||
+      !investorForm.city ||
+      !investorForm.state ||
+      !investorForm.zipCode ||
       !investorForm.pixKey
     ) {
       toast({
         title: "Campos obrigatórios",
         description:
-          "Preencha todos os campos obrigatórios incluindo RG, nacionalidade, estado civil, profissão, endereço e chave PIX/USDT.",
+          "Preencha todos os campos obrigatórios incluindo RG, nacionalidade, estado civil, profissão, endereço completo e chave PIX/USDT.",
         variant: "destructive",
       });
       return;
@@ -434,10 +448,10 @@ export function DistributorDashboard() {
 
     // Validações específicas para investidor
     if (userType === "investor") {
-      if (!investorForm.investmentValue) {
+      if (!investorForm.investmentValue || !investorForm.rescueTerm || !investorForm.commitmentPeriod || !investorForm.liquidity) {
         toast({
-          title: "Valor do investimento obrigatório",
-          description: "O valor do investimento é obrigatório para investidores.",
+          title: "Dados do investimento obrigatórios",
+          description: "O valor, prazo de resgate, prazo de investimento e liquidez são obrigatórios para investidores.",
           variant: "destructive",
         });
         return;
@@ -593,7 +607,7 @@ export function DistributorDashboard() {
             nationality: investorForm.nationality,
             marital_status: investorForm.maritalStatus,
             profession: investorForm.profession,
-            address: investorForm.address,
+            address: buildFullAddress(),
             pix_usdt_key: investorForm.pixKey,
           },
         ])
@@ -621,13 +635,11 @@ export function DistributorDashboard() {
             p_amount: Number(investmentValue),
             p_status: "pending",
             p_quota_type: "senior",
-            p_monthly_return_rate:
-              user?.role === "escritorio"
-                ? 0.01
-                : user?.role === "investor"
-                ? 0.02
-                : 0.03,
-            p_commitment_period: 12,
+            p_monthly_return_rate: getRateByPeriodAndLiquidity(
+              Number(investorForm.commitmentPeriod), 
+              investorForm.liquidity
+            ),
+            p_commitment_period: Number(investorForm.commitmentPeriod),
           });
 
         if (investmentError) {
@@ -702,12 +714,19 @@ export function DistributorDashboard() {
         nationality: "",
         maritalStatus: "",
         profession: "",
-        address: "",
+        street: "",
+        number: "",
+        neighborhood: "",
+        city: "",
+        state: "",
+        zipCode: "",
         pixKey: "",
         password: "",
         confirmPassword: "",
         investmentValue: "",
         rescueTerm: "",
+        commitmentPeriod: "",
+        liquidity: "",
         profitability: "",
       });
 
@@ -780,6 +799,42 @@ export function DistributorDashboard() {
       style: "currency",
       currency: "BRL",
     }).format(value);
+  };
+
+  // Funções auxiliares para investimento
+  const getAvailableLiquidityOptions = (period: number) => {
+    switch (period) {
+      case 3:
+        return ["Mensal"];
+      case 6:
+        return ["Mensal", "Semestral"];
+      case 12:
+        return ["Mensal", "Semestral", "Anual"];
+      case 24:
+        return ["Mensal", "Semestral", "Anual"];
+      case 36:
+        return ["Mensal", "Semestral", "Anual", "Bienal"];
+      default:
+        return [];
+    }
+  };
+
+  const getRateByPeriodAndLiquidity = (period: number, liquidity: string) => {
+    const baseRates: Record<number, Record<string, number>> = {
+      3: { "Mensal": 0.02 },
+      6: { "Mensal": 0.025, "Semestral": 0.03 },
+      12: { "Mensal": 0.03, "Semestral": 0.035, "Anual": 0.04 },
+      24: { "Mensal": 0.035, "Semestral": 0.04, "Anual": 0.045 },
+      36: { "Mensal": 0.04, "Semestral": 0.045, "Anual": 0.05, "Bienal": 0.055 }
+    };
+    
+    return baseRates[period]?.[liquidity] || 0.03;
+  };
+
+  // Função para construir endereço completo
+  const buildFullAddress = () => {
+    const { street, number, neighborhood, city, state, zipCode } = investorForm;
+    return `${street}, ${number}, ${neighborhood}, ${city}, ${state}, ${zipCode}`.trim();
   };
 
   if (!user) return null;
@@ -1527,18 +1582,125 @@ export function DistributorDashboard() {
                       />
                     </div>
 
-                    <div className="md:col-span-2">
-                      <Label htmlFor="address">Endereço Completo *</Label>
+                    {/* Campo específico para investidores - Prazo de Resgate */}
+                    {userType === "investor" && (
+                      <div>
+                        <Label htmlFor="rescueTerm">Prazo de Resgate *</Label>
+                        <select
+                          id="rescueTerm"
+                          value={investorForm.rescueTerm}
+                          onChange={(e) => {
+                            const term = e.target.value;
+                            setInvestorForm((prev) => ({
+                              ...prev,
+                              rescueTerm: term,
+                            }));
+                          }}
+                          className="w-full border rounded-md p-2"
+                          required
+                        >
+                          <option value="">Selecione o prazo</option>
+                          <option value="D+60">D+60</option>
+                          <option value="D+90">D+90</option>
+                          <option value="D+180">D+180</option>
+                          <option value="D+360">D+360</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Campos de endereço separados */}
+                    <div>
+                      <Label htmlFor="street">Rua *</Label>
                       <Input
-                        id="address"
-                        value={investorForm.address}
+                        id="street"
+                        value={investorForm.street}
                         onChange={(e) =>
                           setInvestorForm((prev) => ({
                             ...prev,
-                            address: e.target.value,
+                            street: e.target.value,
                           }))
                         }
-                        placeholder="Rua, número, bairro, cidade, estado, CEP"
+                        placeholder="Nome da rua"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="number">Número *</Label>
+                      <Input
+                        id="number"
+                        value={investorForm.number}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            number: e.target.value,
+                          }))
+                        }
+                        placeholder="123"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="neighborhood">Bairro *</Label>
+                      <Input
+                        id="neighborhood"
+                        value={investorForm.neighborhood}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            neighborhood: e.target.value,
+                          }))
+                        }
+                        placeholder="Nome do bairro"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="city">Cidade *</Label>
+                      <Input
+                        id="city"
+                        value={investorForm.city}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            city: e.target.value,
+                          }))
+                        }
+                        placeholder="Nome da cidade"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="state">Estado *</Label>
+                      <Input
+                        id="state"
+                        value={investorForm.state}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            state: e.target.value,
+                          }))
+                        }
+                        placeholder="SP"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="zipCode">CEP *</Label>
+                      <Input
+                        id="zipCode"
+                        value={investorForm.zipCode}
+                        onChange={(e) =>
+                          setInvestorForm((prev) => ({
+                            ...prev,
+                            zipCode: e.target.value,
+                          }))
+                        }
+                        placeholder="00000-000"
                         required
                       />
                     </div>
@@ -1564,88 +1726,147 @@ export function DistributorDashboard() {
                     {/* Campos específicos para investidores */}
                     {userType === "investor" && (
                       <>
-                        <div>
-                          <Label htmlFor="investmentValue">
-                            Valor do Investimento * (mínimo R$ 5.000,00)
-                          </Label>
-                          <Input
-                            id="investmentValue"
-                            value={investorForm.investmentValue}
-                            onChange={(e) => {
-                              const formatted = formatCurrencyInput(e.target.value);
-                              setInvestorForm((prev) => ({
-                                ...prev,
-                                investmentValue: formatted,
-                              }));
-                            }}
-                            placeholder="R$ 5.000,00"
-                            required
-                          />
-                        </div>
+                        <div className="md:col-span-3">
+                          <div className="p-4 border rounded-lg bg-muted/50">
+                            <h3 className="text-lg font-semibold mb-4">Configuração do Investimento</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <Label htmlFor="investmentValue">
+                                  Valor do Investimento * (mínimo R$ 5.000,00)
+                                </Label>
+                                <Input
+                                  id="investmentValue"
+                                  value={investorForm.investmentValue}
+                                  onChange={(e) => {
+                                    const formatted = formatCurrencyInput(e.target.value);
+                                    setInvestorForm((prev) => ({
+                                      ...prev,
+                                      investmentValue: formatted,
+                                    }));
+                                  }}
+                                  placeholder="R$ 5.000,00"
+                                  required
+                                />
+                              </div>
 
-                        <div>
-                          <Label htmlFor="rescueTerm">Prazo de Resgate *</Label>
-                          <select
-                            id="rescueTerm"
-                            value={investorForm.rescueTerm}
-                            onChange={(e) => {
-                              const term = e.target.value;
-                              let profitability = "";
-                              switch (term) {
-                                case "D+60":
-                                  profitability = "2% a.m.";
-                                  break;
-                                case "D+90":
-                                  profitability = "2,5% a.m.";
-                                  break;
-                                case "D+180":
-                                  profitability =
-                                    user.role === "escritorio"
-                                      ? "1% a.m."
-                                      : user.role === "investor"
-                                      ? "2% a.m."
-                                      : "3% a.m.";
-                                  break;
-                                case "D+360":
-                                  profitability = "3,5% a.m.";
-                                  break;
-                              }
-                              setInvestorForm((prev) => ({
-                                ...prev,
-                                rescueTerm: term,
-                                profitability,
-                              }));
-                            }}
-                            className="w-full border rounded-md p-2"
-                            required
-                          >
-                            <option value="">Selecione o prazo</option>
-                            <option value="D+60">D+60</option>
-                            <option value="D+90">D+90</option>
-                            <option value="D+180">D+180</option>
-                            <option value="D+360">D+360</option>
-                          </select>
+                              <div>
+                                <Label htmlFor="commitmentPeriod">Prazo de Investimento *</Label>
+                                <select
+                                  id="commitmentPeriod"
+                                  value={investorForm.commitmentPeriod}
+                                  onChange={(e) => {
+                                    const period = e.target.value;
+                                    setInvestorForm((prev) => ({
+                                      ...prev,
+                                      commitmentPeriod: period,
+                                      liquidity: "", // Reset liquidez quando mudar o prazo
+                                    }));
+                                  }}
+                                  className="w-full border rounded-md p-2"
+                                  required
+                                >
+                                  <option value="">Selecione o prazo</option>
+                                  <option value="3">3 meses</option>
+                                  <option value="6">6 meses</option>
+                                  <option value="12">12 meses</option>
+                                  <option value="24">24 meses</option>
+                                  <option value="36">36 meses</option>
+                                </select>
+                              </div>
 
-                          {/* Aviso de multa */}
-                          <p className="mt-1 text-sm text-red-600">
-                            Resgates antes do prazo terão multa de{" "}
-                            <strong>20%</strong> + perda da rentabilidade.
-                          </p>
+                              <div>
+                                <Label htmlFor="liquidity">Liquidez da Rentabilidade *</Label>
+                                <select
+                                  id="liquidity"
+                                  value={investorForm.liquidity}
+                                  onChange={(e) => {
+                                    const liquidity = e.target.value;
+                                    const rate = getRateByPeriodAndLiquidity(
+                                      Number(investorForm.commitmentPeriod), 
+                                      liquidity
+                                    );
+                                    setInvestorForm((prev) => ({
+                                      ...prev,
+                                      liquidity,
+                                      profitability: `${(rate * 100).toFixed(1)}% a.m.`,
+                                    }));
+                                  }}
+                                  className="w-full border rounded-md p-2"
+                                  disabled={!investorForm.commitmentPeriod}
+                                  required
+                                >
+                                  <option value="">Selecione a liquidez</option>
+                                  {getAvailableLiquidityOptions(Number(investorForm.commitmentPeriod)).map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                                {investorForm.commitmentPeriod && investorForm.liquidity && (
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    Taxa: {getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 100}% a.m.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Projeção do retorno */}
+                            {investorForm.investmentValue && 
+                             Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) >= 5000 && 
+                             investorForm.commitmentPeriod && 
+                             investorForm.liquidity && (
+                              <div className="mt-4 bg-emerald-50 p-4 rounded-lg">
+                                <h4 className="font-semibold text-emerald-800 mb-2">
+                                  Projeção do Retorno
+                                </h4>
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span>Retorno Mensal:</span>
+                                    <span className="font-semibold text-emerald-600">
+                                      {formatCurrency(
+                                        Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) * 
+                                        getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity)
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Retorno Total ({investorForm.commitmentPeriod} meses):</span>
+                                    <span className="font-semibold text-emerald-600">
+                                      {formatCurrency(
+                                        Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) * 
+                                        getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 
+                                        Number(investorForm.commitmentPeriod)
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="border-t pt-2">
+                                    <div className="flex justify-between">
+                                      <span className="font-semibold">Valor Final:</span>
+                                      <span className="font-semibold text-emerald-600">
+                                        {formatCurrency(
+                                          Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) + 
+                                          (Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) * 
+                                           getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 
+                                           Number(investorForm.commitmentPeriod))
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Aviso de multa */}
+                            <p className="mt-2 text-sm text-red-600">
+                              Resgates antes do prazo terão multa de{" "}
+                              <strong>20%</strong> + perda da rentabilidade.
+                            </p>
+                          </div>
                         </div>
                       </>
                     )}
 
-                    {/* Exibir rentabilidade dinâmica */}
-                    {/* {investorForm.profitability ? (
-                      <p className="mt-2 text-sm text-green-700">
-                        Rentabilidade estimada:{" "}
-                        <strong>{investorForm.profitability}</strong>
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-sm text-red-700">
-                        Escolha um prazo de resgate
-                      </p>
-                    )} */}
 
                     <div>
                       <Label htmlFor="password">Senha *</Label>
@@ -1699,12 +1920,19 @@ export function DistributorDashboard() {
                           nationality: "",
                           maritalStatus: "",
                           profession: "",
-                          address: "",
+                          street: "",
+                          number: "",
+                          neighborhood: "",
+                          city: "",
+                          state: "",
+                          zipCode: "",
                           pixKey: "",
                           password: "",
                           confirmPassword: "",
                           investmentValue: "",
                           rescueTerm: "",
+                          commitmentPeriod: "",
+                          liquidity: "",
                           profitability: "",
                         });
                       }}
