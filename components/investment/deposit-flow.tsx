@@ -252,6 +252,7 @@ export function DepositFlow() {
         "Semestral": 0.026, // 2.6%
         "Anual": 0.03, // 3%
         "Bienal": 0.035, // 3.5%
+        "Trienal": 0.035, // 3.5% (igual ao bienal)
       },
     };
 
@@ -265,7 +266,7 @@ export function DepositFlow() {
       "6": ["Mensal", "Semestral"],
       "12": ["Mensal", "Semestral", "Anual"],
       "24": ["Mensal", "Semestral", "Anual", "Bienal"],
-      "36": ["Mensal", "Semestral", "Anual", "Bienal"],
+      "36": ["Mensal", "Semestral", "Anual", "Bienal", "Trienal"],
     };
 
     return options[period.toString()] || [];

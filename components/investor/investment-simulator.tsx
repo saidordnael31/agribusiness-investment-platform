@@ -104,6 +104,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
         "semestral": 0.026, // 2.6%
         "anual": 0.03, // 3%
         "bienal": 0.035, // 3.5%
+        "trienal": 0.035, // 3.5% (igual ao bienal)
       },
     };
 
@@ -117,7 +118,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
       "6": ["mensal", "semestral"],
       "12": ["mensal", "semestral", "anual"],
       "24": ["mensal", "semestral", "anual", "bienal"],
-      "36": ["mensal", "semestral", "anual", "bienal"],
+      "36": ["mensal", "semestral", "anual", "bienal", "trienal"],
     };
 
     return options[period.toString()] || [];

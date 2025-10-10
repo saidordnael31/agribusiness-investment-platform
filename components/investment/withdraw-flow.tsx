@@ -25,7 +25,7 @@ interface Investment {
   amount: number;
   monthly_return_rate: number;
   commitment_period: number; // em meses
-  profitability_liquidity: "Mensal" | "Semestral" | "Anual" | "Bienal";
+  profitability_liquidity: "Mensal" | "Semestral" | "Anual" | "Bienal" | "Trienal";
   created_at: string;
   status: string;
 }
@@ -111,6 +111,9 @@ export function WithdrawFlow() {
         case "Bienal":
           periodInMonths = 24;
           break;
+        case "Trienal":
+          periodInMonths = 36;
+          break;
       }
       
       // Calcula quantos períodos completos se passaram desde a criação
@@ -185,6 +188,9 @@ export function WithdrawFlow() {
       case "Bienal":
         liquidityPeriodDays = 730;
         break;
+      case "Trienal":
+        liquidityPeriodDays = 1095; // 36 meses = 1095 dias
+        break;
       default:
         liquidityPeriodDays = 30; // padrão mensal
     }
@@ -214,6 +220,9 @@ export function WithdrawFlow() {
         break;
       case "Bienal":
         profitabilityLiquidityDays = 730;
+        break;
+      case "Trienal":
+        profitabilityLiquidityDays = 1095; // 36 meses = 1095 dias
         break;
       default:
         profitabilityLiquidityDays = 30; // padrão mensal
@@ -245,6 +254,9 @@ export function WithdrawFlow() {
         break;
       case "Bienal":
         profitabilityLiquidityDays = 730;
+        break;
+      case "Trienal":
+        profitabilityLiquidityDays = 1095; // 36 meses = 1095 dias
         break;
       default:
         profitabilityLiquidityDays = 30; // padrão mensal
@@ -283,6 +295,9 @@ export function WithdrawFlow() {
         break;
       case "Bienal":
         liquidityPeriodDays = 730;
+        break;
+      case "Trienal":
+        liquidityPeriodDays = 1095; // 36 meses = 1095 dias
         break;
       default:
         liquidityPeriodDays = 30; // padrão mensal
@@ -1047,7 +1062,7 @@ export function WithdrawFlow() {
                   {formatCurrency(userSummary.totalDividendsByPeriod)}
                 </p>
                 <p className="text-xs text-green-700 mt-1">
-                  Baseado no período contratado (mensal, semestral, anual ou bienal)
+                  Baseado no período contratado (mensal, semestral, anual, bienal ou trienal)
                 </p>
               </div>
               <div className="bg-purple-50 p-6 rounded-lg">

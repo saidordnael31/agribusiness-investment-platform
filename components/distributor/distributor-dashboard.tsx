@@ -813,7 +813,7 @@ export function DistributorDashboard() {
       case 24:
         return ["Mensal", "Semestral", "Anual"];
       case 36:
-        return ["Mensal", "Semestral", "Anual", "Bienal"];
+        return ["Mensal", "Semestral", "Anual", "Bienal", "Trienal"];
       default:
         return [];
     }
@@ -821,11 +821,11 @@ export function DistributorDashboard() {
 
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string) => {
     const baseRates: Record<number, Record<string, number>> = {
-      3: { "Mensal": 0.02 },
-      6: { "Mensal": 0.025, "Semestral": 0.03 },
-      12: { "Mensal": 0.03, "Semestral": 0.035, "Anual": 0.04 },
-      24: { "Mensal": 0.035, "Semestral": 0.04, "Anual": 0.045 },
-      36: { "Mensal": 0.04, "Semestral": 0.045, "Anual": 0.05, "Bienal": 0.055 }
+      3: { "Mensal": 0.018 }, // 1.8%
+      6: { "Mensal": 0.019, "Semestral": 0.02 }, // 1.9% | 2%
+      12: { "Mensal": 0.021, "Semestral": 0.022, "Anual": 0.025 }, // 2.1% | 2.2% | 2.5%
+      24: { "Mensal": 0.023, "Semestral": 0.025, "Anual": 0.027, "Bienal": 0.03 }, // 2.3% | 2.5% | 2.7% | 3%
+      36: { "Mensal": 0.024, "Semestral": 0.026, "Anual": 0.03, "Bienal": 0.035, "Trienal": 0.035 } // 2.4% | 2.6% | 3% | 3.5% | 3.5%
     };
     
     return baseRates[period]?.[liquidity] || 0.03;
