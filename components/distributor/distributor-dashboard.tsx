@@ -1805,7 +1805,7 @@ export function DistributorDashboard() {
                                 </select>
                                 {investorForm.commitmentPeriod && investorForm.liquidity && (
                                   <p className="text-sm text-muted-foreground mt-1">
-                                    Taxa: {getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 100}% a.m.
+                                    Taxa: {(getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 100).toFixed(1)}% a.m.
                                   </p>
                                 )}
                               </div>

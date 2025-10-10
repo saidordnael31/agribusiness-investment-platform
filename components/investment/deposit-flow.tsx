@@ -688,7 +688,7 @@ export function DepositFlow() {
               </Select>
               {commitmentPeriod && (
                 <p className="text-sm text-gray-600 mt-1">
-                  Taxa: {getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100}% a.m.
+                  Taxa: {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
                 </p>
               )}
             </div>
