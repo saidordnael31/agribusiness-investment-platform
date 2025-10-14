@@ -1177,7 +1177,7 @@ export function UserManager() {
 
       {/* Modal para visualizar perfil */}
       <Dialog open={showProfileViewModal} onOpenChange={setShowProfileViewModal}>
-        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-[98vw] !w-[98vw] !max-h-[95vh] !h-[95vh] overflow-y-auto p-6 sm:!max-w-[98vw]">
           <DialogHeader>
             <DialogTitle>Perfil do Usuário</DialogTitle>
             <DialogDescription>
@@ -1196,7 +1196,7 @@ export function UserManager() {
 
       {/* Modal para editar perfil */}
       <Dialog open={showProfileEditModal} onOpenChange={setShowProfileEditModal}>
-        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-[98vw] !w-[98vw] !max-h-[95vh] !h-[95vh] overflow-y-auto p-6 sm:!max-w-[98vw]">
           <DialogHeader>
             <DialogTitle>Editar Perfil do Usuário</DialogTitle>
             <DialogDescription>

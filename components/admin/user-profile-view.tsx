@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { User, Mail, Phone, MapPin, Briefcase, Heart, Globe, CreditCard, Calendar, Shield } from 'lucide-react'
+import { User, Mail, Phone, MapPin, Briefcase, Heart, Globe, CreditCard, Calendar, Shield, FileText } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { ContractList } from './contract-list'
 
 interface UserProfileData {
   id: string
@@ -319,6 +320,24 @@ export function UserProfileView({ userId, onEdit, onClose }: UserProfileViewProp
                 </div>
               )}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Contratos - Apenas para investidores */}
+      {profileData.user_type === 'investor' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Contratos do Investidor
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ContractList 
+              investorId={userId}
+              investorName={profileData.full_name || profileData.email}
+            />
           </CardContent>
         </Card>
       )}

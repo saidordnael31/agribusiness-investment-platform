@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Save, User, X } from "lucide-react";
+import { ContractUpload } from "./contract-upload";
+import { ContractList } from "./contract-list";
 
 interface UserProfileData {
   id: string;
@@ -77,6 +79,7 @@ export function UserProfileEdit({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [existingContract, setExistingContract] = useState<any>(null);
    const [formData, setFormData] = useState<Partial<UserProfileData>>({
      name: "",
      email: "",
@@ -115,6 +118,25 @@ export function UserProfileEdit({
       setFormData(mappedData);
     }
   }, [initialData]);
+
+  // Buscar contratos existentes
+  useEffect(() => {
+    const fetchExistingContract = async () => {
+      try {
+        const response = await fetch(`/api/contracts?investorId=${userId}`);
+        const data = await response.json();
+        if (data.success && data.data && data.data.length > 0) {
+          setExistingContract(data.data[0]); // Pegar o primeiro contrato
+        }
+      } catch (error) {
+        console.error("Error fetching contracts:", error);
+      }
+    };
+
+    if (userId) {
+      fetchExistingContract();
+    }
+  }, [userId]);
 
   const validateField = (
     field: keyof UserProfileData,
@@ -498,6 +520,28 @@ export function UserProfileEdit({
           Use esta chave para receber pagamentos e resgates
         </p>
       </div>
+
+      {/* Seção de Contratos - Apenas para investidores */}
+      {(formData.user_type === 'investor' || initialData?.user_type === 'investor') && (
+        <div className="space-y-6 pt-6 border-t">
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Contratos do Investidor</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Gerencie os contratos e documentos do investidor. Apenas administradores podem fazer upload e gerenciar contratos.
+            </p>
+          </div>
+          
+          <ContractUpload 
+            investorId={userId}
+            investorName={formData.name || initialData?.name || initialData?.email || "Usuário"}
+            existingContract={existingContract}
+            onUploadSuccess={() => {
+              // Recarregar a lista de contratos se necessário
+              window.location.reload();
+            }}
+          />
+        </div>
+      )}
 
       {/* Botões de Ação */}
       <div className="flex justify-end gap-3 pt-6">

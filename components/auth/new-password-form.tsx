@@ -17,17 +17,35 @@ export function NewPasswordForm() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Supabase valida o link e autentica o usuário automaticamente
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
+    // Verificar se o usuário está autenticado via Supabase
+    const checkSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error("Erro ao verificar sessão:", error);
+        toast({
+          title: "Erro de autenticação",
+          description: "Erro ao verificar sua sessão. Tente novamente.",
+          variant: "destructive",
+        });
+        router.push("/login");
+        return;
+      }
+
+      if (!session) {
         toast({
           title: "Link inválido",
           description: "Link inválido ou expirado. Redirecionando para o login.",
           variant: "destructive",
         });
         router.push("/login");
+        return;
       }
-    });
+
+      console.log("Usuário autenticado para reset de senha:", session.user.email);
+    };
+
+    checkSession();
   }, [router, supabase.auth, toast]);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
