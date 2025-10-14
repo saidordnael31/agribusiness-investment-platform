@@ -9,14 +9,27 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient()
     const { searchParams } = new URL(request.url)
+    
+    // Parâmetros de filtro
     const status = searchParams.get('status') || 'all'
     const userId = searchParams.get('userId')
+    const quotaType = searchParams.get('quota_type')
+    const search = searchParams.get('search')
+    const dateFrom = searchParams.get('date_from')
+    const dateTo = searchParams.get('date_to')
+    
+    // Parâmetros de paginação
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const offset = (page - 1) * limit
 
+    // Query base para investments
     let query = supabase
       .from("investments")
       .select('*')
       .order('created_at', { ascending: false })
 
+    // Aplicar filtros
     if (status !== 'all') {
       query = query.eq('status', status)
     }
@@ -24,6 +37,53 @@ export async function GET(request: NextRequest) {
     if (userId) {
       query = query.eq('user_id', userId)
     }
+
+    if (quotaType && quotaType !== 'all') {
+      query = query.eq('quota_type', quotaType)
+    }
+
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom)
+    }
+
+    if (dateTo) {
+      const endDate = new Date(dateTo)
+      endDate.setHours(23, 59, 59, 999)
+      query = query.lte('created_at', endDate.toISOString())
+    }
+
+    // Buscar total para paginação (aplicando os mesmos filtros)
+    let countQuery = supabase
+      .from("investments")
+      .select('*', { count: 'exact', head: true })
+
+    // Aplicar os mesmos filtros para a contagem
+    if (status !== 'all') {
+      countQuery = countQuery.eq('status', status)
+    }
+
+    if (userId) {
+      countQuery = countQuery.eq('user_id', userId)
+    }
+
+    if (quotaType && quotaType !== 'all') {
+      countQuery = countQuery.eq('quota_type', quotaType)
+    }
+
+    if (dateFrom) {
+      countQuery = countQuery.gte('created_at', dateFrom)
+    }
+
+    if (dateTo) {
+      const endDate = new Date(dateTo)
+      endDate.setHours(23, 59, 59, 999)
+      countQuery = countQuery.lte('created_at', endDate.toISOString())
+    }
+
+    const { count: totalCount } = await countQuery
+
+    // Aplicar paginação
+    query = query.range(offset, offset + limit - 1)
 
     const { data: investments, error } = await query
 
@@ -48,11 +108,26 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    console.log("investmentsWithProfiles", investmentsWithProfiles)
+    // Aplicar filtro de busca por nome ou email se especificado
+    let filteredInvestments = investmentsWithProfiles
+    if (search) {
+      filteredInvestments = filteredInvestments.filter(investment => 
+        investment.profiles?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+        investment.profiles?.email?.toLowerCase().includes(search.toLowerCase())
+      )
+    }
+
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / limit))
 
     return NextResponse.json({
       success: true,
-      data: investmentsWithProfiles,
+      data: filteredInvestments,
+      pagination: {
+        page,
+        limit,
+        total: totalCount || 0,
+        totalPages
+      }
     })
   } catch (error) {
     console.error("Get investments error:", error)

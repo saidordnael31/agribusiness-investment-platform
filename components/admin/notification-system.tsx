@@ -4,6 +4,7 @@ import { CardDescription } from "@/components/ui/card"
 
 import { useState, useEffect } from "react"
 import { useNotifications } from "@/hooks/use-notifications"
+import { ApproveInvestmentModal } from "./approve-investment-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -105,6 +106,14 @@ export function NotificationSystem() {
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
 
+  // Estados para o modal de aprovação
+  const [approveModalOpen, setApproveModalOpen] = useState(false)
+  const [selectedInvestment, setSelectedInvestment] = useState<{
+    id: string
+    amount: number
+    investorName: string
+  } | null>(null)
+
   // Stats
   const totalNotifications = notifications.length
   const pendingNotifications = notifications.filter((n) => n.status === "pending").length
@@ -159,18 +168,29 @@ export function NotificationSystem() {
   }
 
   const handleNotificationAction = async (notificationId: string, action: string) => {
+    if (action === 'approve') {
+      // Buscar informações do investimento para o modal
+      const notification = notifications.find(n => n.id === notificationId)
+      if (notification) {
+        const realId = notificationId.replace(/^investment_/, '')
+        setSelectedInvestment({
+          id: realId,
+          amount: notification.amount || 0,
+          investorName: notification.title.split(' - ')[0] || 'Investidor'
+        })
+        setApproveModalOpen(true)
+      }
+      return
+    }
+
+    // Para rejeição, usar a API normal
     try {
-      // Extrair o ID real do investimento do ID da notificação
       const realId = notificationId.replace(/^investment_/, '')
-      
-      // Processar a ação na API
-      await processInvestmentAction(realId, action as 'approve' | 'reject')
+      await processInvestmentAction(realId, 'reject')
 
       toast({
-        title: "Ação realizada!",
-        description: action === "approve" 
-          ? "Investimento aprovado com sucesso." 
-          : "Investimento rejeitado e removido com sucesso.",
+        title: "Investimento rejeitado!",
+        description: "O investimento foi rejeitado e removido com sucesso.",
       })
     } catch (error) {
       console.error('Error handling notification action:', error)
@@ -187,6 +207,11 @@ export function NotificationSystem() {
       title: "Notificações enviadas!",
       description: "Todas as notificações pendentes foram enviadas.",
     })
+  }
+
+  const handleApprovalSuccess = () => {
+    // Recarregar as notificações após aprovação bem-sucedida
+    refetch()
   }
 
   const filteredNotifications =
@@ -715,6 +740,21 @@ export function NotificationSystem() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de aprovação com upload de comprovante */}
+      {selectedInvestment && (
+        <ApproveInvestmentModal
+          isOpen={approveModalOpen}
+          onClose={() => {
+            setApproveModalOpen(false)
+            setSelectedInvestment(null)
+          }}
+          investmentId={selectedInvestment.id}
+          investmentAmount={selectedInvestment.amount}
+          investorName={selectedInvestment.investorName}
+          onSuccess={handleApprovalSuccess}
+        />
+      )}
     </div>
   )
 }

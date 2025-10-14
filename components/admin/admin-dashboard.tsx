@@ -18,6 +18,8 @@ import { AdminSettings } from "./admin-settings"
 import { HierarchyManager } from "./hierarchy-manager"
 import { RecurrenceCalculator } from "./recurrence-calculator"
 import { NotificationSystem } from "./notification-system"
+import { ApproveInvestmentModal } from "./approve-investment-modal"
+import { InvestmentsManager } from "./investments-manager"
 import AkintecManager from "./akintec-manager"
 import { createClient } from "@/lib/supabase/client"
 
@@ -82,6 +84,15 @@ export function AdminDashboard() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalActivities, setTotalActivities] = useState(0)
   const itemsPerPage = 10
+
+  // Estados para o modal de aprovação
+  const [approveModalOpen, setApproveModalOpen] = useState(false)
+  const [selectedInvestment, setSelectedInvestment] = useState<{
+    id: string
+    amount: number
+    investorName: string
+  } | null>(null)
+
 
   const fetchRecentActivities = async (page: number = 1, filters: typeof activityFilters = activityFilters) => {
     try {
@@ -430,8 +441,23 @@ export function AdminDashboard() {
     fetchRecentActivities(1, clearedFilters)
   }
 
-  // Função para processar ações de investimento (igual ao sistema de notificações)
+  // Função para processar ações de investimento
   const processInvestmentAction = async (investmentId: string, action: 'approve' | 'reject') => {
+    if (action === 'approve') {
+      // Buscar informações do investimento para o modal
+      const activity = recentActivities.find(a => a.relatedData?.investmentId === investmentId)
+      if (activity) {
+        setSelectedInvestment({
+          id: investmentId,
+          amount: activity.relatedData?.amount || 0,
+          investorName: activity.description.split(' - ')[0] || 'Investidor'
+        })
+        setApproveModalOpen(true)
+      }
+      return
+    }
+
+    // Para rejeição, usar a API normal
     try {
       const response = await fetch('/api/investments/action', {
         method: 'POST',
@@ -440,7 +466,7 @@ export function AdminDashboard() {
         },
         body: JSON.stringify({
           investmentId,
-          action,
+          action: 'reject',
         }),
       })
 
@@ -451,10 +477,8 @@ export function AdminDashboard() {
       }
 
       toast({
-        title: "Ação realizada!",
-        description: action === "approve" 
-          ? "Investimento aprovado com sucesso." 
-          : "Investimento rejeitado e removido com sucesso.",
+        title: "Investimento rejeitado!",
+        description: "O investimento foi rejeitado e removido com sucesso.",
       })
 
       // Recarregar as atividades
@@ -473,6 +497,11 @@ export function AdminDashboard() {
     // Extrair o ID real do investimento do ID da atividade
     const realId = activityId.replace(/^pending-inv-/, '')
     await processInvestmentAction(realId, action)
+  }
+
+  const handleApprovalSuccess = () => {
+    // Recarregar as atividades após aprovação bem-sucedida
+    fetchRecentActivities(currentPage, activityFilters)
   }
 
   useEffect(() => {
@@ -584,8 +613,9 @@ export function AdminDashboard() {
       {/* Main Content */}
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="overflow-x-auto">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10 min-w-max">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-11 min-w-max">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Visão Geral</TabsTrigger>
+            <TabsTrigger value="investments" className="text-xs sm:text-sm">Investimentos</TabsTrigger>
             <TabsTrigger value="akintec" className="text-xs sm:text-sm">Akintec</TabsTrigger>
             <TabsTrigger value="hierarchy" className="text-xs sm:text-sm">Hierarquia</TabsTrigger>
             <TabsTrigger value="recurrence" className="text-xs sm:text-sm">Recorrência</TabsTrigger>
@@ -926,6 +956,10 @@ export function AdminDashboard() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="investments">
+          <InvestmentsManager />
+        </TabsContent>
+
         <TabsContent value="akintec">
           <AkintecManager />
         </TabsContent>
@@ -963,6 +997,21 @@ export function AdminDashboard() {
           <ReportsManager />
         </TabsContent>
       </Tabs>
+
+      {/* Modal de aprovação com upload de comprovante */}
+      {selectedInvestment && (
+        <ApproveInvestmentModal
+          isOpen={approveModalOpen}
+          onClose={() => {
+            setApproveModalOpen(false)
+            setSelectedInvestment(null)
+          }}
+          investmentId={selectedInvestment.id}
+          investmentAmount={selectedInvestment.amount}
+          investorName={selectedInvestment.investorName}
+          onSuccess={handleApprovalSuccess}
+        />
+      )}
     </div>
   )
 }

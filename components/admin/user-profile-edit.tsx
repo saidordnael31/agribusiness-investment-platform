@@ -12,9 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, User, X } from "lucide-react";
+import { Loader2, Save, User, X, Upload, TrendingUp } from "lucide-react";
 import { ContractUpload } from "./contract-upload";
 import { ContractList } from "./contract-list";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserInvestmentsList } from "./user-investments-list";
 
 interface UserProfileData {
   id: string;
@@ -521,7 +523,7 @@ export function UserProfileEdit({
         </p>
       </div>
 
-      {/* Seção de Contratos - Apenas para investidores */}
+      {/* Seção de Contratos e Investimentos - Apenas para investidores */}
       {(formData.user_type === 'investor' || initialData?.user_type === 'investor') && (
         <div className="space-y-6 pt-6 border-t">
           <div>
@@ -531,15 +533,37 @@ export function UserProfileEdit({
             </p>
           </div>
           
-          <ContractUpload 
-            investorId={userId}
-            investorName={formData.name || initialData?.name || initialData?.email || "Usuário"}
-            existingContract={existingContract}
-            onUploadSuccess={() => {
-              // Recarregar a lista de contratos se necessário
-              window.location.reload();
-            }}
-          />
+          <Tabs defaultValue="contracts" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="contracts" className="flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Upload de Contrato
+              </TabsTrigger>
+              <TabsTrigger value="investments" className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Investimentos
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="contracts" className="mt-6">
+              <ContractUpload 
+                investorId={userId}
+                investorName={formData.name || initialData?.name || initialData?.email || "Usuário"}
+                existingContract={existingContract}
+                onUploadSuccess={() => {
+                  // Recarregar a lista de contratos se necessário
+                  window.location.reload();
+                }}
+              />
+            </TabsContent>
+
+            <TabsContent value="investments" className="mt-6">
+              <UserInvestmentsList 
+                userId={userId}
+                userName={formData.name || initialData?.name || initialData?.email || "Usuário"}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 
