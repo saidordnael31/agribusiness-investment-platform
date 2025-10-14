@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { User, Mail, Phone, MapPin, Briefcase, Heart, Globe, CreditCard, Calendar, Shield, FileText } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { User, Mail, Phone, MapPin, Briefcase, Heart, Globe, CreditCard, Calendar, Shield, FileText, TrendingUp } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { ContractList } from './contract-list'
+import { UserInvestmentsList } from './user-investments-list'
 
 interface UserProfileData {
   id: string
@@ -324,46 +326,75 @@ export function UserProfileView({ userId, onEdit, onClose }: UserProfileViewProp
         </Card>
       )}
 
-      {/* Contratos - Apenas para investidores */}
-      {profileData.user_type === 'investor' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Contratos do Investidor
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ContractList 
-              investorId={userId}
-              investorName={profileData.full_name || profileData.email}
-            />
-          </CardContent>
-        </Card>
-      )}
+      {/* Abas de Informações Adicionais */}
+      <Tabs defaultValue="system" className="w-full">
+        <TabsList className={`grid w-full ${profileData.user_type === 'investor' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <TabsTrigger value="system" className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Sistema
+          </TabsTrigger>
+          {profileData.user_type === 'investor' && (
+            <TabsTrigger value="contracts" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Contratos
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="investments" className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Investimentos
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Informações do Sistema */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Informações do Sistema
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Data de Cadastro</label>
-              <p className="text-lg">{formatDate(profileData.created_at)}</p>
-            </div>
+        <TabsContent value="system" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="w-5 h-5" />
+                Informações do Sistema
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Data de Cadastro</label>
+                  <p className="text-lg">{formatDate(profileData.created_at)}</p>
+                </div>
 
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Última Atualização</label>
-              <p className="text-lg">{formatDate(profileData.updated_at)}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Última Atualização</label>
+                  <p className="text-lg">{formatDate(profileData.updated_at)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {profileData.user_type === 'investor' && (
+          <TabsContent value="contracts" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Contratos do Investidor
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ContractList 
+                  investorId={userId}
+                  investorName={profileData.full_name || profileData.email}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        <TabsContent value="investments" className="mt-6">
+          <UserInvestmentsList 
+            userId={userId}
+            userName={profileData.full_name || profileData.email}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

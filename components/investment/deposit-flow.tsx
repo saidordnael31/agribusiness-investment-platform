@@ -22,6 +22,7 @@ import {
   Loader2,
   Copy,
   QrCode,
+  Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -165,6 +166,7 @@ export function DepositFlow() {
       });
     }
   };
+
 
   const generateQRCode = async (value: number, cpf: string) => {
     try {

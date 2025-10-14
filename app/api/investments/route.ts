@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createServerClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'all'
+    const userId = searchParams.get('userId')
 
     let query = supabase
       .from("investments")
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
 
     if (status !== 'all') {
       query = query.eq('status', status)
+    }
+
+    if (userId) {
+      query = query.eq('user_id', userId)
     }
 
     const { data: investments, error } = await query
