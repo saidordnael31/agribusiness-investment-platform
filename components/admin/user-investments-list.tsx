@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { PixReceiptUpload } from '@/components/pix-receipt-upload'
+import { ReceiptViewer } from './receipt-viewer'
 
 interface Investment {
   id: string
@@ -84,6 +85,8 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
   const [selectedReceipt, setSelectedReceipt] = useState<PixReceipt | null>(null)
   const [receiptToDelete, setReceiptToDelete] = useState<PixReceipt | null>(null)
   const [investmentReceipts, setInvestmentReceipts] = useState<Record<string, PixReceipt[]>>({})
+  const [receiptViewerOpen, setReceiptViewerOpen] = useState(false)
+  const [receiptToView, setReceiptToView] = useState<PixReceipt | null>(null)
 
   useEffect(() => {
     fetchInvestments()
@@ -223,28 +226,9 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
     })
   }
 
-  const viewReceipt = async (receipt: PixReceipt) => {
-    try {
-      const response = await fetch(`/api/pix-receipts/view?receiptId=${receipt.id}`)
-      const result = await response.json()
-
-      if (result.success && result.data.signed_url) {
-        setSelectedReceipt({
-          ...receipt,
-          signed_url: result.data.signed_url
-        })
-        setShowViewModal(true)
-      } else {
-        throw new Error(result.error || 'Erro ao carregar comprovante')
-      }
-    } catch (error) {
-      console.error('Erro ao abrir comprovante:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível abrir o comprovante",
-        variant: "destructive"
-      })
-    }
+  const viewReceipt = (receipt: PixReceipt) => {
+    setReceiptToView(receipt)
+    setReceiptViewerOpen(true)
   }
 
   const confirmDeleteReceipt = (receipt: PixReceipt) => {
@@ -488,7 +472,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                             <div className="flex items-center gap-2">
                               {getFileIcon(receipt.file_type)}
                               <div>
-                                <p className="text-sm font-medium">{receipt.file_name}</p>
+                                <p className="text-sm font-medium">Comprovante PIX</p>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-muted-foreground">
                                     {formatFileSize(receipt.file_size)}
@@ -498,12 +482,13 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                             </div>
                             <div className="flex items-center gap-1">
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
                                 onClick={() => viewReceipt(receipt)}
-                                className="text-blue-600 hover:text-blue-700"
+                                className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
                               >
-                                <Eye className="w-4 h-4" />
+                                <Eye className="w-3 h-3 mr-1" />
+                                Visualizar
                               </Button>
                               <Button
                                 variant="ghost"
@@ -739,6 +724,18 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de visualização de comprovante */}
+      {receiptToView && (
+        <ReceiptViewer
+          receipt={receiptToView}
+          isOpen={receiptViewerOpen}
+          onClose={() => {
+            setReceiptViewerOpen(false)
+            setReceiptToView(null)
+          }}
+        />
+      )}
     </div>
   )
 }

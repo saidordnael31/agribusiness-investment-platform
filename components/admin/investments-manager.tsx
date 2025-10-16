@@ -10,12 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { UploadReceiptModal } from "./upload-receipt-modal"
+import { ReceiptViewer } from "./receipt-viewer"
 import { 
   Search, 
   Filter, 
   Download, 
   RefreshCw, 
-  Upload
+  Upload,
+  Eye
 } from "lucide-react"
 
 interface Investment {
@@ -74,6 +76,17 @@ export function InvestmentsManager() {
     includePersonalData: true,
     format: 'csv' as 'csv' | 'excel'
   })
+
+  // Estados para visualização de comprovante
+  const [receiptViewerOpen, setReceiptViewerOpen] = useState(false)
+  const [selectedReceipt, setSelectedReceipt] = useState<{
+    id: string
+    file_name: string
+    file_type: string
+    file_size: number
+    status: 'pending' | 'approved' | 'rejected'
+    created_at: string
+  } | null>(null)
 
   // Filtros
   const [filters, setFilters] = useState<InvestmentFilters>({
@@ -184,6 +197,18 @@ export function InvestmentsManager() {
       investorName: investment.profiles?.full_name || 'Investidor'
     })
     setUploadModalOpen(true)
+  }
+
+  const handleViewReceipt = (receipt: any) => {
+    setSelectedReceipt({
+      id: receipt.id,
+      file_name: receipt.file_name,
+      file_type: receipt.file_type || 'image/jpeg', // fallback
+      file_size: receipt.file_size || 0,
+      status: receipt.status,
+      created_at: receipt.created_at
+    })
+    setReceiptViewerOpen(true)
   }
 
   const handleApprovalSuccess = () => {
@@ -507,21 +532,15 @@ export function InvestmentsManager() {
                           <div className="space-y-1">
                             {investment.receipts.map((receipt) => (
                               <div key={receipt.id} className="flex items-center gap-2">
-                                <Badge 
-                                  variant="secondary" 
-                                  className={
-                                    receipt.status === 'approved' 
-                                      ? 'bg-green-100 text-green-800 border-green-200'
-                                      : receipt.status === 'pending'
-                                      ? 'bg-orange-100 text-orange-800 border-orange-200'
-                                      : 'bg-red-100 text-red-800 border-red-200'
-                                  }
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleViewReceipt(receipt)}
+                                  className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
                                 >
-                                  {receipt.status === 'approved' ? '✓' : receipt.status === 'pending' ? '⏳' : '✗'}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                                  {receipt.file_name}
-                                </span>
+                                  <Eye className="w-3 h-3 mr-1" />
+                                  Visualizar
+                                </Button>
                               </div>
                             ))}
                           </div>
@@ -713,6 +732,18 @@ export function InvestmentsManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de visualização de comprovante */}
+      {selectedReceipt && (
+        <ReceiptViewer
+          receipt={selectedReceipt}
+          isOpen={receiptViewerOpen}
+          onClose={() => {
+            setReceiptViewerOpen(false)
+            setSelectedReceipt(null)
+          }}
+        />
+      )}
     </div>
   )
 }
