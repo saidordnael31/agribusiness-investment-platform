@@ -158,7 +158,7 @@ export function HierarchyManager() {
           advisorShare: monthlyCommission * 0.7,
           officeShare: monthlyCommission * 0.3,
           status: investment.status === "active" ? "active" : "paused",
-          startDate: investment.created_at || new Date().toISOString(),
+          startDate: investment.payment_date || investment.created_at || new Date().toISOString(),
         }
       })
 

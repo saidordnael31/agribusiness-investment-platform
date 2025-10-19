@@ -117,8 +117,8 @@ export function SalesChart({ distributorId }: SalesChartProps) {
 
       // Processar investidores e extrair valores das notes
       investorsWithInvestments?.forEach((investor) => {
-        const createdDate = new Date(investor.created_at);
-        const monthKey = months[createdDate.getMonth()];
+        const paymentDate = investor.payment_date ? new Date(investor.payment_date) : new Date(investor.created_at);
+        const monthKey = months[paymentDate.getMonth()];
 
         if (monthlyData[monthKey]) {
           // Tentar extrair valor do investimento das notes (formato: "CPF: xxx | External ID: xxx | Investment: xxx")

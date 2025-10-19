@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { Upload, FileText, CheckCircle } from "lucide-react"
+import { Upload, FileText, CheckCircle, Calendar } from "lucide-react"
 
 interface ApproveInvestmentModalProps {
   isOpen: boolean
@@ -29,6 +29,7 @@ export function ApproveInvestmentModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [paymentDate, setPaymentDate] = useState("")
 
   const handleFileSelect = (file: File) => {
     // Validar tipo de arquivo
@@ -94,12 +95,22 @@ export function ApproveInvestmentModal({
       return
     }
 
+    if (!paymentDate) {
+      toast({
+        title: "Data de pagamento obrigatória",
+        description: "Informe a data de pagamento antes de aprovar o investimento.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setIsUploading(true)
 
     try {
       const formData = new FormData()
       formData.append('investmentId', investmentId)
       formData.append('receipt', selectedFile)
+      formData.append('paymentDate', paymentDate)
 
       const response = await fetch('/api/investments/approve-with-receipt', {
         method: 'POST',
@@ -120,6 +131,7 @@ export function ApproveInvestmentModal({
       onSuccess()
       onClose()
       setSelectedFile(null)
+      setPaymentDate("")
 
     } catch (error) {
       console.error('Erro ao aprovar investimento:', error)
@@ -161,6 +173,25 @@ export function ApproveInvestmentModal({
               <div><span className="font-medium">Investidor:</span> {investorName}</div>
               <div><span className="font-medium">Valor:</span> {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(investmentAmount)}</div>
             </div>
+          </div>
+
+          {/* Campo de data de pagamento */}
+          <div className="space-y-2">
+            <Label htmlFor="paymentDate" className="flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              Data de Pagamento *
+            </Label>
+            <Input
+              id="paymentDate"
+              type="datetime-local"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              required
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500">
+              Esta data será usada para calcular comissões e rentabilidades
+            </p>
           </div>
 
           {/* Upload de arquivo */}
@@ -232,7 +263,7 @@ export function ApproveInvestmentModal({
           </Button>
           <Button 
             onClick={handleApprove} 
-            disabled={!selectedFile || isUploading}
+            disabled={!selectedFile || !paymentDate || isUploading}
             className="bg-green-600 hover:bg-green-700"
           >
             {isUploading ? "Aprovando..." : "Aprovar Investimento"}

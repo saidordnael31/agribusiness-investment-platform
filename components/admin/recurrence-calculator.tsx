@@ -112,7 +112,7 @@ export function RecurrenceCalculator() {
         const advisorShare = monthlyCommission * 0.7
         const officeShare = monthlyCommission * 0.3
 
-        const startDate = new Date(investment.created_at)
+        const startDate = investment.payment_date ? new Date(investment.payment_date) : new Date(investment.created_at)
         const now = new Date()
         const monthsPassed = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
         const totalPaid = monthlyCommission * monthsPassed
@@ -132,7 +132,7 @@ export function RecurrenceCalculator() {
           monthlyCommission,
           advisorShare,
           officeShare,
-          startDate: investment.created_at,
+          startDate: investment.payment_date || investment.created_at,
           projectedEndDate: undefined,
           status: "active" as const,
           totalPaid,

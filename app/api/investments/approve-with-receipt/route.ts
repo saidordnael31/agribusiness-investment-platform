@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const investmentId = formData.get('investmentId') as string
     const receiptFile = formData.get('receipt') as File
+    const paymentDate = formData.get('paymentDate') as string
 
     if (!investmentId) {
       return NextResponse.json(
@@ -45,6 +46,22 @@ export async function POST(request: NextRequest) {
     if (!receiptFile) {
       return NextResponse.json(
         { success: false, error: "Comprovante é obrigatório" },
+        { status: 400 }
+      )
+    }
+
+    if (!paymentDate) {
+      return NextResponse.json(
+        { success: false, error: "Data de pagamento é obrigatória" },
+        { status: 400 }
+      )
+    }
+
+    // Validar formato da data
+    const paymentDateObj = new Date(paymentDate)
+    if (isNaN(paymentDateObj.getTime())) {
+      return NextResponse.json(
+        { success: false, error: "Data de pagamento inválida" },
         { status: 400 }
       )
     }
@@ -116,6 +133,7 @@ export async function POST(request: NextRequest) {
       .from("investments")
       .update({ 
         status: 'active',
+        payment_date: paymentDateObj.toISOString(),
         updated_at: updatedAt
       })
       .eq('id', investmentId)

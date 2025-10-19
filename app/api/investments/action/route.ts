@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
   try {
-    const { investmentId, action } = await request.json()
+    const { investmentId, action, paymentDate } = await request.json()
     const supabase = await createServerClient()
 
     if (!investmentId || !action) {
@@ -24,6 +24,23 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'approve') {
+      // Validar data de pagamento para aprovação
+      if (!paymentDate) {
+        return NextResponse.json({ 
+          success: false, 
+          error: "Data de pagamento é obrigatória para aprovação" 
+        }, { status: 400 })
+      }
+
+      // Validar formato da data
+      const paymentDateObj = new Date(paymentDate)
+      if (isNaN(paymentDateObj.getTime())) {
+        return NextResponse.json({ 
+          success: false, 
+          error: "Data de pagamento inválida" 
+        }, { status: 400 })
+      }
+
       // Aprovar: alterar status para 'active'
       const updatedAt = new Date().toISOString()
 
@@ -31,6 +48,7 @@ export async function POST(request: NextRequest) {
         .from("investments")
         .update({ 
           status: 'active',
+          payment_date: paymentDateObj.toISOString(),
           updated_at: updatedAt
         })
         .eq('id', investmentId)

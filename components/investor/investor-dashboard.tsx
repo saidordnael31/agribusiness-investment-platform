@@ -226,8 +226,9 @@ export function InvestorDashboard() {
       investmentsRaw.forEach((inv) => {
         const amount = Number(inv.amount);
         const monthlyRate = Number(inv.monthly_return_rate) || 0.02;
+        const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
         const monthsPassed = Math.floor(
-          (today.getTime() - new Date(inv.created_at).getTime()) /
+          (today.getTime() - paymentDate.getTime()) /
             (1000 * 60 * 60 * 24 * 30)
         );
         
