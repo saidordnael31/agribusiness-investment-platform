@@ -322,13 +322,26 @@ export function LoginForm() {
           required
         />
       </div>
-      <div className="text-right">
-        <Link
-          href="/resetPassword"
-          className="text-sm text-primary hover:underline"
-        >
-          Esqueceu sua senha?
-        </Link>
+      <div className="space-y-2">
+        <div className="text-right">
+          <Link
+            href="/resetPassword"
+            className="text-sm text-primary hover:underline"
+          >
+            Esqueceu sua senha?
+          </Link>
+        </div>
+        <div className="text-center">
+          <span className="text-sm text-muted-foreground">ou</span>
+        </div>
+        <div className="text-center">
+          <Link
+            href="/magicLink"
+            className="text-sm text-primary hover:underline font-medium"
+          >
+            Entrar com Magic Link
+          </Link>
+        </div>
       </div>
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? "Entrando..." : "Entrar"}

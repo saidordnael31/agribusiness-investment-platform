@@ -1,10 +1,9 @@
-import { LoginForm } from "@/components/auth/login-form"
 import { MagicLinkForm } from "@/components/auth/magic-link-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp } from "lucide-react"
 import Link from "next/link"
 
-export default function LoginPage() {
+export default function MagicLinkPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -18,14 +17,22 @@ export default function LoginPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader className="text-center">
-              <CardTitle>Entrar na Plataforma</CardTitle>
-              <CardDescription>Acesse sua conta para gerenciar seus investimentos</CardDescription>
+              <CardTitle>Entrar com Magic Link</CardTitle>
+              <CardDescription>
+                Digite seu email para receber um link de acesso sem senha
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <LoginForm />
+              <MagicLinkForm />
             </CardContent>
           </Card>
 
+          <p className="text-center text-sm text-muted-foreground">
+            Prefere usar senha?{" "}
+            <Link href="/login" className="text-primary hover:underline">
+              Fazer login tradicional
+            </Link>
+          </p>
         </div>
       </div>
     </div>
