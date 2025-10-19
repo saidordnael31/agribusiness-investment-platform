@@ -42,7 +42,7 @@ export function ResetPasswordForm() {
 
       // Enviar email de reset de senha
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/newPassword`,
+        redirectTo: `${window.location.origin}/newPassword`,
       });
 
       if (error) {
