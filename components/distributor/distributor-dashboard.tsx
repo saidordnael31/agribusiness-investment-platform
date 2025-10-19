@@ -36,6 +36,10 @@ import {
   Search,
   Award,
   UserCheck,
+  Edit,
+  FileText,
+  Download,
+  Eye,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
@@ -68,6 +72,13 @@ interface Investor {
   status: string;
   joinedAt: string;
   lastActivity: string;
+  address?: string;
+  rg?: string;
+  nationality?: string;
+  maritalStatus?: string;
+  profession?: string;
+  pixKey?: string;
+  user_type?: string;
 }
 
 interface Advisor {
@@ -81,12 +92,42 @@ interface Advisor {
   joinedAt: string;
   lastActivity: string;
   investorsCount: number;
+  address?: string;
+  rg?: string;
+  nationality?: string;
+  maritalStatus?: string;
+  profession?: string;
+  pixKey?: string;
+  user_type?: string;
 }
 
 interface QRCodeData {
   qrCode: string;
   paymentString: string;
   originalData: any;
+}
+
+interface Contract {
+  id: string;
+  contract_name: string;
+  file_name: string;
+  file_url: string;
+  file_size: number;
+  file_type: string;
+  status: string;
+  created_at: string;
+  uploaded_by: string;
+}
+
+interface Investment {
+  id: string;
+  amount: number;
+  quota_type: string;
+  monthly_return_rate: number;
+  commitment_period: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export function DistributorDashboard() {
@@ -134,6 +175,34 @@ export function DistributorDashboard() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null);
   const [generatingQR, setGeneratingQR] = useState(false);
+
+  // Estados para edição de perfil
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<Investor | Advisor | null>(null);
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    cpf: "",
+    rg: "",
+    nationality: "",
+    maritalStatus: "",
+    profession: "",
+    street: "",
+    number: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    pixKey: "",
+  });
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  // Estados para contratos e investimentos
+  const [userContracts, setUserContracts] = useState<Contract[]>([]);
+  const [userInvestments, setUserInvestments] = useState<Investment[]>([]);
+  const [loadingContracts, setLoadingContracts] = useState(false);
+  const [loadingInvestments, setLoadingInvestments] = useState(false);
 
   const [distributorData, setDistributorData] = useState({
     totalCaptured: 0,
@@ -311,6 +380,13 @@ export function DistributorDashboard() {
           status: profile.is_active ? "active" : "inactive",
           joinedAt: profile.created_at,
           lastActivity: profile.updated_at || profile.created_at,
+          address: profile.address,
+          rg: profile.rg,
+          nationality: profile.nationality,
+          maritalStatus: profile.marital_status,
+          profession: profile.profession,
+          pixKey: profile.pix_usdt_key,
+          user_type: profile.user_type,
         };
       });
 
@@ -406,6 +482,13 @@ export function DistributorDashboard() {
           joinedAt: profile.created_at,
           lastActivity: profile.updated_at || profile.created_at,
           investorsCount: advisorInvestorsCount,
+          address: profile.address,
+          rg: profile.rg,
+          nationality: profile.nationality,
+          maritalStatus: profile.marital_status,
+          profession: profile.profession,
+          pixKey: profile.pix_usdt_key,
+          user_type: profile.user_type,
         };
       });
 
@@ -769,6 +852,289 @@ export function DistributorDashboard() {
       });
     }
   };
+
+  // Função para buscar contratos do usuário
+  const fetchUserContracts = async (userId: string) => {
+    try {
+      setLoadingContracts(true);
+      const supabase = createClient();
+
+      const { data: contracts, error } = await supabase
+        .from("investor_contracts")
+        .select("*")
+        .eq("investor_id", userId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Erro ao buscar contratos:", error);
+        return;
+      }
+
+      setUserContracts(contracts || []);
+    } catch (error) {
+      console.error("Erro ao buscar contratos:", error);
+    } finally {
+      setLoadingContracts(false);
+    }
+  };
+
+  // Função para buscar investimentos do usuário
+  const fetchUserInvestments = async (userId: string) => {
+    try {
+      setLoadingInvestments(true);
+      const supabase = createClient();
+
+      // Primeiro, verificar se o usuário é um investidor
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, user_type")
+        .eq("id", userId)
+        .single();
+
+      if (profileError || !profile) {
+        console.error("Erro ao buscar perfil:", profileError);
+        setUserInvestments([]);
+        return;
+      }
+
+      if (profile.user_type !== 'investor') {
+        setUserInvestments([]);
+        return;
+      }
+
+      // Buscar investimentos do usuário
+      const { data: investments, error } = await supabase
+        .from("investments")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Erro ao buscar investimentos:", error);
+        setUserInvestments([]);
+        return;
+      }
+
+      setUserInvestments(investments || []);
+    } catch (error) {
+      console.error("Erro ao buscar investimentos:", error);
+    } finally {
+      setLoadingInvestments(false);
+    }
+  };
+
+  // Função para abrir modal de edição
+  const handleEditUser = (user: Investor | Advisor) => {
+    setEditingUser(user);
+    
+    // Extrair dados do endereço se existir
+    let street = '', number = '', neighborhood = '', city = '', state = '', zipCode = '';
+    
+    if (user.address) {
+      const addressParts = user.address.split(', ');
+      
+      street = addressParts[0] || '';
+      number = addressParts[1] || '';
+      neighborhood = addressParts[2] || '';
+      city = addressParts[3] || '';
+      state = addressParts[4] || '';
+      zipCode = addressParts[5] || '';
+    }
+
+    const formData = {
+      fullName: user.name,
+      email: user.email,
+      phone: user.phone || "",
+      cpf: user.cpf || "",
+      rg: user.rg || "",
+      nationality: user.nationality || "",
+      maritalStatus: user.maritalStatus || "",
+      profession: user.profession || "",
+      street,
+      number,
+      neighborhood,
+      city,
+      state,
+      zipCode,
+      pixKey: user.pixKey || "",
+    };
+
+    setEditForm(formData);
+    setShowEditModal(true);
+
+    // Buscar contratos e investimentos apenas para investidores
+    if (user.user_type === 'investor' || 'totalInvested' in user) {
+      fetchUserContracts(user.id);
+      fetchUserInvestments(user.id);
+    }
+  };
+
+  // Função para salvar edição
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editingUser) {
+      return;
+    }
+
+    // Validações básicas
+    if (
+      !editForm.fullName ||
+      !editForm.email ||
+      !editForm.rg ||
+      !editForm.nationality ||
+      !editForm.maritalStatus ||
+      !editForm.profession ||
+      !editForm.street ||
+      !editForm.number ||
+      !editForm.neighborhood ||
+      !editForm.city ||
+      !editForm.state ||
+      !editForm.zipCode ||
+      !editForm.pixKey
+    ) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha todos os campos obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSubmittingEdit(true);
+      const supabase = createClient();
+
+      // Verificar se o usuário tem permissão para editar este perfil
+      const { data: currentUser } = await supabase.auth.getUser();
+      if (!currentUser.user) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const fullAddress = `${editForm.street}, ${editForm.number}, ${editForm.neighborhood}, ${editForm.city}, ${editForm.state}, ${editForm.zipCode}`.trim();
+
+      const updateData = {
+        full_name: editForm.fullName,
+        email: editForm.email,
+        phone: editForm.phone || null,
+        cnpj: editForm.cpf || null,
+        notes: `CPF: ${editForm.cpf}`,
+        rg: editForm.rg,
+        nationality: editForm.nationality,
+        marital_status: editForm.maritalStatus,
+        profession: editForm.profession,
+        address: fullAddress,
+        pix_usdt_key: editForm.pixKey,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Verificar se o perfil existe e se o usuário tem permissão
+      const { data: profileCheck, error: checkError } = await supabase
+        .from("profiles")
+        .select("id, parent_id, office_id, user_type")
+        .eq("id", editingUser.id)
+        .single();
+
+      if (checkError) {
+        throw new Error(`Erro ao verificar perfil: ${checkError.message}`);
+      }
+
+      // Verificar se o usuário logado tem permissão para editar este perfil
+      const isOwner = profileCheck.parent_id === user?.id || profileCheck.office_id === userOfficeId;
+      if (!isOwner) {
+        throw new Error("Você não tem permissão para editar este perfil");
+      }
+
+      let updateSuccess = false;
+      let updateError = null;
+
+      // Tentar primeiro com função RPC
+      try {
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('update_user_profile', {
+          p_user_id: editingUser.id,
+          p_full_name: updateData.full_name,
+          p_email: updateData.email,
+          p_phone: updateData.phone,
+          p_cnpj: updateData.cnpj,
+          p_notes: updateData.notes,
+          p_rg: updateData.rg,
+          p_nationality: updateData.nationality,
+          p_marital_status: updateData.marital_status,
+          p_profession: updateData.profession,
+          p_address: updateData.address,
+          p_pix_usdt_key: updateData.pix_usdt_key
+        });
+
+        if (rpcError) {
+          throw new Error("RPC não disponível");
+        }
+
+        if (!rpcResult || !rpcResult.success) {
+          throw new Error(rpcResult?.error || "Erro na função RPC");
+        }
+
+        updateSuccess = true;
+      } catch (rpcError) {
+        // Fallback: tentar atualização direta
+        const { data, error } = await supabase
+          .from("profiles")
+          .update(updateData)
+          .eq("id", editingUser.id)
+          .select();
+
+        if (error) {
+          updateError = new Error(`Erro ao atualizar perfil: ${error.message}`);
+        } else if (!data || data.length === 0) {
+          updateError = new Error("Nenhum registro foi atualizado. Verifique se o usuário existe.");
+        } else {
+          updateSuccess = true;
+        }
+      }
+
+      if (!updateSuccess) {
+        throw updateError || new Error("Não foi possível atualizar o perfil");
+      }
+
+      toast({
+        title: "Perfil atualizado!",
+        description: "Os dados do usuário foram atualizados com sucesso.",
+      });
+
+      setShowEditModal(false);
+      setEditingUser(null);
+
+      // Recarregar dados
+      if (user?.id) {
+        await fetchMyInvestors(user.id);
+        if (user.role === "escritorio") {
+          await fetchMyAdvisors(user.id);
+        }
+      }
+    } catch (error: any) {
+      console.error("Erro ao atualizar perfil:", error);
+      toast({
+        title: "Erro ao atualizar perfil",
+        description: error.message || "Não foi possível atualizar o perfil.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+
+  // Função para baixar contrato
+  const downloadContract = (contract: Contract) => {
+    const link = document.createElement('a');
+    link.href = contract.file_url;
+    link.download = contract.file_name;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const formatCurrencyInput = (value: string) => {
     const numericValue = value.replace(/[^\d]/g, "");
@@ -1262,6 +1628,7 @@ export function DistributorDashboard() {
                         <TableHead>Total Investido</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Data de Cadastro</TableHead>
+                        <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1292,6 +1659,16 @@ export function DistributorDashboard() {
                             {new Date(investor.joinedAt).toLocaleDateString(
                               "pt-BR"
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditUser(investor)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1356,6 +1733,7 @@ export function DistributorDashboard() {
                           <TableHead>Telefone</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Data de Cadastro</TableHead>
+                          <TableHead>Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1383,6 +1761,16 @@ export function DistributorDashboard() {
                               {new Date(advisor.joinedAt).toLocaleDateString(
                                 "pt-BR"
                               )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditUser(advisor)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -2019,6 +2407,519 @@ export function DistributorDashboard() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Modal de Edição de Perfil */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="w-5 h-5" />
+                Editar Perfil do Usuário
+              </DialogTitle>
+              <DialogDescription>
+                Edite as informações do usuário selecionado.
+              </DialogDescription>
+            </DialogHeader>
+
+            <Tabs defaultValue="profile" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="profile">Perfil</TabsTrigger>
+                {editingUser && ('totalInvested' in editingUser || editingUser.user_type === 'investor') && (
+                  <>
+                    <TabsTrigger value="contracts">Contratos</TabsTrigger>
+                    <TabsTrigger value="investments">Investimentos</TabsTrigger>
+                  </>
+                )}
+              </TabsList>
+
+              <TabsContent value="profile">
+                <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="editFullName">Nome Completo *</Label>
+                  <Input
+                    id="editFullName"
+                    value={editForm.fullName}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        fullName: e.target.value,
+                      }))
+                    }
+                    placeholder="Nome completo do usuário"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editEmail">Email *</Label>
+                  <Input
+                    id="editEmail"
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        email: e.target.value,
+                      }))
+                    }
+                    placeholder="email@exemplo.com"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editPhone">Telefone</Label>
+                  <Input
+                    id="editPhone"
+                    value={editForm.phone}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        phone: e.target.value,
+                      }))
+                    }
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editCpf">CPF *</Label>
+                  <Input
+                    id="editCpf"
+                    value={editForm.cpf}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        cpf: e.target.value,
+                      }))
+                    }
+                    placeholder="000.000.000-00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editRg">RG *</Label>
+                  <Input
+                    id="editRg"
+                    value={editForm.rg}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        rg: e.target.value,
+                      }))
+                    }
+                    placeholder="00.000.000-0"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editNationality">Nacionalidade *</Label>
+                  <Input
+                    id="editNationality"
+                    value={editForm.nationality}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        nationality: e.target.value,
+                      }))
+                    }
+                    placeholder="Brasileira"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editMaritalStatus">Estado Civil *</Label>
+                  <select
+                    id="editMaritalStatus"
+                    value={editForm.maritalStatus}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        maritalStatus: e.target.value,
+                      }))
+                    }
+                    className="w-full border rounded-md p-2"
+                    required
+                  >
+                    <option value="">Selecione o estado civil</option>
+                    <option value="solteiro">Solteiro(a)</option>
+                    <option value="casado">Casado(a)</option>
+                    <option value="divorciado">Divorciado(a)</option>
+                    <option value="viuvo">Viúvo(a)</option>
+                    <option value="uniao_estavel">União Estável</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="editProfession">Profissão *</Label>
+                  <Input
+                    id="editProfession"
+                    value={editForm.profession}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        profession: e.target.value,
+                      }))
+                    }
+                    placeholder="Ex: Engenheiro, Médico, Advogado..."
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editStreet">Rua *</Label>
+                  <Input
+                    id="editStreet"
+                    value={editForm.street}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        street: e.target.value,
+                      }))
+                    }
+                    placeholder="Nome da rua"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editNumber">Número *</Label>
+                  <Input
+                    id="editNumber"
+                    value={editForm.number}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        number: e.target.value,
+                      }))
+                    }
+                    placeholder="123"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editNeighborhood">Bairro *</Label>
+                  <Input
+                    id="editNeighborhood"
+                    value={editForm.neighborhood}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        neighborhood: e.target.value,
+                      }))
+                    }
+                    placeholder="Nome do bairro"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editCity">Cidade *</Label>
+                  <Input
+                    id="editCity"
+                    value={editForm.city}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        city: e.target.value,
+                      }))
+                    }
+                    placeholder="Nome da cidade"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editState">Estado *</Label>
+                  <Input
+                    id="editState"
+                    value={editForm.state}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        state: e.target.value,
+                      }))
+                    }
+                    placeholder="SP"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editZipCode">CEP *</Label>
+                  <Input
+                    id="editZipCode"
+                    value={editForm.zipCode}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        zipCode: e.target.value,
+                      }))
+                    }
+                    placeholder="00000-000"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="editPixKey">
+                    Chave PIX ou Endereço USDT *
+                  </Label>
+                  <Input
+                    id="editPixKey"
+                    value={editForm.pixKey}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        pixKey: e.target.value,
+                      }))
+                    }
+                    placeholder="Chave PIX (CPF, email, telefone) ou endereço USDT"
+                    required
+                  />
+                </div>
+              </div>
+
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowEditModal(false)}
+                      disabled={submittingEdit}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={submittingEdit}>
+                      {submittingEdit ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Salvar Alterações
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </TabsContent>
+
+              {/* Aba de Contratos */}
+              {editingUser && ('totalInvested' in editingUser || editingUser.user_type === 'investor') && (
+                <TabsContent value="contracts">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Contratos do Investidor</h3>
+
+                    {loadingContracts ? (
+                      <div className="text-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                        <p className="text-muted-foreground">Carregando contratos...</p>
+                      </div>
+                    ) : userContracts.length === 0 ? (
+                      <div className="text-center py-8">
+                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">Nenhum contrato encontrado</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {userContracts.map((contract) => (
+                          <Card key={contract.id}>
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <FileText className="w-5 h-5 text-blue-500" />
+                                  <div>
+                                    <p className="font-medium">{contract.contract_name}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {contract.file_name} • {(contract.file_size / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(contract.created_at).toLocaleDateString('pt-BR')}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => downloadContract(contract)}
+                                    title="Baixar contrato"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(contract.file_url, '_blank')}
+                                    title="Visualizar contrato"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              )}
+
+              {/* Aba de Investimentos */}
+              {editingUser && ('totalInvested' in editingUser || editingUser.user_type === 'investor') && (
+                <TabsContent value="investments">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Investimentos do Investidor</h3>
+                    
+                    {/* Resumo dos investimentos */}
+                    {userInvestments.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <Card>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Total Investido</p>
+                                <p className="text-2xl font-bold">
+                                  {formatCurrency(
+                                    userInvestments.reduce((sum, inv) => sum + inv.amount, 0)
+                                  )}
+                                </p>
+                              </div>
+                              <DollarSign className="h-8 w-8 text-muted-foreground" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Investimentos Ativos</p>
+                                <p className="text-2xl font-bold text-green-600">
+                                  {userInvestments.filter(inv => inv.status === 'active').length}
+                                </p>
+                              </div>
+                              <TrendingUp className="h-8 w-8 text-green-600" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Pendentes</p>
+                                <p className="text-2xl font-bold text-yellow-600">
+                                  {userInvestments.filter(inv => inv.status === 'pending').length}
+                                </p>
+                              </div>
+                              <Loader2 className="h-8 w-8 text-yellow-600" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">Resgatados</p>
+                                <p className="text-2xl font-bold text-red-600">
+                                  {userInvestments.filter(inv => inv.status === 'withdrawn').length}
+                                </p>
+                              </div>
+                              <Users className="h-8 w-8 text-red-600" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+
+                    {loadingInvestments ? (
+                      <div className="text-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                        <p className="text-muted-foreground">Carregando investimentos...</p>
+                      </div>
+                    ) : userInvestments.length === 0 ? (
+                      <div className="text-center py-8">
+                        <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">Nenhum investimento encontrado</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Este investidor ainda não possui investimentos cadastrados.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {userInvestments.map((investment) => (
+                          <Card key={investment.id}>
+                            <CardContent className="p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Valor Investido</p>
+                                  <p className="text-lg font-semibold">
+                                    {formatCurrency(investment.amount)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Tipo de Cota</p>
+                                  <Badge variant={investment.quota_type === 'senior' ? 'default' : 'secondary'}>
+                                    {investment.quota_type === 'senior' ? 'Sênior' : 'Subordinada'}
+                                  </Badge>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Taxa Mensal</p>
+                                  <p className="text-lg font-semibold">
+                                    {(investment.monthly_return_rate * 100).toFixed(2)}%
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Status</p>
+                                  <Badge 
+                                    variant={
+                                      investment.status === 'active' 
+                                        ? 'default' 
+                                        : investment.status === 'pending'
+                                        ? 'secondary'
+                                        : 'destructive'
+                                    }
+                                  >
+                                    {investment.status === 'active' 
+                                      ? 'Ativo' 
+                                      : investment.status === 'pending'
+                                      ? 'Pendente'
+                                      : investment.status === 'withdrawn'
+                                      ? 'Resgatado'
+                                      : 'Inativo'
+                                    }
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="mt-2 text-sm text-muted-foreground">
+                                <p>Prazo: {investment.commitment_period} meses</p>
+                                <p>Criado em: {new Date(investment.created_at).toLocaleDateString('pt-BR')}</p>
+                                {investment.updated_at !== investment.created_at && (
+                                  <p>Atualizado em: {new Date(investment.updated_at).toLocaleDateString('pt-BR')}</p>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              )}
+            </Tabs>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   );
