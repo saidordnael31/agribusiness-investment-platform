@@ -16,7 +16,7 @@ export default function AuthCallbackPage() {
         router.replace("/login?error=invalid_link");
         return;
       }
-      console.log("Usuário autenticado:", data.session?.user);
+      console.log("Usuário autenticado:", data);
       const userInfo = data.session?.user.identities?.[0].identity_data;
       const userData = {
         id: data.session?.user.id,
