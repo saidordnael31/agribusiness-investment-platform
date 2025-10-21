@@ -67,16 +67,14 @@ export function InvestorDashboard() {
       // Buscar investimentos
       const { data: investmentsRaw, error: investmentsError } = await supabase
         .from("investments")
-        .select(
-          "id, amount, quota_type, monthly_return_rate, created_at, status"
-        )
-        .eq("user_id", userId)
-        .eq("status", "active");
+        .select("*")
+        .eq("user_id", userId);
+      // .eq("status", "active");
 
       // Buscar transações (resgates)
       const { data: transactionsRaw, error: transactionsError } = await supabase
         .from("transactions")
-        .select("id, type, amount, status, created_at")
+        .select("*")
         .eq("user_id", userId)
         .in("type", ["withdrawal", "return"])
         .order("created_at", { ascending: false });
@@ -101,9 +99,7 @@ export function InvestorDashboard() {
             status: investment.status,
             created_at: investment.created_at,
             quota_type: investment.quota_type,
-            description: `Investimento - Cota ${
-              investment.quota_type === "senior" ? "Sênior" : "Subordinada"
-            }`,
+            description: `Investimento`,
           });
         });
       }
@@ -149,7 +145,7 @@ export function InvestorDashboard() {
       const { data: investmentsRaw, error: investmentsError } = await supabase
         .from("investments")
         .select(
-          "id, amount, quota_type, monthly_return_rate, created_at, status"
+          "id, amount, quota_type, monthly_return_rate, payment_date, created_at, status"
         )
         .eq("user_id", userId)
         .eq("status", "active");
@@ -160,7 +156,7 @@ export function InvestorDashboard() {
         .select("amount, created_at, investment_id")
         .eq("user_id", userId)
         .eq("type", "withdrawal")
-        .eq("status", "completed");
+        // .eq("status", "completed");
 
       if (investmentsError || withdrawalsError) {
         console.error(
@@ -204,44 +200,61 @@ export function InvestorDashboard() {
 
         const monthlyRate = Number(inv.monthly_return_rate) || 0.02; // 2% padrão
         const amount = Number(inv.amount);
-        
+
         // Calcular resgates específicos deste investimento
-        const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
-        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
-        
+        const investmentWithdrawals =
+          withdrawalsRaw?.filter((w) => w.investment_id === inv.id) || [];
+        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce(
+          (sum, w) => sum + Number(w.amount),
+          0
+        );
+
         // Valor disponível = valor original - resgates específicos
-        const availableAmount = Math.max(0, amount - totalWithdrawnFromInvestment);
-        
+        const availableAmount = Math.max(
+          0,
+          amount - totalWithdrawnFromInvestment
+        );
+
         // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
-        const compoundValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+        const compoundValue =
+          availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
         const investmentReturn = compoundValue - availableAmount;
-        
+
         totalReturn += investmentReturn;
       });
 
       // Calcular valor atual considerando resgates por investimento
       let currentValue = 0;
       let totalInvestedAfterWithdrawals = 0;
-      
+
       investmentsRaw.forEach((inv) => {
         const amount = Number(inv.amount);
         const monthlyRate = Number(inv.monthly_return_rate) || 0.02;
-        const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
+        const paymentDate = inv.payment_date
+          ? new Date(inv.payment_date)
+          : new Date(inv.created_at);
         const monthsPassed = Math.floor(
-          (today.getTime() - paymentDate.getTime()) /
-            (1000 * 60 * 60 * 24 * 30)
+          (today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
         );
-        
+
         // Calcular resgates específicos deste investimento
-        const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
-        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
-        
+        const investmentWithdrawals =
+          withdrawalsRaw?.filter((w) => w.investment_id === inv.id) || [];
+        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce(
+          (sum, w) => sum + Number(w.amount),
+          0
+        );
+
         // Valor disponível = valor original - resgates específicos
-        const availableAmount = Math.max(0, amount - totalWithdrawnFromInvestment);
-        
+        const availableAmount = Math.max(
+          0,
+          amount - totalWithdrawnFromInvestment
+        );
+
         // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
-        const compoundValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
-        
+        const compoundValue =
+          availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+
         currentValue += compoundValue;
         totalInvestedAfterWithdrawals += availableAmount;
       });
@@ -251,8 +264,12 @@ export function InvestorDashboard() {
         .filter((inv) => inv.quota_type === "senior")
         .reduce((sum, inv) => {
           const amount = Number(inv.amount);
-          const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
-          const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+          const investmentWithdrawals =
+            withdrawalsRaw?.filter((w) => w.investment_id === inv.id) || [];
+          const totalWithdrawnFromInvestment = investmentWithdrawals.reduce(
+            (sum, w) => sum + Number(w.amount),
+            0
+          );
           return sum + Math.max(0, amount - totalWithdrawnFromInvestment);
         }, 0);
 
@@ -260,8 +277,12 @@ export function InvestorDashboard() {
         .filter((inv) => inv.quota_type === "subordinate")
         .reduce((sum, inv) => {
           const amount = Number(inv.amount);
-          const investmentWithdrawals = withdrawalsRaw?.filter(w => w.investment_id === inv.id) || [];
-          const totalWithdrawnFromInvestment = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
+          const investmentWithdrawals =
+            withdrawalsRaw?.filter((w) => w.investment_id === inv.id) || [];
+          const totalWithdrawnFromInvestment = investmentWithdrawals.reduce(
+            (sum, w) => sum + Number(w.amount),
+            0
+          );
           return sum + Math.max(0, amount - totalWithdrawnFromInvestment);
         }, 0);
 
@@ -332,7 +353,7 @@ export function InvestorDashboard() {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -382,23 +403,6 @@ export function InvestorDashboard() {
               </div>
               <p className="text-xs text-muted-foreground">
                 Baseado na rentabilidade das cotas
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Liquidez</CardTitle>
-              <CardDescription>
-                Liquidez de acordo com o contrato
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold">
-                {user.rescue_type}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Resgate em até 2 dias úteis após o vencimento
               </p>
             </CardContent>
           </Card>
