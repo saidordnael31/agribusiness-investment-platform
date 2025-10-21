@@ -9,6 +9,41 @@ export async function POST(request: NextRequest) {
     const { investmentId, action, paymentDate } = await request.json()
     const supabase = await createServerClient()
 
+    // Verificar autenticação
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Usuário não autenticado" },
+        { status: 401 }
+      )
+    }
+
+    // Verificar perfil do usuário
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type, role, id")
+      .eq("id", user.id)
+      .single()
+
+    if (!profile) {
+      return NextResponse.json(
+        { success: false, error: "Perfil do usuário não encontrado" },
+        { status: 404 }
+      )
+    }
+
+    // Verificar se é admin ou assessor
+    const isAdmin = profile.user_type === 'admin'
+    const isAdvisor = profile.user_type === 'distributor' && profile.role === 'assessor'
+    
+    if (!isAdmin && !isAdvisor) {
+      return NextResponse.json(
+        { success: false, error: "Acesso negado. Apenas administradores e assessores podem gerenciar investimentos" },
+        { status: 403 }
+      )
+    }
+
     if (!investmentId || !action) {
       return NextResponse.json({ 
         success: false, 
@@ -21,6 +56,45 @@ export async function POST(request: NextRequest) {
         success: false, 
         error: "Ação deve ser 'approve' ou 'reject'" 
       }, { status: 400 })
+    }
+
+    // Verificar se o investimento existe
+    const { data: investment, error: investmentError } = await supabase
+      .from("investments")
+      .select("*")
+      .eq("id", investmentId)
+      .single()
+
+    if (investmentError || !investment) {
+      return NextResponse.json(
+        { success: false, error: "Investimento não encontrado" },
+        { status: 404 }
+      )
+    }
+
+    // Se for assessor, verificar se tem permissão para gerenciar este investimento
+    if (isAdvisor) {
+      const { data: investorProfile, error: investorError } = await supabase
+        .from("profiles")
+        .select("parent_id")
+        .eq("id", investment.user_id)
+        .eq("user_type", "investor")
+        .single()
+
+      if (investorError || !investorProfile) {
+        return NextResponse.json(
+          { success: false, error: "Investidor não encontrado" },
+          { status: 404 }
+        )
+      }
+
+      // Verificar se o investidor pertence ao assessor
+      if (investorProfile.parent_id !== profile.id) {
+        return NextResponse.json(
+          { success: false, error: "Acesso negado. Você só pode gerenciar investimentos dos seus investidores" },
+          { status: 403 }
+        )
+      }
     }
 
     if (action === 'approve') {

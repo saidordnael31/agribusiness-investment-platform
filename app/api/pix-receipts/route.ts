@@ -23,26 +23,45 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'all'
     const transactionId = searchParams.get('transactionId')
 
-    // Verificar se é admin
+    // Verificar perfil do usuário
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type")
+      .select("user_type, role")
       .eq("id", user.id)
       .single()
 
     const isAdmin = profile?.user_type === 'admin'
+    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor'
 
     let query = supabase
       .from("pix_receipts")
       .select('*')
       .order('created_at', { ascending: false })
 
-    // Se não for admin, só pode ver seus próprios comprovantes
-    if (!isAdmin) {
+    // Definir filtros baseados no tipo de usuário
+    if (isAdmin) {
+      // Admin pode ver todos os comprovantes
+      if (userId) {
+        query = query.eq('user_id', userId)
+      }
+    } else if (isAdvisor) {
+      // Assessor pode ver comprovantes dos seus investidores
+      const { data: investorIds } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("parent_id", user.id)
+        .eq("user_type", "investor")
+      
+      if (investorIds && investorIds.length > 0) {
+        const ids = investorIds.map(inv => inv.id)
+        query = query.in('user_id', ids)
+      } else {
+        // Se não tem investidores, retorna array vazio
+        query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
+      }
+    } else {
+      // Usuário comum só pode ver seus próprios comprovantes
       query = query.eq('user_id', user.id)
-    } else if (userId) {
-      // Admin pode filtrar por usuário específico
-      query = query.eq('user_id', userId)
     }
 
     if (status !== 'all') {
@@ -62,6 +81,7 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
+
 
     return NextResponse.json({
       success: true,

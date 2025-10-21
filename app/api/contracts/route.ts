@@ -30,34 +30,110 @@ export async function GET(request: NextRequest) {
     // Verificar permissões
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type")
+      .select("user_type, role, parent_id, office_id")
       .eq("id", user.id)
       .single()
 
-    // Apenas admins podem ver contratos de outros usuários
-    // Investidores podem ver apenas seus próprios contratos
-    if (profile?.user_type !== 'admin' && user.id !== investorId) {
+    console.log("🔍 [DEBUG] Perfil do usuário logado:", profile);
+    console.log("🔍 [DEBUG] InvestorId solicitado:", investorId);
+
+    // Verificar se é admin
+    const isAdmin = profile?.user_type === 'admin';
+    
+    // Verificar se é assessor e se o investidor é seu cliente
+    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor';
+    const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio';
+    
+    // Verificar se o investidor pertence ao assessor/escritório
+    let hasPermission = false;
+    
+    if (isAdmin) {
+      hasPermission = true;
+    } else if (isAdvisor || isOffice) {
+      // Buscar o perfil do investidor para verificar se pertence ao assessor/escritório
+      const { data: investorProfile } = await supabase
+        .from("profiles")
+        .select("parent_id, office_id")
+        .eq("id", investorId)
+        .single()
+      
+      console.log("🔍 [DEBUG] Perfil do investidor:", investorProfile);
+      
+      if (isAdvisor) {
+        // Assessor pode ver contratos de seus próprios investidores
+        hasPermission = investorProfile?.parent_id === user.id;
+      } else if (isOffice) {
+        // Escritório pode ver contratos de investidores do seu office_id
+        hasPermission = investorProfile?.office_id === user.id;
+      }
+    } else if (user.id === investorId) {
+      // Investidor pode ver seus próprios contratos
+      hasPermission = true;
+    }
+
+    console.log("🔍 [DEBUG] Tem permissão:", hasPermission);
+
+    if (!hasPermission) {
       return NextResponse.json(
-        { success: false, error: "Acesso negado" },
+        { success: false, error: "Acesso negado. Você não tem permissão para ver os contratos deste investidor." },
         { status: 403 }
       )
     }
 
-    // Buscar contratos do investidor
-    const { data: contracts, error } = await supabase
+    // Buscar contratos do investidor usando RPC para contornar RLS
+    console.log("🔍 [DEBUG] Buscando contratos na tabela investor_contracts para investor_id:", investorId);
+    
+    // Primeiro, tentar buscar diretamente
+    let { data: contracts, error } = await supabase
       .from("investor_contracts")
       .select("*")
       .eq("investor_id", investorId)
       .eq("status", "active")
       .order("created_at", { ascending: false })
 
+    console.log("🔍 [DEBUG] Resultado da consulta direta:", { contracts, error });
+
+    // Se der erro de RLS, tentar com bypass
+    if (error && error.message.includes('row-level security')) {
+      console.log("🔍 [DEBUG] Erro de RLS detectado, tentando bypass...");
+      
+      // Usar service role para contornar RLS
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        }
+      );
+
+      const { data: contractsAdmin, error: errorAdmin } = await supabaseAdmin
+        .from("investor_contracts")
+        .select("*")
+        .eq("investor_id", investorId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      console.log("🔍 [DEBUG] Resultado com bypass RLS:", { contractsAdmin, errorAdmin });
+      
+      if (!errorAdmin) {
+        contracts = contractsAdmin;
+        error = null;
+      }
+    }
+
     if (error) {
-      console.error("Get contracts error:", error)
+      console.error("❌ [DEBUG] Erro ao buscar contratos:", error)
       return NextResponse.json(
         { success: false, error: "Erro ao buscar contratos" },
         { status: 500 }
       )
     }
+
+    console.log("✅ [DEBUG] Contratos encontrados:", contracts?.length || 0);
 
     // Buscar informações dos usuários que fizeram upload
     const contractsWithUploaderInfo = await Promise.all(

@@ -45,14 +45,29 @@ export async function GET(request: NextRequest) {
     // Verificar permissões
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type")
+      .select("user_type, role")
       .eq("id", user.id)
       .single()
 
     const isAdmin = profile?.user_type === 'admin'
     const isOwner = receipt.user_id === user.id
+    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor'
 
-    if (!isAdmin && !isOwner) {
+    // Verificar se assessor tem acesso ao investidor
+    let hasAdvisorAccess = false
+    if (isAdvisor) {
+      const { data: investorProfile } = await supabase
+        .from("profiles")
+        .select("parent_id")
+        .eq("id", receipt.user_id)
+        .eq("user_type", "investor")
+        .single()
+      
+      hasAdvisorAccess = investorProfile?.parent_id === user.id
+    }
+
+
+    if (!isAdmin && !isOwner && !hasAdvisorAccess) {
       return NextResponse.json(
         { success: false, error: "Acesso negado" },
         { status: 403 }
@@ -65,7 +80,14 @@ export async function GET(request: NextRequest) {
       .createSignedUrl(receipt.file_path, 3600) // URL válida por 1 hora
 
     if (urlError) {
-      console.error("URL generation error:", urlError)
+      // Se o arquivo não existe, retornar erro específico
+      if (urlError.statusCode === '404' || urlError.message.includes('Object not found')) {
+        return NextResponse.json(
+          { success: false, error: "Arquivo não encontrado no storage" },
+          { status: 404 }
+        )
+      }
+      
       return NextResponse.json(
         { success: false, error: "Erro ao gerar URL do arquivo" },
         { status: 500 }

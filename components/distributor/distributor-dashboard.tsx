@@ -40,9 +40,12 @@ import {
   FileText,
   Download,
   Eye,
+  Check,
+  X,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
+import { ApproveInvestmentModal } from "./approve-investment-modal";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -53,6 +56,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InvestmentSimulator } from "../investor/investment-simulator";
+import { PDFViewer } from "../contracts/pdf-viewer";
 
 interface UserData {
   id: string;
@@ -203,6 +207,33 @@ export function DistributorDashboard() {
   const [userInvestments, setUserInvestments] = useState<Investment[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(false);
   const [loadingInvestments, setLoadingInvestments] = useState(false);
+  
+  // Estados para visualização de contratos
+  const [contractViewerOpen, setContractViewerOpen] = useState(false);
+  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  
+  // Estados para aprovação de investimentos
+  const [approvingInvestment, setApprovingInvestment] = useState<string | null>(null);
+  const [rejectingInvestment, setRejectingInvestment] = useState<string | null>(null);
+  
+  // Estados para modal de aprovação
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [selectedInvestment, setSelectedInvestment] = useState<{
+    id: string;
+    amount: number;
+    investorName: string;
+  } | null>(null);
+  
+  // Estados para observações e comprovantes
+  const [investmentNotes, setInvestmentNotes] = useState<Record<string, string>>({});
+  const [savingNotes, setSavingNotes] = useState<string | null>(null);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<{
+    investmentId: string;
+    receiptUrl: string;
+    fileName: string;
+  } | null>(null);
 
   const [distributorData, setDistributorData] = useState({
     totalCaptured: 0,
@@ -857,23 +888,26 @@ export function DistributorDashboard() {
   const fetchUserContracts = async (userId: string) => {
     try {
       setLoadingContracts(true);
-      const supabase = createClient();
+      
+      console.log("🔍 [DEBUG] Buscando contratos para userId:", userId);
 
-      const { data: contracts, error } = await supabase
-        .from("investor_contracts")
-        .select("*")
-        .eq("investor_id", userId)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
+      // Usar a API de contratos em vez de acessar diretamente o Supabase
+      const response = await fetch(`/api/contracts?investorId=${userId}`);
+      const result = await response.json();
 
-      if (error) {
-        console.error("Erro ao buscar contratos:", error);
+      console.log("🔍 [DEBUG] Resultado da API de contratos:", result);
+
+      if (!result.success) {
+        console.error("❌ [DEBUG] Erro na API de contratos:", result.error);
+        setUserContracts([]);
         return;
       }
 
-      setUserContracts(contracts || []);
+      console.log("✅ [DEBUG] Contratos encontrados via API:", result.data?.length || 0);
+      setUserContracts(result.data || []);
     } catch (error) {
-      console.error("Erro ao buscar contratos:", error);
+      console.error("❌ [DEBUG] Erro geral ao buscar contratos:", error);
+      setUserContracts([]);
     } finally {
       setLoadingContracts(false);
     }
@@ -917,6 +951,17 @@ export function DistributorDashboard() {
       }
 
       setUserInvestments(investments || []);
+      
+      // Carregar observações existentes
+      if (investments && investments.length > 0) {
+        const notesMap: Record<string, string> = {};
+        investments.forEach(investment => {
+          if (investment.notes) {
+            notesMap[investment.id] = investment.notes;
+          }
+        });
+        setInvestmentNotes(notesMap);
+      }
     } catch (error) {
       console.error("Erro ao buscar investimentos:", error);
     } finally {
@@ -1133,6 +1178,176 @@ export function DistributorDashboard() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Função para visualizar contrato (usando a mesma lógica do admin)
+  const viewContract = async (contract: Contract) => {
+    try {
+      setSelectedContract(contract);
+      setContractViewerOpen(true);
+    } catch (error) {
+      console.error("Erro ao abrir visualizador:", error);
+      toast({
+        title: "Erro ao visualizar contrato",
+        description: "Não foi possível abrir o visualizador de contratos.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Função para abrir modal de aprovação
+  const handleApproveInvestment = (investment: Investment) => {
+    setSelectedInvestment({
+      id: investment.id,
+      amount: investment.amount,
+      investorName: editingUser?.name || 'Investidor'
+    });
+    setApproveModalOpen(true);
+  };
+
+  // Função para rejeitar investimento
+  const handleRejectInvestment = async (investmentId: string) => {
+    try {
+      setRejectingInvestment(investmentId);
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("investments")
+        .update({ 
+          status: "rejected",
+          rejected_at: new Date().toISOString(),
+          rejected_by: user?.id
+        })
+        .eq("id", investmentId);
+
+      if (error) {
+        throw new Error(`Erro ao rejeitar investimento: ${error.message}`);
+      }
+
+      toast({
+        title: "Investimento rejeitado!",
+        description: "O investimento foi rejeitado.",
+      });
+
+      // Recarregar investimentos
+      if (editingUser) {
+        await fetchUserInvestments(editingUser.id);
+      }
+    } catch (error: any) {
+      console.error("Erro ao rejeitar investimento:", error);
+      toast({
+        title: "Erro ao rejeitar investimento",
+        description: error.message || "Não foi possível rejeitar o investimento.",
+        variant: "destructive",
+      });
+    } finally {
+      setRejectingInvestment(null);
+    }
+  };
+
+  // Função chamada quando a aprovação é bem-sucedida
+  const handleApprovalSuccess = async () => {
+    if (editingUser) {
+      await fetchUserInvestments(editingUser.id);
+    }
+  };
+
+  // Função para visualizar comprovante
+  const handleViewReceipt = async (investmentId: string) => {
+    setLoadingReceipt(true);
+    try {
+      // Buscar comprovantes do investimento
+      const response = await fetch(`/api/pix-receipts?transactionId=${investmentId}`);
+      const data = await response.json();
+
+      if (!data.success || !data.data || data.data.length === 0) {
+        toast({
+          title: "Comprovante não encontrado",
+          description: "Não foi possível encontrar o comprovante para este investimento.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Tentar todos os comprovantes até encontrar um que funcione
+      for (let i = 0; i < data.data.length; i++) {
+        const receipt = data.data[i];
+        
+        const viewResponse = await fetch(`/api/pix-receipts/view?receiptId=${receipt.id}`);
+        const viewData = await viewResponse.json();
+
+        if (viewData.success && viewData.data.signed_url) {
+          setSelectedReceipt({
+            investmentId,
+            receiptUrl: viewData.data.signed_url,
+            fileName: receipt.file_name
+          });
+          setReceiptModalOpen(true);
+          return; // Sair do loop se encontrou um comprovante válido
+        }
+      }
+      
+      // Se chegou aqui, nenhum comprovante funcionou
+      toast({
+        title: "Erro ao visualizar comprovante",
+        description: "Nenhum dos comprovantes encontrados pôde ser visualizado. Verifique se os arquivos existem no storage.",
+        variant: "destructive"
+      });
+    } catch (error: any) {
+      console.error("❌ ERRO GERAL ao buscar comprovante:", error);
+      console.error("Stack trace:", error.stack);
+      toast({
+        title: "Erro ao carregar comprovante",
+        description: error.message || "Não foi possível carregar o comprovante.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
+
+  // Função para alterar observações
+  const handleNotesChange = (investmentId: string, notes: string) => {
+    setInvestmentNotes(prev => ({
+      ...prev,
+      [investmentId]: notes
+    }));
+  };
+
+  // Função para salvar observações
+  const handleSaveNotes = async (investmentId: string) => {
+    try {
+      setSavingNotes(investmentId);
+      const supabase = createClient();
+
+      const notes = investmentNotes[investmentId] || '';
+      
+      const { error } = await supabase
+        .from("investments")
+        .update({ 
+          notes: notes,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", investmentId);
+
+      if (error) {
+        throw new Error(`Erro ao salvar observações: ${error.message}`);
+      }
+
+      toast({
+        title: "Observações salvas!",
+        description: "As observações foram salvas com sucesso.",
+      });
+    } catch (error: any) {
+      console.error("Erro ao salvar observações:", error);
+      toast({
+        title: "Erro ao salvar observações",
+        description: error.message || "Não foi possível salvar as observações.",
+        variant: "destructive"
+      });
+    } finally {
+      setSavingNotes(null);
+    }
   };
 
 
@@ -2757,7 +2972,7 @@ export function DistributorDashboard() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => window.open(contract.file_url, '_blank')}
+                                    onClick={() => viewContract(contract)}
                                     title="Visualizar contrato"
                                   >
                                     <Eye className="w-4 h-4" />
@@ -2830,12 +3045,12 @@ export function DistributorDashboard() {
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-sm font-medium text-muted-foreground">Resgatados</p>
+                                <p className="text-sm font-medium text-muted-foreground">Rejeitados</p>
                                 <p className="text-2xl font-bold text-red-600">
-                                  {userInvestments.filter(inv => inv.status === 'withdrawn').length}
+                                  {userInvestments.filter(inv => inv.status === 'rejected').length}
                                 </p>
                               </div>
-                              <Users className="h-8 w-8 text-red-600" />
+                              <X className="h-8 w-8 text-red-600" />
                             </div>
                           </CardContent>
                         </Card>
@@ -2860,18 +3075,12 @@ export function DistributorDashboard() {
                         {userInvestments.map((investment) => (
                           <Card key={investment.id}>
                             <CardContent className="p-4">
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                   <p className="text-sm font-medium text-muted-foreground">Valor Investido</p>
                                   <p className="text-lg font-semibold">
                                     {formatCurrency(investment.amount)}
                                   </p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-muted-foreground">Tipo de Cota</p>
-                                  <Badge variant={investment.quota_type === 'senior' ? 'default' : 'secondary'}>
-                                    {investment.quota_type === 'senior' ? 'Sênior' : 'Subordinada'}
-                                  </Badge>
                                 </div>
                                 <div>
                                   <p className="text-sm font-medium text-muted-foreground">Taxa Mensal</p>
@@ -2887,13 +3096,17 @@ export function DistributorDashboard() {
                                         ? 'default' 
                                         : investment.status === 'pending'
                                         ? 'secondary'
-                                        : 'destructive'
+                                        : investment.status === 'rejected'
+                                        ? 'destructive'
+                                        : 'outline'
                                     }
                                   >
                                     {investment.status === 'active' 
                                       ? 'Ativo' 
                                       : investment.status === 'pending'
                                       ? 'Pendente'
+                                      : investment.status === 'rejected'
+                                      ? 'Rejeitado'
                                       : investment.status === 'withdrawn'
                                       ? 'Resgatado'
                                       : 'Inativo'
@@ -2901,11 +3114,125 @@ export function DistributorDashboard() {
                                   </Badge>
                                 </div>
                               </div>
-                              <div className="mt-2 text-sm text-muted-foreground">
-                                <p>Prazo: {investment.commitment_period} meses</p>
-                                <p>Criado em: {new Date(investment.created_at).toLocaleDateString('pt-BR')}</p>
-                                {investment.updated_at !== investment.created_at && (
-                                  <p>Atualizado em: {new Date(investment.updated_at).toLocaleDateString('pt-BR')}</p>
+                              <div className="mt-4 space-y-3">
+                                <div className="text-sm text-muted-foreground">
+                                  <p>Prazo: {investment.commitment_period} meses</p>
+                                  <p>Criado em: {new Date(investment.created_at).toLocaleDateString('pt-BR')}</p>
+                                  {investment.updated_at !== investment.created_at && (
+                                    <p>Atualizado em: {new Date(investment.updated_at).toLocaleDateString('pt-BR')}</p>
+                                  )}
+                                </div>
+                                
+                                {/* Ações de aprovação para investimentos pendentes */}
+                                {investment.status === 'pending' && (
+                                  <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-amber-600 mb-2">
+                                        ⚠️ Investimento aguardando aprovação
+                                      </p>
+                                      <p className="text-xs text-muted-foreground mb-3">
+                                        Verifique se o investidor possui:
+                                      </p>
+                                      <ul className="text-xs text-muted-foreground space-y-1 mb-3">
+                                        <li>• Data de pagamento registrada</li>
+                                        <li>• Comprovante de transferência anexado</li>
+                                      </ul>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleApproveInvestment(investment)}
+                                        className="bg-green-600 hover:bg-green-700"
+                                      >
+                                        <Check className="w-4 h-4 mr-2" />
+                                        Aprovar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => handleRejectInvestment(investment.id)}
+                                        disabled={rejectingInvestment === investment.id}
+                                      >
+                                        {rejectingInvestment === investment.id ? (
+                                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        ) : (
+                                          <X className="w-4 h-4 mr-2" />
+                                        )}
+                                        Rejeitar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Status de aprovação para investimentos aprovados/rejeitados */}
+                                {investment.status === 'active' && (
+                                  <div className="pt-3 border-t space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <Check className="w-4 h-4 text-green-600" />
+                                      <span className="text-sm text-green-600 font-medium">
+                                        Investimento aprovado
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Botão para visualizar comprovante */}
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleViewReceipt(investment.id)}
+                                        disabled={loadingReceipt}
+                                        className="bg-blue-50 hover:bg-blue-100 text-blue-700"
+                                      >
+                                        {loadingReceipt ? (
+                                          <>
+                                            <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-blue-700 border-t-transparent" />
+                                            Carregando...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Eye className="w-4 h-4 mr-2" />
+                                            Ver Comprovante
+                                          </>
+                                        )}
+                                      </Button>
+                                    </div>
+                                    
+                                    {/* Input para observações */}
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`notes-${investment.id}`} className="text-sm font-medium">
+                                        Observações
+                                      </Label>
+                                      <div className="flex gap-2">
+                                        <Input
+                                          id={`notes-${investment.id}`}
+                                          placeholder="Adicione observações sobre este investimento..."
+                                          value={investmentNotes[investment.id] || ''}
+                                          onChange={(e) => handleNotesChange(investment.id, e.target.value)}
+                                          className="flex-1"
+                                        />
+                                        <Button
+                                          size="sm"
+                                          onClick={() => handleSaveNotes(investment.id)}
+                                          disabled={savingNotes === investment.id}
+                                        >
+                                          {savingNotes === investment.id ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <Check className="w-4 h-4" />
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {investment.status === 'rejected' && (
+                                  <div className="flex items-center gap-2 pt-3 border-t">
+                                    <X className="w-4 h-4 text-red-600" />
+                                    <span className="text-sm text-red-600 font-medium">
+                                      Investimento rejeitado
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             </CardContent>
@@ -2919,6 +3246,110 @@ export function DistributorDashboard() {
             </Tabs>
           </DialogContent>
         </Dialog>
+
+        {/* Modal de Aprovação de Investimento */}
+        {selectedInvestment && (
+          <ApproveInvestmentModal
+            isOpen={approveModalOpen}
+            onClose={() => {
+              setApproveModalOpen(false)
+              setSelectedInvestment(null)
+            }}
+            investmentId={selectedInvestment.id}
+            investmentAmount={selectedInvestment.amount}
+            investorName={selectedInvestment.investorName}
+            onSuccess={handleApprovalSuccess}
+          />
+        )}
+
+        {/* Modal para Visualizar Comprovante */}
+        <Dialog open={receiptModalOpen} onOpenChange={setReceiptModalOpen}>
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="w-5 h-5" />
+                Comprovante de Pagamento
+              </DialogTitle>
+              <DialogDescription>
+                Visualize o comprovante de pagamento do investimento
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedReceipt && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Arquivo: {selectedReceipt.fileName}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(selectedReceipt.receiptUrl, '_blank')}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Baixar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setReceiptModalOpen(false)}
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="border rounded-lg overflow-hidden">
+                  {selectedReceipt.receiptUrl.endsWith('.pdf') ? (
+                    <iframe
+                      src={selectedReceipt.receiptUrl}
+                      className="w-full h-96"
+                      title="Comprovante PDF"
+                    />
+                  ) : (
+                    <img
+                      src={selectedReceipt.receiptUrl}
+                      alt="Comprovante de pagamento"
+                      className="w-full h-auto max-h-96 object-contain"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal para Visualizar Contrato - Usando a mesma lógica do admin */}
+        {contractViewerOpen && selectedContract && (
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0,
+              zIndex: 9999,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              pointerEvents: 'auto'
+            }}
+            onClick={() => setContractViewerOpen(false)}
+          >
+            <div 
+              className="w-full max-w-7xl max-h-[90vh] flex items-center justify-center"
+              style={{ pointerEvents: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <PDFViewer
+                contractId={selectedContract.id}
+                fileName={selectedContract.file_name}
+                fileType={selectedContract.file_type}
+                onClose={() => setContractViewerOpen(false)}
+              />
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
