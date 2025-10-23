@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     // Query base para investments
     let query = supabase
       .from("investments")
-      .select('*')
+      .select('*, approved_by_admin')
       .order('created_at', { ascending: false })
 
     // Aplicar filtros

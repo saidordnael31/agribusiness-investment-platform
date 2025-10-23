@@ -225,6 +225,7 @@ export async function POST(request: NextRequest) {
     const updateData = { 
       status: 'active',
       payment_date: paymentDateObj.toISOString(),
+      approved_by_admin: isAdvisor ? false : true, // Se for assessor, marcar como não aprovado pelo admin
       updated_at: updatedAt
     }
     
@@ -257,7 +258,9 @@ export async function POST(request: NextRequest) {
           fileType: receiptFile.type
         }
       },
-      message: "Investimento aprovado com comprovante enviado com sucesso!",
+      message: isAdvisor 
+        ? "Investimento aprovado pelo assessor com comprovante enviado! Aguardando aprovação final do administrador."
+        : "Investimento aprovado definitivamente pelo administrador com comprovante enviado!",
     })
 
   } catch (error) {

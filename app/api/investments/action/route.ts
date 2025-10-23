@@ -98,47 +98,75 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'approve') {
-      // Validar data de pagamento para aprovação
-      if (!paymentDate) {
-        return NextResponse.json({ 
-          success: false, 
-          error: "Data de pagamento é obrigatória para aprovação" 
-        }, { status: 400 })
-      }
+      // Se for assessor, aprovar mas marcar como não aprovado pelo admin
+      if (isAdvisor) {
+        // Validar data de pagamento para aprovação
+        if (!paymentDate) {
+          return NextResponse.json({ 
+            success: false, 
+            error: "Data de pagamento é obrigatória para aprovação" 
+          }, { status: 400 })
+        }
 
-      // Validar formato da data
-      const paymentDateObj = new Date(paymentDate)
-      if (isNaN(paymentDateObj.getTime())) {
-        return NextResponse.json({ 
-          success: false, 
-          error: "Data de pagamento inválida" 
-        }, { status: 400 })
-      }
+        // Validar formato da data
+        const paymentDateObj = new Date(paymentDate)
+        if (isNaN(paymentDateObj.getTime())) {
+          return NextResponse.json({ 
+            success: false, 
+            error: "Data de pagamento inválida" 
+          }, { status: 400 })
+        }
 
-      // Aprovar: alterar status para 'active'
-      const updatedAt = new Date().toISOString()
+        // Aprovar como assessor: alterar status para 'active' mas marcar como não aprovado pelo admin
+        const updatedAt = new Date().toISOString()
 
-      const { data, error } = await supabase
-        .from("investments")
-        .update({ 
-          status: 'active',
-          payment_date: paymentDateObj.toISOString(),
-          updated_at: updatedAt
+        const { data, error } = await supabase
+          .from("investments")
+          .update({ 
+            status: 'active',
+            payment_date: paymentDateObj.toISOString(),
+            approved_by_admin: false,
+            updated_at: updatedAt
+          })
+          .eq('id', investmentId)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Database error:", error)
+          return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+        }
+
+        return NextResponse.json({
+          success: true,
+          data,
+          message: "Investimento aprovado pelo assessor! Aguardando aprovação final do administrador.",
         })
-        .eq('id', investmentId)
-        .select()
-        .single()
+      } else {
+        // Se for admin, aprovar definitivamente
+        const updatedAt = new Date().toISOString()
 
-      if (error) {
-        console.error("Database error:", error)
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+        const { data, error } = await supabase
+          .from("investments")
+          .update({ 
+            approved_by_admin: true,
+            updated_at: updatedAt
+          })
+          .eq('id', investmentId)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Database error:", error)
+          return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+        }
+
+        return NextResponse.json({
+          success: true,
+          data,
+          message: "Investimento aprovado definitivamente pelo administrador!",
+        })
       }
-
-      return NextResponse.json({
-        success: true,
-        data,
-        message: "Investimento aprovado com sucesso!",
-      })
     } else {
       // Rejeitar: deletar o registro da tabela
       const { data, error } = await supabase

@@ -41,7 +41,7 @@ interface PlatformStats {
 
 interface RecentActivity {
   id: string
-  type: "investment" | "withdrawal" | "goal_achieved" | "pending_investment" | "user_created"
+  type: "investment" | "withdrawal" | "goal_achieved" | "pending_investment" | "user_created" | "active_investment_pending_admin"
   title: string
   description: string
   timestamp: string
@@ -56,6 +56,7 @@ interface RecentActivity {
     quotaType?: string
     commitmentPeriod?: number
     monthlyReturnRate?: number
+    approvedByAdmin?: boolean
   }
 }
 
@@ -151,7 +152,7 @@ export function AdminDashboard() {
 
 
       // Buscar investimentos ativos (status active) usando a API
-      if (filters.type === "all" || filters.type === "investment") {
+      if (filters.type === "all" || filters.type === "investment" || filters.type === "active_investment_pending_admin") {
         try {
           const activeResponse = await fetch('/api/investments?status=active')
           const activeData = await activeResponse.json()
@@ -162,21 +163,54 @@ export function AdminDashboard() {
             activeData.data
               .filter((inv: any) => applyDateFilter(inv.updated_at || inv.created_at))
               .forEach((inv: any) => {
-                activities.push({
-                  id: `active-inv-${inv.id}`,
-                  type: "investment",
-                  title: `Investimento ativo - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
-                  description: `${inv.profiles?.full_name || "Usuário"} - ${inv.quota_type || 'Tipo não especificado'} - Investimento ativo`,
-                  timestamp: new Date(inv.updated_at || inv.created_at).toLocaleString("pt-BR"),
-                  color: "bg-green-500",
-                  relatedData: {
-                    investmentId: inv.id,
-                    amount: inv.amount,
-                    quotaType: inv.quota_type,
-                    commitmentPeriod: inv.commitment_period,
-                    monthlyReturnRate: inv.monthly_return_rate
+                // Verificar se foi aprovado pelo admin
+                const isApprovedByAdmin = inv.approved_by_admin === true
+                
+                if (!isApprovedByAdmin) {
+                  // Investimento ativo mas não aprovado pelo admin
+                  if (filters.type === "all" || filters.type === "active_investment_pending_admin") {
+                    activities.push({
+                      id: `active-pending-admin-${inv.id}`,
+                      type: "active_investment_pending_admin",
+                      title: `Investimento ativo - Aguardando aprovação do admin - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
+                      description: `${inv.profiles?.full_name || "Usuário"} - ${inv.quota_type || 'Tipo não especificado'} - Aprovado pelo assessor, aguardando admin`,
+                      timestamp: new Date(inv.updated_at || inv.created_at).toLocaleString("pt-BR"),
+                      color: "bg-yellow-500",
+                      actions: {
+                        approve: true,
+                        reject: true
+                      },
+                      relatedData: {
+                        investmentId: inv.id,
+                        amount: inv.amount,
+                        quotaType: inv.quota_type,
+                        commitmentPeriod: inv.commitment_period,
+                        monthlyReturnRate: inv.monthly_return_rate,
+                        approvedByAdmin: false
+                      }
+                    })
                   }
-                })
+                } else {
+                  // Investimento ativo e aprovado pelo admin
+                  if (filters.type === "all" || filters.type === "investment") {
+                    activities.push({
+                      id: `active-inv-${inv.id}`,
+                      type: "investment",
+                      title: `Investimento ativo - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
+                      description: `${inv.profiles?.full_name || "Usuário"} - ${inv.quota_type || 'Tipo não especificado'} - Investimento ativo`,
+                      timestamp: new Date(inv.updated_at || inv.created_at).toLocaleString("pt-BR"),
+                      color: "bg-green-500",
+                      relatedData: {
+                        investmentId: inv.id,
+                        amount: inv.amount,
+                        quotaType: inv.quota_type,
+                        commitmentPeriod: inv.commitment_period,
+                        monthlyReturnRate: inv.monthly_return_rate,
+                        approvedByAdmin: true
+                      }
+                    })
+                  }
+                }
               })
           }
         } catch (error) {
@@ -495,7 +529,8 @@ export function AdminDashboard() {
 
   const handleActivityAction = async (activityId: string, action: 'approve' | 'reject') => {
     // Extrair o ID real do investimento do ID da atividade
-    const realId = activityId.replace(/^pending-inv-/, '')
+    let realId = activityId.replace(/^pending-inv-/, '')
+    realId = realId.replace(/^active-pending-admin-/, '')
     await processInvestmentAction(realId, action)
   }
 
@@ -725,6 +760,7 @@ export function AdminDashboard() {
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="investment">Investimentos</SelectItem>
                       <SelectItem value="pending_investment">Investimentos Pendentes</SelectItem>
+                      <SelectItem value="active_investment_pending_admin">Aguardando Admin</SelectItem>
                       <SelectItem value="withdrawal">Transações</SelectItem>
                       <SelectItem value="user_created">Usuários</SelectItem>
                       <SelectItem value="goal_achieved">Metas</SelectItem>
@@ -783,6 +819,11 @@ export function AdminDashboard() {
                                   ⏳ Pendente
                                 </Badge>
                               )}
+                              {activity.type === "active_investment_pending_admin" && (
+                                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                  ⚠️ Aguardando Admin
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground mb-2">{activity.description}</p>
                             
@@ -815,6 +856,32 @@ export function AdminDashboard() {
                                     </span>
                                   </div>
                                 )}
+                              </div>
+                            )}
+
+                            {/* Informações adicionais para investimentos ativos que aguardam aprovação do admin */}
+                            {activity.type === "active_investment_pending_admin" && activity.relatedData && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs bg-yellow-50 p-3 rounded border border-yellow-200">
+                                <div>
+                                  <span className="text-muted-foreground">Status:</span>
+                                  <span className="ml-1 font-medium text-yellow-700">⚠️ Aguardando Admin</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Valor:</span>
+                                  <span className="ml-1 font-medium">
+                                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(activity.relatedData.amount || 0)}
+                                  </span>
+                                </div>
+                                {activity.relatedData.quotaType && (
+                                  <div>
+                                    <span className="text-muted-foreground">Tipo:</span>
+                                    <span className="ml-1 font-medium capitalize">{activity.relatedData.quotaType}</span>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-muted-foreground">Aprovado por:</span>
+                                  <span className="ml-1 font-medium text-yellow-600">Assessor</span>
+                                </div>
                               </div>
                             )}
 
@@ -863,6 +930,34 @@ export function AdminDashboard() {
                                 >
                                   <CheckCircle className="w-3 h-3 mr-1" />
                                   Aprovar
+                                </Button>
+                              )}
+                              {activity.actions.reject && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 border-red-600 bg-transparent hover:bg-red-50"
+                                  onClick={() => handleActivityAction(activity.id, "reject")}
+                                >
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Rejeitar
+                                </Button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Botões de ação para investimentos ativos que aguardam aprovação do admin */}
+                          {activity.actions && activity.type === "active_investment_pending_admin" && (
+                            <div className="flex gap-1">
+                              {activity.actions.approve && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-emerald-600 border-emerald-600 bg-transparent hover:bg-emerald-50"
+                                  onClick={() => handleActivityAction(activity.id, "approve")}
+                                >
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Aprovar Admin
                                 </Button>
                               )}
                               {activity.actions.reject && (
