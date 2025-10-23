@@ -511,7 +511,7 @@ export function UserManager() {
         body: JSON.stringify({ 
           value, 
           cpf,
-          email: "admin@agroderi.com", // Email padrão para admin
+          email: "admin@agrinvest.com", // Email padrão para admin
           userName: "Administrador"
         }),
       });

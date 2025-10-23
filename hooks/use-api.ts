@@ -82,7 +82,7 @@ export function useAuth() {
 
         toast({
           title: "Login realizado com sucesso!",
-          description: `Bem-vindo à plataforma Agroderi!`,
+          description: `Bem-vindo à plataforma AGRINVEST!`,
         })
 
         return result.user
@@ -108,7 +108,7 @@ export function useAuth() {
 
         toast({
           title: "Cadastro realizado com sucesso!",
-          description: `Bem-vindo à plataforma Agroderi!`,
+          description: `Bem-vindo à plataforma AGRINVEST!`,
         })
 
         return result.user

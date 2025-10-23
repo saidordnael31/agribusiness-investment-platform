@@ -26,10 +26,10 @@ export default function AdminLoginPage() {
     // Simular autenticação admin
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    if (email === "admin@agroderi.com" && password === "admin123") {
+    if (email === "admin@agrinvest.com" && password === "admin123") {
       const adminUser = {
         name: "Administrador",
-        email: "admin@agroderi.com",
+        email: "admin@agrinvest.com",
         type: "admin",
       }
 
@@ -71,7 +71,7 @@ export default function AdminLoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@agroderi.com"
+                placeholder="admin@agrinvest.com"
                 required
               />
             </div>
@@ -103,7 +103,7 @@ export default function AdminLoginPage() {
           </form>
           <div className="mt-6 p-4 bg-slate-50 rounded-lg">
             <p className="text-sm text-slate-600 text-center">
-              <strong>Demo:</strong> admin@agroderi.com / admin123
+              <strong>Demo:</strong> admin@agrinvest.com / admin123
             </p>
           </div>
         </CardContent>

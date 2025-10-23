@@ -24,7 +24,7 @@ Nome: ${userName}
 Valor: R$ ${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
 CPF: ${cpf}
 ========================================
-Assunto: 🌱 Código PIX - Investimento Agroderi - R$ ${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+Assunto: 🌱 Código PIX - Investimento AGRINVEST - R$ ${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
 ========================================
 
 Olá ${userName}!
@@ -46,7 +46,7 @@ ${pixCode}
 
 Importante: Este código PIX é válido por 24 horas.
 
-Agroderi - Clube de Investimentos Agropecuários
+AGRINVEST - Clube de Investimentos Agropecuários
 ========================================
 `;
 

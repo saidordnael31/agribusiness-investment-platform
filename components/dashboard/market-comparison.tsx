@@ -17,7 +17,7 @@ interface MarketProduct {
 export default function MarketComparison() {
   const marketProducts: MarketProduct[] = [
     {
-      name: "Agroderi Conservador",
+      name: "AGRINVEST Conservador",
       type: "Clube Privado",
       rate: 3.0,
       liquidity: "D+2",
@@ -26,7 +26,7 @@ export default function MarketComparison() {
       description: "Clube Privado de Investimento do Agronegócio",
     },
     {
-      name: "Agroderi Estratégico",
+      name: "AGRINVEST Estratégico",
       type: "Clube Privado",
       rate: 3.5,
       liquidity: "D+2",
@@ -112,7 +112,7 @@ export default function MarketComparison() {
           <TrendingUp className="h-5 w-5" />
           Comparativo de Mercado
         </CardTitle>
-        <CardDescription>Compare a rentabilidade dos produtos Agroderi com outras opções do mercado</CardDescription>
+        <CardDescription>Compare a rentabilidade dos produtos AGRINVEST com outras opções do mercado</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -120,13 +120,13 @@ export default function MarketComparison() {
             <div
               key={index}
               className={`p-4 rounded-lg border ${
-                product.name.includes("Agroderi") ? "border-primary bg-primary/5" : "border-border"
+                product.name.includes("AGRINVEST") ? "border-primary bg-primary/5" : "border-border"
               }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <h4 className="font-semibold">{product.name}</h4>
-                  {product.name.includes("Agroderi") && (
+                  {product.name.includes("AGRINVEST") && (
                     <Badge variant="default" className="text-xs">
                       Nosso Produto
                     </Badge>
@@ -158,7 +158,7 @@ export default function MarketComparison() {
         </div>
 
         <div className="mt-6 p-4 bg-muted rounded-lg">
-          <h4 className="font-semibold mb-2">Vantagens Agroderi</h4>
+          <h4 className="font-semibold mb-2">Vantagens AGRINVEST</h4>
           <ul className="text-sm space-y-1 text-muted-foreground">
             <li>
               • <strong>Liquidez superior:</strong> D+2 vs D+30/D+60 do mercado

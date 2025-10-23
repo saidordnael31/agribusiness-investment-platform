@@ -346,7 +346,7 @@ export function InvestorDashboard() {
                 Bem-vindo, {user.name}
               </h2>
               <p className="text-muted-foreground">
-                Acompanhe seus investimentos no Clube Agroderi
+                Acompanhe seus investimentos no Clube AGRINVEST
               </p>
             </div>
           </div>
@@ -414,7 +414,7 @@ export function InvestorDashboard() {
             <CardHeader>
               <CardTitle>Histórico de Transações</CardTitle>
               <CardDescription>
-                Seus investimentos e resgates no Clube Agroderi
+                Seus investimentos e resgates no Clube AGRINVEST
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

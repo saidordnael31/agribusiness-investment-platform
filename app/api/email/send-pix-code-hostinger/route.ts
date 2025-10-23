@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Código PIX - Agroderi</title>
+        <title>Código PIX - AGRINVEST</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       <body>
         <div class="container">
           <div class="header">
-            <div class="logo">🌱 Agroderi</div>
+            <div class="logo">🌱 AGRINVEST</div>
             <p>Clube de Investimentos Agropecuários</p>
           </div>
           
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
           </div>
           
           <div class="footer">
-            <p>Agroderi - Clube de Investimentos Agropecuários</p>
+            <p>AGRINVEST - Clube de Investimentos Agropecuários</p>
             <p>Este é um email automático, não responda.</p>
           </div>
         </div>
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     const info = await transporter.sendMail({
       from: "agrinvest@akintec.com",
       to: email,
-      subject: `🌱 Código PIX - Investimento Agroderi - R$ ${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+      subject: `🌱 Código PIX - Investimento AGRINVEST - R$ ${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
       html: emailHtml,
       text: `
 Olá ${userName}!
@@ -199,7 +199,7 @@ Código PIX: ${pixCode}
 ⏰ Importante: Este código PIX é válido por 24 horas.
 📅 Data de geração: ${new Date().toLocaleString('pt-BR')}
 
-Agroderi - Clube de Investimentos Agropecuários
+AGRINVEST - Clube de Investimentos Agropecuários
       `.trim()
     });
 

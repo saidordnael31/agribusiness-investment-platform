@@ -121,7 +121,7 @@ export function useNotifications() {
     // Notificações de investimentos pendentes da tabela investments
     pendingInvestments.forEach(investment => {
       const investorName = investment.profiles?.full_name || `Investidor ${investment.user_id.slice(0, 8)}`
-      const investorEmail = investment.profiles?.email || `admin@agroderi.com`
+      const investorEmail = investment.profiles?.email || `admin@agrinvest.com`
       
       notificationsList.push({
         id: `investment_${investment.id}`,

@@ -79,11 +79,11 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
     // Simulação de envio de email - em produção, usar serviço real
     console.log(`
       Para: ${email}
-      Assunto: Bem-vindo ao Clube de Investimentos Agroderi
+      Assunto: Bem-vindo ao Clube de Investimentos AGRINVEST
       
       Olá ${investorName},
       
-      Seu assessor ${assessorName} cadastrou você na plataforma Agroderi.
+      Seu assessor ${assessorName} cadastrou você na plataforma AGRINVEST.
       
       Suas credenciais de acesso:
       Email: ${email}
@@ -92,7 +92,7 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
       Acesse: ${window.location.origin}/login
       
       Atenciosamente,
-      Equipe Agroderi
+      Equipe AGRINVEST
     `)
 
     toast({

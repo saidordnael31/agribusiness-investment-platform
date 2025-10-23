@@ -12,12 +12,12 @@ export async function POST(request: NextRequest) {
 
     // Verificar credenciais de demonstração primeiro
     const demoCredentials = [
-      { email: "admin@agroderi.com", password: "demo123", type: "admin", name: "Administrador" },
-      { email: "escritorio@agroderi.com", password: "demo123", type: "escritorio", name: "Escritório Demo" },
-      { email: "gestor@agroderi.com", password: "demo123", type: "gestor", name: "Gestor Demo" },
-      { email: "lider@agroderi.com", password: "demo123", type: "lider", name: "Líder Demo" },
-      { email: "assessor@agroderi.com", password: "demo123", type: "assessor", name: "Assessor Demo" },
-      { email: "investidor@agroderi.com", password: "demo123", type: "investidor", name: "Investidor Demo" },
+      { email: "admin@agrinvest.com", password: "demo123", type: "admin", name: "Administrador" },
+      { email: "escritorio@agrinvest.com", password: "demo123", type: "escritorio", name: "Escritório Demo" },
+      { email: "gestor@agrinvest.com", password: "demo123", type: "gestor", name: "Gestor Demo" },
+      { email: "lider@agrinvest.com", password: "demo123", type: "lider", name: "Líder Demo" },
+      { email: "assessor@agrinvest.com", password: "demo123", type: "assessor", name: "Assessor Demo" },
+      { email: "investidor@agrinvest.com", password: "demo123", type: "investidor", name: "Investidor Demo" },
     ]
 
     const demoUser = demoCredentials.find((cred) => cred.email === email && cred.password === password)

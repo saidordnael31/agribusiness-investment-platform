@@ -110,5 +110,5 @@ ON CONFLICT (setting_key) DO NOTHING;
 
 -- Criar usuário admin padrão (senha: admin123)
 INSERT INTO users (name, email, password_hash, user_type) VALUES
-('Administrador', 'admin@agroderi.com', '$2b$10$rQZ9QmjqjKW8WzK8nQZ9QO', 'admin')
+('Administrador', 'admin@agrinvest.com', '$2b$10$rQZ9QmjqjKW8WzK8nQZ9QO', 'admin')
 ON CONFLICT (email) DO NOTHING;
