@@ -30,7 +30,6 @@ import {
   Minus,
   Gift,
   Settings,
-  FileText,
   Key,
   ArrowRight,
   ArrowLeft,
@@ -133,14 +132,19 @@ export function Navbar() {
     }
   };
 
+  // Detectar se está nas páginas de redefinir senha
+  const isPasswordResetPage = pathname === '/resetPassword' || pathname === '/newPassword';
+  
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <header 
+      className={`sticky top-0 z-50 w-full border-b ${isPasswordResetPage ? 'border-transparent bg-transparent' : 'border-white/20 bg-[#003F28]'}`} 
+    >
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <TrendingUp className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-card-foreground">
+            <TrendingUp className="h-8 w-8 text-white" />
+            <span className="text-xl font-bold text-white">
               Agrinvest
             </span>
           </Link>
@@ -153,29 +157,18 @@ export function Navbar() {
                   <Link href={getDashboardRoute()} legacyBehavior passHref>
                     <NavigationMenuLink
                       className={cn(
-                        navigationMenuTriggerStyle(),
-                        isActive(getDashboardRoute()) && "bg-accent"
+                        "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                        "w-[138px] h-[41px] rounded-[11px]",
+                        isActive(getDashboardRoute()) 
+                          ? "bg-[#00BC6E] text-[#003F28]" 
+                          : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
                       )}
                     >
-                      <BarChart3 className="h-4 w-4 mr-2" />
                       Dashboard
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
 
-                <NavigationMenuItem>
-                  <Link href="/documents" legacyBehavior passHref>
-                    <NavigationMenuLink
-                      className={cn(
-                        navigationMenuTriggerStyle(),
-                        isActive("/documents") && "bg-accent"
-                      )}
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      Documentos
-                    </NavigationMenuLink>
-                  </Link>
-                </NavigationMenuItem>
 
                 {user.user_type === "investor" && (
                   <>
@@ -183,11 +176,14 @@ export function Navbar() {
                       <Link href="/deposit" legacyBehavior passHref>
                         <NavigationMenuLink
                           className={cn(
-                            navigationMenuTriggerStyle(),
-                            isActive("/deposit") && "bg-accent"
+                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                            "w-[138px] h-[41px] rounded-[11px]",
+                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                            isActive("/deposit") 
+                              ? "bg-[#00BC6E] text-[#003F28]" 
+                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#00BC6E] hover:text-[#003F28]"
                           )}
                         >
-                          <Plus className="h-4 w-4 mr-2" />
                           Depositar
                         </NavigationMenuLink>
                       </Link>
@@ -197,11 +193,14 @@ export function Navbar() {
                       <Link href="/withdraw" legacyBehavior passHref>
                         <NavigationMenuLink
                           className={cn(
-                            navigationMenuTriggerStyle(),
-                            isActive("/withdraw") && "bg-accent"
+                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                            "w-[138px] h-[41px] rounded-[11px]",
+                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                            isActive("/withdraw") 
+                              ? "bg-[#00BC6E] text-[#003F28]" 
+                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#00BC6E] hover:text-[#003F28]"
                           )}
                         >
-                          <Minus className="h-4 w-4 mr-2" />
                           Resgatar
                         </NavigationMenuLink>
                       </Link>
@@ -218,11 +217,14 @@ export function Navbar() {
                       <Link href="/calculator" legacyBehavior passHref>
                         <NavigationMenuLink
                           className={cn(
-                            navigationMenuTriggerStyle(),
-                            isActive("/calculator") && "bg-accent"
+                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                            "w-[138px] h-[41px] rounded-[11px]",
+                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                            isActive("/calculator") 
+                              ? "bg-[#00BC6E] text-[#003F28]" 
+                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
                           )}
                         >
-                          <Calculator className="h-4 w-4 mr-2" />
                           Calculadora
                         </NavigationMenuLink>
                       </Link>
@@ -252,7 +254,7 @@ export function Navbar() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="md:hidden"
+                  className="md:hidden text-white hover:bg-white/10"
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 >
                   <Menu className="h-5 w-5" />
@@ -263,13 +265,19 @@ export function Navbar() {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="flex items-center space-x-2 hover:bg-accent/80"
+                      className="flex items-center space-x-2 hover:bg-white/10 text-white"
                     >
-                      <User className="h-4 w-4" />
+                      <div className="h-4 w-4 relative">
+                        <img 
+                          src="/identity_platform.svg" 
+                          alt="User Icon" 
+                          className="h-4 w-4"
+                        />
+                      </div>
                       <span className="hidden sm:inline">
                         {getUserDisplayName()}
                       </span>
-                      <Badge variant="secondary" className="hidden sm:inline">
+                      <Badge variant="secondary" className="hidden sm:inline bg-[#00BC6E] text-[#003F28]">
                         {getUserTypeLabel()}
                       </Badge>
                     </Button>
@@ -288,12 +296,6 @@ export function Navbar() {
                       <Link href={getDashboardRoute()}>
                         <BarChart3 className="h-4 w-4 mr-2" />
                         Dashboard
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/documents">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Documentos
                       </Link>
                     </DropdownMenuItem>
                     {user.user_type === "investor" && (

@@ -324,10 +324,10 @@ export function InvestorDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white/80">
             Carregando seus investimentos...
           </p>
         </div>
@@ -336,16 +336,16 @@ export function InvestorDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <div className="container mx-auto px-4 py-6 md:py-8">
         {/* Welcome Section */}
         <div className="mb-6 md:mb-8">
           <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
             <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+              <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
                 Bem-vindo, {user.name}
               </h2>
-              <p className="text-muted-foreground">
+              <p className="text-white/80">
                 Acompanhe seus investimentos no Clube AGRINVEST
               </p>
             </div>
@@ -354,15 +354,21 @@ export function InvestorDashboard() {
 
         {/* Overview Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+          <Card className="bg-gradient-to-b from-[#00BC6E] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px' }}>
+            <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center">
+              <img 
+                src="/icons/paid.svg" 
+                alt="Paid Icon" 
+                className="h-full w-auto max-w-none"
+              />
+            </div>
+            <CardHeader className="space-y-0 pb-2">
+              <CardTitle className="text-white font-urbanist font-medium text-xl leading-7">
                 Total Investido
               </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-primary">
+            <CardContent className="pt-2">
+              <div className="text-white font-ibm-plex-sans font-bold text-4xl leading-7">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
@@ -371,37 +377,50 @@ export function InvestorDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Valor Atual</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <Card className="bg-gradient-to-b from-[#00BC6E] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px' }}>
+            <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center">
+              <img 
+                src="/icons/trending_up.svg" 
+                alt="Trending Up Icon" 
+                className="h-full w-auto max-w-none"
+              />
+            </div>
+            <CardHeader className="space-y-0 pb-2">
+              <CardTitle className="text-white font-urbanist font-medium text-xl leading-7">
+                Valor Atual
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-secondary">
+            <CardContent className="pt-2">
+              <div className="text-[#00BC6E] font-ibm-plex-sans font-bold text-4xl leading-7" style={{ textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)' }}>
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
                 }).format(investments.currentValue)}
               </div>
-              <p className="text-xs text-muted-foreground">+ 2% no período</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+          <Card className="bg-gradient-to-b from-[#00BC6E] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px' }}>
+            <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center">
+              <img 
+                src="/icons/payment_arrow_down.svg" 
+                alt="Payment Arrow Down Icon" 
+                className="h-full w-auto max-w-none"
+              />
+            </div>
+            <CardHeader className="space-y-0 pb-2">
+              <CardTitle className="text-white font-urbanist font-medium text-xl leading-7">
                 Retorno Mensal
               </CardTitle>
-              <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-accent">
+            <CardContent className="pt-2">
+              <div className="text-[#00BC6E] font-ibm-plex-sans font-bold text-4xl leading-7" style={{ textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)' }}>
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
                 }).format(investments.monthlyReturn)}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-white text-sm mt-1">
                 Baseado na rentabilidade das cotas
               </p>
             </CardContent>
@@ -410,10 +429,12 @@ export function InvestorDashboard() {
 
         {/* Investment Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
-          <Card>
+          <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #D9D9D9, rgba(0, 63, 40, 0.6))' }}>
             <CardHeader>
-              <CardTitle>Histórico de Transações</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
+                Histórico de Transações
+              </CardTitle>
+              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-xl leading-9">
                 Seus investimentos e resgates no Clube AGRINVEST
               </CardDescription>
             </CardHeader>
@@ -422,18 +443,18 @@ export function InvestorDashboard() {
                 transactionHistory.map((item) => (
                   <div
                     key={item.id}
-                    className="flex flex-col p-4 border border-border rounded-lg space-y-2"
+                    className="flex flex-col p-4 border border-white/20 rounded-lg space-y-2 bg-white/5"
                   >
                     <div className="flex flex-row justify-between items-center w-full">
                       <div className="flex flex-col gap-1">
-                        <span className="font-semibold">
+                        <span className="font-semibold text-white">
                           {item.type === "investment"
                             ? "Investimento"
                             : item.type === "withdrawal"
                             ? "Resgate"
                             : "Retorno"}
                         </span>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-white/70">
                           {item.description}
                         </span>
                       </div>
@@ -441,10 +462,10 @@ export function InvestorDashboard() {
                         <p
                           className={`font-bold ${
                             item.type === "investment"
-                              ? "text-green-600"
+                              ? "text-green-300"
                               : item.type === "withdrawal"
-                              ? "text-red-600"
-                              : "text-blue-600"
+                              ? "text-red-300"
+                              : "text-blue-300"
                           }`}
                         >
                           {item.type === "investment"
@@ -466,7 +487,11 @@ export function InvestorDashboard() {
                               ? "secondary"
                               : "destructive"
                           }
-                          className="text-xs"
+                          className={`text-xs ${
+                            item.status === "pending"
+                              ? "bg-[#D9D9D9] text-[#003F28]"
+                              : ""
+                          }`}
                         >
                           {item.status === "active"
                             ? "Ativo"
@@ -479,7 +504,7 @@ export function InvestorDashboard() {
                       </div>
                     </div>
 
-                    <div className="flex flex-row justify-between w-full text-sm text-muted-foreground">
+                    <div className="flex flex-row justify-between w-full text-sm text-white/70">
                       <span>Data:</span>
                       <span>
                         {new Date(item.created_at).toLocaleDateString("pt-BR")}
@@ -489,23 +514,36 @@ export function InvestorDashboard() {
                 ))}
 
               {transactionHistory.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">
-                    Você ainda não possui transações
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Entre em contato com seu assessor para realizar
-                    investimentos
-                  </p>
+                <div className="text-center">
+                  <div className="pt-16">
+                    <p className="text-[#4A4D4C] font-ibm-plex-sans font-semibold text-xl leading-[35px] mb-2">
+                      Você ainda não possui transações
+                    </p>
+                    <p className="text-[#D9D9D9] font-ibm-plex-sans font-normal text-lg leading-[35px] text-center">
+                      Entre em contato com seu assessor para realizar
+                      investimentos
+                    </p>
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #D9D9D9, rgba(0, 63, 40, 0.6))' }}>
+            <div className="absolute right-0 bottom-0 opacity-20">
+              <img 
+                src="/icons/trending_up.svg" 
+                alt="Trending Up Icon" 
+                className="h-48 w-auto"
+              />
+            </div>
             <CardHeader>
-              <CardTitle>Performance Mensal</CardTitle>
-              <CardDescription>Evolução dos seus investimentos</CardDescription>
+              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
+                Performance Mensal
+              </CardTitle>
+              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-xl leading-9">
+                Evolução dos seus investimentos
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <PerformanceChart />
@@ -513,25 +551,39 @@ export function InvestorDashboard() {
           </Card>
         </div>
 
-        {/* Tabs Section */}
-        <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-1">
-            <TabsTrigger value="simulator" className="text-sm">
-              Simulador
-            </TabsTrigger>
-            {/* <TabsTrigger value="history" className="text-sm">
-              Histórico
-            </TabsTrigger> */}
-          </TabsList>
+        {/* Investment Simulator */}
+        <InvestmentSimulator />
 
-          <TabsContent value="simulator">
-            <InvestmentSimulator />
-          </TabsContent>
-
-          <TabsContent value="history">
-            <InvestmentHistory />
-          </TabsContent>
-        </Tabs>
+        {/* Footer with Legal Disclaimers */}
+        <div className="mt-12 p-6">
+          <div className="text-center space-y-4">
+            <p className="text-white font-ibm-plex-sans font-normal text-sm leading-6">
+              Este produto NÃO é um FIDC regulado pela CVM. Trata-se de um Clube de Investimento Privado, baseado em contratos civis de sociedade em conta de participação. Rentabilidade apresentada é alvo/esperada, não garantida. Há riscos de mercado, crédito e liquidez.
+            </p>
+            
+            <div className="w-full h-px bg-[#00A568]"></div>
+            
+            <p className="text-white font-ibm-plex-sans font-normal text-sm">
+              Aviso Legal: Todo investimento envolve riscos. Rentabilidades passadas não garantem resultados futuros.
+            </p>
+            
+            <div className="flex justify-between items-center mt-6">
+              <p className="font-ibm-plex-sans font-normal text-sm">
+                <span className="text-[#00BC6E]">© 2025</span> <span className="text-[#D9D9D9]">Agrinvest</span>
+              </p>
+              
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-white rounded-sm flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 12L6 8L10 10L14 4" stroke="#003F28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M10 4L14 4L14 8" stroke="#003F28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <span className="text-[#D9D9D9] font-ibm-plex-sans font-bold text-lg">Agrinvest</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
 export function MagicLinkForm() {
@@ -48,9 +49,9 @@ export function MagicLinkForm() {
 
   if (sent) {
     return (
-      <div className="text-center space-y-3">
-        <p className="text-green-600 font-medium">Link enviado com sucesso!</p>
-        <p className="text-sm text-muted-foreground">
+      <div className="text-center space-y-3 flex flex-col items-center">
+        <p className="text-[#00BC6E] font-ibm-plex-sans font-medium text-lg">Link enviado com sucesso!</p>
+        <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm">
           Verifique seu e-mail <strong>{email}</strong> e clique no link para entrar.
         </p>
       </div>
@@ -58,15 +59,36 @@ export function MagicLinkForm() {
   }
 
   return (
-    <form onSubmit={handleSendLink} className="space-y-4">
-      <Input
-        type="email"
-        placeholder="seu@email.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-      />
-      <Button type="submit" disabled={isLoading} className="w-full">
+    <form onSubmit={handleSendLink} className="space-y-4 flex flex-col items-center">
+      <div className="space-y-2 w-full">
+        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">E-mail</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="seu@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+          style={{ width: '400px' }}
+        />
+        <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm">
+          Digite seu email para receber o link de acesso
+        </p>
+      </div>
+      
+      <Button 
+        type="submit" 
+        className="text-white font-inter font-semibold text-xl leading-7"
+        disabled={isLoading}
+        style={{ 
+          backgroundColor: '#012544',
+          borderRadius: '11px',
+          width: '400px',
+          letterSpacing: '0%',
+          verticalAlign: 'middle'
+        }}
+      >
         {isLoading ? "Enviando..." : "Entrar com Magic Link"}
       </Button>
     </form>

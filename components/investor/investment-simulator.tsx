@@ -35,7 +35,7 @@ interface Bonification {
 
 export function InvestmentSimulator({ title }: { title?: string }) {
   const [user, setUser] = useState<null>(null);
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState("5000");
   const [commitmentPeriod, setCommitmentPeriod] = useState("");
   const [liquidity, setLiquidity] = useState("");
   const [results, setResults] = useState<{
@@ -53,30 +53,6 @@ export function InvestmentSimulator({ title }: { title?: string }) {
       setUser(JSON.parse(userStr));
     }
   }, []);
-
-  // const getApplicableBonifications = (
-  //   investmentAmount: number,
-  //   commitment: number
-  // ): Bonification[] => {
-  //   return mockBonifications.filter((bonification) => {
-  //     if (!bonification.isActive) return false;
-
-  //     switch (bonification.type) {
-  //       case "value":
-  //         return bonification.minValue
-  //           ? investmentAmount >= bonification.minValue
-  //           : true;
-  //       case "commitment":
-  //         return bonification.minCommitment
-  //           ? commitment >= bonification.minCommitment
-  //           : true;
-  //       case "promotion":
-  //         return true;
-  //       default:
-  //         return false;
-  //     }
-  //   });
-  // };
 
   // Função para obter a taxa baseada no prazo e liquidez
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
@@ -152,23 +128,27 @@ export function InvestmentSimulator({ title }: { title?: string }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calculator className="h-5 w-5" />
-          {title || "Simulador de Investimentos"}
+    <Card className="border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #003F28, #00A568)' }}>
+      {/* Calculator Icon Background */}
+      <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center overflow-hidden">
+        <Calculator className="h-[90%] w-auto text-white" style={{ transform: 'translateX(20%)' }} />
+      </div>
+      
+      <CardHeader className="text-center pb-4">
+        <CardTitle className="text-white font-urbanist font-extrabold text-[35px] leading-[28px] mb-2">
+          SIMULADOR DE INVESTIMENTOS
         </CardTitle>
-        {!title && (
-          <CardDescription>
-            Simule os retornos do seu investimento no Clube de Investimentos
-            Privado do Agronegócio
-          </CardDescription>
-        )}
+        <CardDescription className="text-white font-ibm-plex-sans font-normal text-lg leading-[35px] text-center">
+          Simule os retornos do seu investimento no Clube de Investimento Privado do Agronegócio
+        </CardDescription>
       </CardHeader>
+      
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="amount">Valor do Investimento</Label>
+            <Label htmlFor="amount" className="text-white font-ibm-plex-sans font-normal text-lg">
+              Valor do Investimento
+            </Label>
             <Input
               id="amount"
               type="number"
@@ -176,97 +156,90 @@ export function InvestmentSimulator({ title }: { title?: string }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               min="5000"
+              className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+              style={{ width: '214px' }}
             />
-            <p className="text-xs text-muted-foreground">Mínimo: R$ 5.000</p>
+            <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm">
+              Mínimo: R$ 5.000,00
+            </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="commitment">Prazo</Label>
-            <Select
-              value={commitmentPeriod}
-              onValueChange={(value) => {
-                setCommitmentPeriod(value);
-                setLiquidity(""); // Reset liquidez quando mudar o prazo
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o prazo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="3">3 meses</SelectItem>
-                <SelectItem value="6">6 meses</SelectItem>
-                <SelectItem value="12">12 meses</SelectItem>
-                <SelectItem value="24">24 meses</SelectItem>
-                <SelectItem value="36">36 meses</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="flex justify-between" style={{ width: '511px' }}>
+            <div className="space-y-2">
+              <Label htmlFor="commitment" className="text-white font-ibm-plex-sans font-normal text-lg">
+                Prazo
+              </Label>
+              <Select
+                value={commitmentPeriod}
+                onValueChange={(value) => {
+                  setCommitmentPeriod(value);
+                  setLiquidity(""); // Reset liquidez quando mudar o prazo
+                }}
+              >
+                <SelectTrigger className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg" style={{ width: '214px' }}>
+                  <SelectValue placeholder="Selecione o prazo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 meses</SelectItem>
+                  <SelectItem value="6">6 meses</SelectItem>
+                  <SelectItem value="12">12 meses</SelectItem>
+                  <SelectItem value="24">24 meses</SelectItem>
+                  <SelectItem value="36">36 meses</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="liquidity">Liquidez da Rentabilidade</Label>
-            <Select 
-              value={liquidity} 
-              onValueChange={setLiquidity}
-              disabled={!commitmentPeriod}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a liquidez" />
-              </SelectTrigger>
-              <SelectContent>
-                {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-2">
+              <Label htmlFor="liquidity" className="text-white font-ibm-plex-sans font-normal text-lg">
+                Liquidez da Rentabilidade
+              </Label>
+              <Select 
+                value={liquidity} 
+                onValueChange={setLiquidity}
+                disabled={!commitmentPeriod}
+              >
+                <SelectTrigger className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg" style={{ width: '214px' }}>
+                  <SelectValue placeholder="Selecione a liquidez" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option.charAt(0).toUpperCase() + option.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
-        <Button onClick={calculateReturns} className="w-full">
+        <Button 
+          onClick={calculateReturns} 
+          className="bg-[#003562] hover:bg-[#003562]/80 text-white font-ibm-plex-sans font-bold text-lg py-3"
+          style={{ width: '511px' }}
+        >
           Calcular Retornos
         </Button>
 
         {results && (
           <div className="space-y-6">
-            {/* {results.baseBonifications.length > 0 && (
-              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <div className="flex items-center gap-2 mb-3">
-                  <Gift className="h-5 w-5 text-primary" />
-                  <h4 className="font-semibold text-primary">Bonificações Aplicadas</h4>
-                  <Badge variant="secondary">+{results.totalBonusRate.toFixed(1)}% a.m.</Badge>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {results.baseBonifications.map((bonus) => (
-                    <div key={bonus.id} className="flex items-center justify-between p-2 bg-background rounded border">
-                      <div>
-                        <p className="text-sm font-medium">{bonus.name}</p>
-                        <p className="text-xs text-muted-foreground">{bonus.description}</p>
-                      </div>
-                      <Badge variant="outline">+{bonus.bonus}%</Badge>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )} */}
-
-            <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 mb-4">
+            <div className="p-4 bg-white/10 rounded-lg border border-white/20 mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <h4 className="font-semibold text-primary">Taxa Aplicada</h4>
+                <TrendingUp className="h-5 w-5 text-white" />
+                <h4 className="font-semibold text-white">Taxa Aplicada</h4>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-white/80">
                 Prazo: {commitmentPeriod} meses | Liquidez: {liquidity.charAt(0).toUpperCase() + liquidity.slice(1)}
               </p>
-              <p className="text-lg font-bold text-primary">
+              <p className="text-lg font-bold text-[#00FF88]">
                 {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-card rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-white/5 rounded-lg border border-white/20">
               <div className="text-center">
-                <p className="text-sm text-muted-foreground">Retorno Mensal</p>
-                <p className="text-2xl font-bold text-primary">
+                <p className="text-sm text-white/70">Retorno Mensal</p>
+                <p className="text-2xl font-bold text-[#00FF88]">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
@@ -274,8 +247,8 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-sm text-muted-foreground">Retorno Total</p>
-                <p className="text-2xl font-bold text-secondary">
+                <p className="text-sm text-white/70">Retorno Total</p>
+                <p className="text-2xl font-bold text-white">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
@@ -283,8 +256,8 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-sm text-muted-foreground">Valor Final</p>
-                <p className="text-2xl font-bold text-foreground">
+                <p className="text-sm text-white/70">Valor Final</p>
+                <p className="text-2xl font-bold text-white">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
@@ -295,7 +268,6 @@ export function InvestmentSimulator({ title }: { title?: string }) {
           </div>
         )}
 
-        <Disclaimers variant="compact" />
       </CardContent>
     </Card>
   );

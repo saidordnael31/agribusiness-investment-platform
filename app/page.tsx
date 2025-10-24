@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { TrendingUp, Shield, BarChart3, Users, Calendar, FileText } from "lucide-react"
+import Image from "next/image"
 
 const marketData = [
   { name: "Selic/Tesouro", min: 0.8, max: 1.0, avg: 0.9 },
@@ -9,8 +10,6 @@ const marketData = [
   { name: "Fundos Multi", min: 1.5, max: 2.0, avg: 1.75 },
   { name: "Agrinvest", min: 2.0, max: 3.0, avg: 2.50 },
 ]
-
-
 
 const highlights = {
   opsAtivas: 18,
@@ -34,214 +33,266 @@ const highlights = {
   },
 };
 
-console.log(highlights);
-
-
 export default function HomePage() {
   const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendly.com/akintec/30min"
 
   return (
-    <div className="min-h-screen bg-background">
-      <section className="pt-16 pb-24 px-4">
-        <div className="container mx-auto text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6 text-balance">
-            Clube Privado de Investimentos do Agronegócio
+    <div className="min-h-screen">
+      {/* Hero Section */}
+      <section 
+        className="relative min-h-screen flex items-center justify-center"
+        style={{
+          backgroundImage: "url('/images/bg-initial.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat"
+        }}
+      >
+        <div className="absolute inset-0 bg-black/40"></div>
+        <div className="relative z-10 container mx-auto px-4 text-center">
+          <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 font-urbanist">
+            Invista no futuro das commodities brasileiras
           </h1>
-          <div className="space-y-4 mb-8 max-w-3xl mx-auto">
-            <p className="text-xl text-muted-foreground text-pretty">
-              Oportunidade exclusiva para convidados com retorno acima da média de mercado.
-            </p>
-            <p className="text-lg text-muted-foreground text-pretty">
-              Operações reais de antecipação de recebíveis do agro brasileiro, com governança e transparência.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            <Badge variant="outline" className="px-4 py-2 bg-background text-foreground border-border">
-              <Shield className="w-4 h-4 mr-2" />
+          <p className="text-xl text-white mb-8 max-w-4xl mx-auto font-ibm-plex-sans">
+            A Agrinvest conecta o agronegócio nacional ao capital global, unindo tecnologia, finanças e sustentabilidade para gerar rentabilidade real.
+          </p>
+          <p className="text-lg text-white mb-8 max-w-4xl mx-auto font-ibm-plex-sans">
+            Operações <strong>reais</strong> de antecipação de recebíveis do <strong>agro brasileiro</strong>, com <strong>governança e transparência</strong>.
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            <Badge className="px-6 py-3 bg-white/20 text-white border-white/30 font-ibm-plex-sans">
               Estrutura privada auditada
             </Badge>
-            <Badge variant="outline" className="px-4 py-2 bg-background text-foreground border-border">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Aportes a partir de R$ 5.000
+            <Badge className="px-6 py-3 bg-white/20 text-white border-white/30 font-ibm-plex-sans">
+              Aportes a partir de R$5.000
             </Badge>
-            <Badge variant="outline" className="px-4 py-2 bg-background text-foreground border-border">
-              <Users className="w-4 h-4 mr-2" />
+            <Badge className="px-6 py-3 bg-white/20 text-white border-white/30 font-ibm-plex-sans">
               Exclusivo por indicação
             </Badge>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="w-full sm:w-auto" asChild>
-              <a href={calendlyUrl} target="_blank" rel="noopener noreferrer">
-                <Calendar className="w-4 h-4 mr-2" />
-                Agendar Reunião
-              </a>
-            </Button>
+          <Button 
+            size="lg" 
+            className="bg-[#00BC6E] text-[#003F28] hover:bg-[#00BC6E]/90 font-inter font-semibold text-lg px-8 py-4"
+            asChild
+          >
+            <a href={calendlyUrl} target="_blank" rel="noopener noreferrer">
+              <Calendar className="w-5 h-5 mr-2" />
+              Agendar Reunião
+            </a>
+          </Button>
+        </div>
+      </section>
+
+          {/* UMA NOVA FORMA DE INVESTIR */}
+          <section 
+            className="py-20 px-4"
+            style={{
+              height: '800px',
+              background: 'linear-gradient(180deg, #00A568 0%, #003F28 100%)'
+            }}
+          >
+            <div className="container mx-auto">
+              <div className="grid lg:grid-cols-2 gap-12 items-center">
+                <div>
+                  <div className="flex justify-center lg:justify-start mb-6">
+                    <Image 
+                      src="/images/uma_nova_forma.png" 
+                      alt="UMA NOVA FORMA DE INVESTIR NO AGRO BRASILEIRO" 
+                      width={500} 
+                      height={120}
+                      className="max-w-full h-auto"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-lg text-white font-ibm-plex-sans leading-relaxed">
+                    A Agrinvest é uma iniciativa da <strong>AkinTec Holding</strong>, grupo com mais de seis anos de experiência em investimentos estruturados, logística e trading internacional. Com presença global e tecnologia de tokenização, oferecemos acesso seguro, transparente e rentável a ativos com alto potencial de valorização.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+      {/* Commodities Section */}
+      <section 
+        className="py-20 px-4" 
+        style={{ 
+          background: 'linear-gradient(180deg, #003F28 0%, #003562 100%)',
+          marginBottom: 0
+        }}
+      >
+        <div className="container mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="flex justify-center">
+              <Image 
+                src="/images/img-acai.png" 
+                alt="Commodities brasileiras" 
+                width={400} 
+                height={300}
+                className="rounded-lg"
+              />
+            </div>
+            <div>
+              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 font-urbanist">
+                Commodities brasileiras em ascensão global
+              </h2>
+              <p className="text-lg text-white font-ibm-plex-sans leading-relaxed">
+                Com cada vez mais espaço nos mercados internacionais, criam oportunidades sólidas para investidores que buscam rentabilidade e segurança em ativos reais.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="py-16 px-4 bg-card">
+      {/* Rentabilidade e Diferenciais - Background Unificado */}
+      <div 
+        className="py-20 px-4"
+        style={{
+          background: 'linear-gradient(180deg, #003562 0%, #D9D9D9 100%), url("/images/blur-bg.png")',
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          marginTop: 0,
+          marginBottom: 0
+        }}
+      >
+        {/* Rentabilidade Section */}
         <div className="container mx-auto">
-          <h2 className="text-3xl font-bold text-center text-card-foreground mb-12">
-            Comparativo de Mercado (média mensal)
+          <h2 className="text-4xl font-bold text-white text-center mb-12 font-urbanist">
+            RENTABILIDADE COM SEGURANÇA E TRANSPARÊNCIA
           </h2>
+          
+          <div className="flex justify-center gap-8 mb-12">
+            <Card className="bg-[#003562] border-0 text-center p-8">
+              <CardTitle className="text-6xl font-bold text-white mb-2 font-ibm-plex-sans">18</CardTitle>
+              <CardDescription className="text-white text-lg font-ibm-plex-sans">operações em curso</CardDescription>
+            </Card>
+            <Card className="bg-[#003562] border-0 text-center p-8">
+              <CardTitle className="text-6xl font-bold text-white mb-2 font-ibm-plex-sans">R$12.8M</CardTitle>
+              <CardDescription className="text-white text-lg font-ibm-plex-sans">volume financiado (30 dias)</CardDescription>
+            </Card>
+          </div>
 
           <div className="max-w-4xl mx-auto">
-            <div className="space-y-4">
-              {marketData.map((item) => (
-                <div key={item.name} className="flex justify-between items-center p-4 bg-background rounded-lg">
-                  <span className="font-medium">{item.name}</span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground">
-                      {item.min}% - {item.max}%
-                    </span>
-                    <span className="font-bold text-primary text-lg">{item.avg}% a.m.</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-sm text-muted-foreground text-center mt-6">
-              Rentabilidade ALVO/ESPERADA, não garantida. Varia conforme ticket, prazo e perfil do investidor.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 px-4">
-        <div className="container mx-auto">
-          <h2 className="text-3xl font-bold text-center text-foreground mb-12">Diferenciais Competitivos</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card>
-              <CardHeader>
-                <Shield className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Estrutura Privada Auditada</CardTitle>
-                <CardDescription>Governança independente com relatórios periódicos.</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <BarChart3 className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Transparência & Relatórios</CardTitle>
-                <CardDescription>Painel com operações, métricas e acompanhamento mensal.</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <TrendingUp className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Impacto Real no Agro</CardTitle>
-                <CardDescription>
-                  Antecipação de recebíveis para agricultores familiares; revenda a compradores AAA.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 px-4 bg-card">
-        <div className="container mx-auto">
-          <h2 className="text-3xl font-bold text-center text-card-foreground mb-12">
-            Informações de Mercado, Operações e Projeções
-          </h2>
-
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            <Card>
-              <CardHeader className="text-center">
-                <CardTitle className="text-2xl font-bold text-primary">{highlights.opsAtivas}</CardTitle>
-                <CardDescription>Operações em curso</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="text-center">
-                <CardTitle className="text-2xl font-bold text-primary">
-                  R$ {(highlights.volume30d / 1000000).toFixed(1)}M
-                </CardTitle>
-                <CardDescription>Volume financiado (30 dias)</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="text-center">
-                <CardTitle className="text-lg font-bold text-primary">Projeções</CardTitle>
-                <CardDescription>Rentabilidade alvo (% a.m.)</CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-
-          <div className="max-w-2xl mx-auto">
-            <h3 className="text-xl font-semibold mb-4 text-center">Cenários de Projeção (% a.m. alvo/esperado)</h3>
+            <h3 className="text-2xl font-bold text-white text-center mb-8 font-urbanist">
+              Cenários de Projeção
+            </h3>
+            <p className="text-white text-center mb-8 font-ibm-plex-sans">(%a.m alvo/esperado)</p>
+            
             <div className="space-y-4">
               {Object.entries(highlights.proj).map(([periodo, valores]) => (
-                <div key={periodo} className="bg-background p-4 rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium">{periodo}</span>
+                <Card key={periodo} className="bg-[#D9D9D9] border-0 p-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-bold text-[#003F28] font-ibm-plex-sans">{periodo}</span>
+                    <div className="flex gap-8">
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.conservador}%</div>
+                        <div className="text-sm text-[#4A4D4C] font-ibm-plex-sans">conservador</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.base}%</div>
+                        <div className="text-sm text-[#4A4D4C] font-ibm-plex-sans">base</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-[#00BC6E] font-ibm-plex-sans">{valores.otimista}%</div>
+                        <div className="text-sm text-[#4A4D4C] font-ibm-plex-sans">otimista</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div className="text-center">
-                      <div className="font-bold text-muted-foreground">{valores.conservador}%</div>
-                      <div className="text-xs">Conservador</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-primary">{valores.base}%</div>
-                      <div className="text-xs">Base</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-green-600">{valores.otimista}%</div>
-                      <div className="text-xs">Otimista</div>
-                    </div>
-                  </div>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="py-16 px-4">
-        <div className="container mx-auto">
-          <h2 className="text-3xl font-bold text-center text-foreground mb-12">Como Funciona</h2>
-          <div className="max-w-3xl mx-auto">
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                  1
-                </div>
-                <h3 className="font-semibold mb-2">Indicação por distribuidor credenciado</h3>
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                  2
-                </div>
-                <h3 className="font-semibold mb-2">Reunião de qualificação (Calendly)</h3>
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                  3
-                </div>
-                <h3 className="font-semibold mb-2">Proposta personalizada (ticket e prazo)</h3>
-              </div>
+      {/* Diferenciais + O AGRO do futuro + Footer - Background Unificado com blur-bg.png */}
+      <div 
+        className="py-20 px-4 relative"
+        style={{ 
+          background: 'linear-gradient(180deg, #D9D9D9 0%, #003F28 50%, #000000 100%)',
+          marginTop: 0,
+          minHeight: '100vh'
+        }}
+      >
+        {/* Imagem blur-bg.png como overlay unificado */}
+        <div 
+          className="absolute inset-0 pointer-events-none flex items-center justify-center"
+          style={{
+            zIndex: 1
+          }}
+        >
+          <div 
+            className="w-[85%] h-full"
+            style={{
+              backgroundImage: "url('/images/blur-bg.png')",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat"
+            }}
+          ></div>
+        </div>
+        
+        {/* Diferenciais Competitivos */}
+        <div className="container mx-auto mt-20 relative z-10">
+          <div className="flex flex-col items-center">
+            {/* Banner do título - quase transparente */}
+            <div className="rounded-2xl px-8 py-4 mb-8 border border-white/20" style={{ background: 'linear-gradient(180deg, rgba(217, 217, 217, 0.1) 0%, rgba(217, 217, 217, 0.1) 100%)' }}>
+              <h2 className="text-2xl font-bold text-[#003F28] font-urbanist">
+                Diferenciais Competitivos
+              </h2>
             </div>
-
-            <div className="text-center mt-8">
-              <Button size="lg" asChild>
-                <a href={calendlyUrl} target="_blank" rel="noopener noreferrer">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Agendar Reunião
-                </a>
-              </Button>
-            </div>
+            
+            {/* Card principal - estilo das imagens */}
+            <Card className="border-2 border-[#00BC6E] p-8 max-w-4xl mx-auto rounded-2xl" style={{ backgroundColor: 'rgba(0, 53, 98, 0.65)' }}>
+              <div className="space-y-4">
+                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
+                  Estrutura Privada Auditada
+                </div>
+                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
+                  Transparência & Relatórios
+                </div>
+                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
+                  Rentabilidade acima da renda fixa tradicional
+                </div>
+                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
+                  Impacto Real no Agro
+                </div>
+                <div className="text-center text-white text-lg font-ibm-plex-sans py-4">
+                  Liquidez programada e previsível
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
-      </section>
+        
+        <div className="container mx-auto text-center relative z-10 mt-20">
+          <div className="flex justify-center mb-6">
+            <Image 
+              src="/images/o_agro_do_futuro.png" 
+              alt="O AGRO do futuro é inteligente, global e rentável" 
+              width={800} 
+              height={200}
+              className="max-w-full h-auto"
+            />
+          </div>
+          <p className="text-lg text-white mb-8 max-w-4xl mx-auto font-ibm-plex-sans">
+            Mais do que um investimento, a <strong>Agrinvest</strong> é um ecossistema completo, integrando <strong>finanças estruturadas, logística própria e inovação tecnológica.</strong>
+          </p>
+          <p className="text-lg text-white mb-12 max-w-4xl mx-auto font-ibm-plex-sans">
+            A SOLIDEZ INSTITUCIONAL COM A <strong>AGILIDADE</strong> QUE O INVESTIDOR PRECISA.
+          </p>
 
-      <footer className="bg-card border-t border-border py-8 px-4">
-        <div className="container mx-auto">
+        </div>
+
+        {/* Footer */}
+        <div className="container mx-auto mt-20">
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
             <div className="flex items-start gap-3">
               <FileText className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-yellow-800 leading-relaxed">
+              <p className="text-sm text-yellow-800 leading-relaxed font-ibm-plex-sans">
                 Este produto NÃO é um FIDC regulado pela CVM. Trata-se de um Agrinvest - Clube de Investimento Privado, restrito a
                 participantes convidados e qualificados, com base em contratos civis de sociedade em conta de
                 participação. Rentabilidade apresentada é alvo/esperada, não garantida. Há riscos de mercado, crédito e
@@ -249,11 +300,12 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <div className="text-center">
-            <p className="text-muted-foreground">Todos direitos reservados. 2025 Agrinvest</p>
-          </div>
+              <div className="flex justify-between items-center">
+                <p className="text-[#D9D9D9] font-ibm-plex-sans">© 2025 Agrinvest</p>
+                <div className="text-[#00BC6E] font-bold font-urbanist">Agrinvest</div>
+              </div>
         </div>
-      </footer>
+      </div>
     </div>
   )
 }

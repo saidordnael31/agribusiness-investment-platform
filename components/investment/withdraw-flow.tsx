@@ -697,27 +697,27 @@ export function WithdrawFlow() {
   if (step === "success") {
     return (
       <div className="max-w-2xl mx-auto">
-        <Card className="border-blue-200">
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003562] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader className="text-center pb-6">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-blue-600" />
+            <div className="w-16 h-16 bg-[#00A568] rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-2xl text-blue-800">
+            <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
               Resgate Solicitado!
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-blue-50 p-6 rounded-lg">
-              <h3 className="font-semibold text-blue-800 mb-4">
+            <div className="bg-[#D9D9D9] p-6 rounded-lg">
+              <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">
                 Detalhes do Resgate
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Protocolo:</span>
-                  <span className="font-mono text-sm">RES-{Date.now()}</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Protocolo:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] font-mono">RES-{Date.now()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Tipo de Resgate:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Tipo de Resgate:</span>
                   <Badge
                     variant={
                       withdrawType === "total" ? "destructive" : 
@@ -731,29 +731,29 @@ export function WithdrawFlow() {
                   </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor do Resgate:</span>
-                  <span className="font-semibold">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor do Resgate:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                     {formatCurrency(selectedInvestment ? calculateWithdrawAmount(selectedInvestment) : 0)}
                   </span>
                 </div>
                 {selectedInvestment && calculatePenaltyAmount(selectedInvestment) > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span className="text-gray-600">Multa (20%):</span>
-                    <span className="font-semibold">
+                  <div className="flex justify-between text-[#00BC6E]">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Multa (20%):</span>
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                       -{formatCurrency(calculatePenaltyAmount(selectedInvestment))}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor Líquido:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor Líquido:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-green-600">
                     {formatCurrency(selectedInvestment ? calculateWithdrawAmount(selectedInvestment) - calculatePenaltyAmount(selectedInvestment) : 0)}
                   </span>
                 </div>
                 {withdrawType === "partial" && selectedInvestment && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Novo Retorno Mensal:</span>
-                    <span className="font-semibold text-blue-600">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Novo Retorno Mensal:</span>
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-600">
                       {formatCurrency(
                         calculateRemainingReturn(calculateWithdrawAmount(selectedInvestment), selectedInvestment)
                       )}
@@ -811,48 +811,49 @@ export function WithdrawFlow() {
             variant="ghost"
             size="sm"
             onClick={() => setStep("summary")}
+            className="text-white hover:bg-white/10"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
             Confirmar Resgate
           </h1>
         </div>
 
-        <Card>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
+            <CardTitle className="flex items-center space-x-2 text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
               <Minus className="w-5 h-5" />
               <span>Confirmação de Resgate</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h3 className="font-semibold mb-4">Resumo do Resgate</h3>
+            <div className="bg-[#D9D9D9] p-6 rounded-lg">
+              <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">Resumo do Resgate</h3>
               <div className="space-y-3">
                 {selectedInvestment && (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Investimento Selecionado:</span>
-                      <span className="font-semibold">ID: {selectedInvestment.id}</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Investimento Selecionado:</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">ID: {selectedInvestment.id}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Valor Investido:</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor Investido:</span>
                       <span>{formatCurrency(Number(selectedInvestment.amount) || 0)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Dividendos por Período:</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Dividendos por Período:</span>
                       <span>{formatCurrency(calculateDividendsByPeriod(selectedInvestment))}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Retorno Mensal:</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Mensal:</span>
                       <span>{formatCurrency(calculateCurrentMonthlyReturn(selectedInvestment))}</span>
                     </div>
                   </>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Tipo de Resgate:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Tipo de Resgate:</span>
                   <Badge
                     variant={
                       withdrawType === "total" ? "destructive" : 
@@ -872,30 +873,30 @@ export function WithdrawFlow() {
                   </p>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor do Resgate:</span>
-                  <span className="font-semibold">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor do Resgate:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                     {formatCurrency(selectedInvestment ? calculateWithdrawAmount(selectedInvestment) : 0)}
                   </span>
                 </div>
                 {selectedInvestment && calculatePenaltyAmount(selectedInvestment) > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span className="text-gray-600">Multa (20%):</span>
-                    <span className="font-semibold">
+                  <div className="flex justify-between text-[#00BC6E]">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Multa (20%):</span>
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                       -{formatCurrency(calculatePenaltyAmount(selectedInvestment))}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor Líquido:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor Líquido:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-green-600">
                     {formatCurrency(selectedInvestment ? calculateWithdrawAmount(selectedInvestment) - calculatePenaltyAmount(selectedInvestment) : 0)}
                   </span>
                 </div>
                 {withdrawType === "partial" && selectedInvestment && (
                   <div className="border-t pt-3">
                     <div className="flex justify-between">
-                      <span className="font-semibold">Valor Remanescente:</span>
-                      <span className="font-semibold text-blue-600">
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor Remanescente:</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-600">
                         {formatCurrency(
                           (Number(selectedInvestment.amount) || 0) - calculateWithdrawAmount(selectedInvestment)
                         )}
@@ -908,27 +909,27 @@ export function WithdrawFlow() {
 
             {withdrawType === "partial" && selectedInvestment && (
               <div className="bg-blue-50 p-6 rounded-lg">
-                <h3 className="font-semibold text-blue-800 mb-4">
+                <h3 className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-800 mb-4">
                   Novo Retorno Projetado
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Dividendos por Período Atual:</span>
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Dividendos por Período Atual:</span>
                     <span>
                       {formatCurrency(calculateDividendsByPeriod(selectedInvestment))}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Novo Retorno Mensal:</span>
-                    <span className="font-semibold text-blue-600">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Novo Retorno Mensal:</span>
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-600">
                       {formatCurrency(
                         calculateRemainingReturn(calculateWithdrawAmount(selectedInvestment), selectedInvestment)
                       )}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Redução Mensal:</span>
-                    <span className="font-semibold text-red-600">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Redução Mensal:</span>
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-red-600">
                       -
                       {formatCurrency(
                         calculateCurrentMonthlyReturn(selectedInvestment) -
@@ -1012,7 +1013,7 @@ export function WithdrawFlow() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Carregando investimentos...</p>
+            <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Carregando investimentos...</p>
           </div>
         </div>
       </div>
@@ -1026,50 +1027,51 @@ export function WithdrawFlow() {
           variant="ghost"
           size="sm"
           onClick={() => router.push("/investor")}
+          className="text-white hover:bg-white/10"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Dashboard
         </Button>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
           Resgate de Investimento
         </h1>
       </div>
 
       <div className="grid gap-6">
         {/* Resumo dos Investimentos */}
-        <Card>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
+            <CardTitle className="flex items-center space-x-2 text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
               <Minus className="w-5 h-5" />
               <span>Resumo dos Investimentos</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-blue-50 p-6 rounded-lg">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">
+              <div className="bg-[#D9D9D9] p-6 rounded-lg">
+                <h3 className="text-[#003F28] font-ibm-plex-sans font-normal text-lg mb-2">
                   Valor Total Investido
                 </h3>
-                <p className="text-2xl font-bold text-blue-900">
+                <p className="text-[#003F28] font-ibm-plex-sans font-bold text-2xl">
                   {formatCurrency(userSummary.totalInvested)}
                 </p>
               </div>
-              <div className="bg-green-50 p-6 rounded-lg">
-                <h3 className="text-sm font-medium text-green-800 mb-2">
+              <div className="bg-[#D9D9D9] p-6 rounded-lg">
+                <h3 className="text-[#003F28] font-ibm-plex-sans font-normal text-lg mb-2">
                   Dividendos por Período
                 </h3>
-                <p className="text-2xl font-bold text-green-900">
+                <p className="text-[#003F28] font-ibm-plex-sans font-bold text-2xl">
                   {formatCurrency(userSummary.totalDividendsByPeriod)}
                 </p>
-                <p className="text-xs text-green-700 mt-1">
+                <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm mt-1">
                   Baseado no período contratado (mensal, semestral, anual, bienal ou trienal)
                 </p>
               </div>
-              <div className="bg-purple-50 p-6 rounded-lg">
-                <h3 className="text-sm font-medium text-purple-800 mb-2">
+              <div className="bg-[#D9D9D9] p-6 rounded-lg">
+                <h3 className="text-[#003F28] font-ibm-plex-sans font-normal text-lg mb-2">
                   Valor Total Acumulado
                 </h3>
-                <p className="text-2xl font-bold text-purple-900">
+                <p className="text-[#003F28] font-ibm-plex-sans font-bold text-2xl">
                   {formatCurrency(userSummary.totalValue)}
                 </p>
               </div>
@@ -1078,13 +1080,13 @@ export function WithdrawFlow() {
         </Card>
 
         {/* Seleção de Investimento */}
-        <Card>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
-            <CardTitle>Selecionar Investimento</CardTitle>
+            <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">Selecionar Investimento</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
                 Escolha o investimento que você deseja resgatar:
               </p>
               <div className="grid gap-3">
@@ -1093,8 +1095,8 @@ export function WithdrawFlow() {
                     key={investment.id}
                     className={`p-4 border rounded-lg cursor-pointer transition-colors ${
                       selectedInvestment?.id === investment.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-[#00BC6E] bg-[#00BC6E]/20'
+                        : 'border-white/20 hover:border-[#00BC6E]/50 bg-white/5'
                     }`}
                     onClick={() => {
                       setSelectedInvestment(investment);
@@ -1111,34 +1113,34 @@ export function WithdrawFlow() {
                             {investment.quota_type === "senior" ? "Senior" : "Subordinada"}
                           </Badge>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                        <div className="grid grid-cols-2 gap-4 text-sm text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                           <div>
                             <span className="font-medium">Valor Investido:</span>
-                            <p className="font-semibold text-gray-900">
+                            <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-gray-900">
                               {formatCurrency(Number(investment.amount) || 0)}
                             </p>
                           </div>
                           <div>
                             <span className="font-medium">Valor Disponível:</span>
-                            <p className="font-semibold text-green-600">
+                            <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-green-600">
                               {formatCurrency(Math.max(0, (Number(investment.amount) || 0) - (investment.withdrawals?.reduce((sum: number, w: any) => sum + Number(w.amount), 0) || 0)))}
                             </p>
                           </div>
                           <div>
                             <span className="font-medium">Taxa Mensal:</span>
-                            <p className="font-semibold text-gray-900">
+                            <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-gray-900">
                               {((Number(investment.monthly_return_rate) || 0) * 100).toFixed(2)}%
                             </p>
                           </div>
                           <div>
                             <span className="font-medium">Período de Liquidez:</span>
-                            <p className="font-semibold text-gray-900">
+                            <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-gray-900">
                               {investment.profitability_liquidity}
                             </p>
                           </div>
                           <div>
                             <span className="font-medium">Dividendos Disponíveis:</span>
-                            <p className="font-semibold text-green-600">
+                            <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-green-600">
                               {formatCurrency(calculateDividendsByPeriod({ 
                                 ...investment, 
                                 amount: Math.max(0, (Number(investment.amount) || 0) - (investment.withdrawals?.reduce((sum: number, w: any) => sum + Number(w.amount), 0) || 0))
@@ -1152,7 +1154,7 @@ export function WithdrawFlow() {
                           selectedInvestment?.id === investment.id
                             ? 'border-blue-500 bg-blue-500'
                             : 'border-gray-300'
-                        }`}>
+                        }`} style={{ borderRadius: '15px' }}>
                           {selectedInvestment?.id === investment.id && (
                             <div className="w-full h-full rounded-full bg-white scale-50"></div>
                           )}
@@ -1172,9 +1174,9 @@ export function WithdrawFlow() {
         </Card>
 
         {/* Tipo de Resgate */}
-        <Card>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
-            <CardTitle>Tipo de Resgate</CardTitle>
+            <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">Tipo de Resgate</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <RadioGroup
@@ -1185,9 +1187,9 @@ export function WithdrawFlow() {
             >
               <div className={`flex items-center space-x-2 p-4 border rounded-lg ${
                 !selectedInvestment || !canWithdrawDividendsByPeriod(selectedInvestment) || !hasDividendsByPeriod(selectedInvestment) 
-                  ? 'opacity-50 cursor-not-allowed bg-gray-50' 
-                  : 'hover:bg-gray-50'
-              }`}>
+                  ? 'opacity-50 cursor-not-allowed bg-[#D9D9D9]' 
+                  : 'hover:bg-[#D9D9D9]/80 bg-[#D9D9D9]'
+              }`} style={{ borderRadius: '15px' }}>
                 <RadioGroupItem 
                   value="dividends_by_period" 
                   id="dividends_by_period" 
@@ -1195,24 +1197,24 @@ export function WithdrawFlow() {
                 />
                 <Label htmlFor="dividends_by_period" className="flex-1 cursor-pointer">
                   <div>
-                    <p className="font-medium flex items-center">
+                    <p className="text-[#003F28] font-ibm-plex-sans font-normal text-lg flex items-center">
                       Resgate dos Dividendos por Período
                       {(!selectedInvestment || !canWithdrawDividendsByPeriod(selectedInvestment) || !hasDividendsByPeriod(selectedInvestment)) && (
-                        <Badge variant="secondary" className="ml-2 text-xs">
+                        <Badge variant="secondary" className="ml-2 text-xs bg-[#D9D9D9] text-[#003F28]">
                           Indisponível
                         </Badge>
                       )}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
                       Resgatar apenas os dividendos acumulados do período contratado (sem multa)
                     </p>
                     {!selectedInvestment && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Selecione um investimento primeiro
                       </p>
                     )}
                     {selectedInvestment && !canWithdrawDividendsByPeriod(selectedInvestment) && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Você precisa aguardar o período de liquidez para resgatar dividendos.
                         {getDividendsAvailableDate(selectedInvestment) && (
                           <span className="block mt-1">
@@ -1222,7 +1224,7 @@ export function WithdrawFlow() {
                       </p>
                     )}
                     {selectedInvestment && canWithdrawDividendsByPeriod(selectedInvestment) && !hasDividendsByPeriod(selectedInvestment) && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Não há dividendos disponíveis para resgate
                       </p>
                     )}
@@ -1231,9 +1233,9 @@ export function WithdrawFlow() {
               </div>
               <div className={`flex items-center space-x-2 p-4 border rounded-lg ${
                 !selectedInvestment || !canWithdrawMonthlyReturn(selectedInvestment) || !hasCurrentMonthlyReturn(selectedInvestment) 
-                  ? 'opacity-50 cursor-not-allowed bg-gray-50' 
-                  : 'hover:bg-gray-50'
-              }`}>
+                  ? 'opacity-50 cursor-not-allowed bg-[#D9D9D9]' 
+                  : 'hover:bg-[#D9D9D9]/80 bg-[#D9D9D9]'
+              }`} style={{ borderRadius: '15px' }}>
                 <RadioGroupItem 
                   value="monthly_return" 
                   id="monthly_return" 
@@ -1241,24 +1243,24 @@ export function WithdrawFlow() {
                 />
                 <Label htmlFor="monthly_return" className="flex-1 cursor-pointer">
                   <div>
-                    <p className="font-medium flex items-center">
+                    <p className="text-[#003F28] font-ibm-plex-sans font-normal text-lg flex items-center">
                       Resgate do Retorno Mensal
                       {(!selectedInvestment || !canWithdrawMonthlyReturn(selectedInvestment) || !hasCurrentMonthlyReturn(selectedInvestment)) && (
-                        <Badge variant="secondary" className="ml-2 text-xs">
+                        <Badge variant="secondary" className="ml-2 text-xs bg-[#D9D9D9] text-[#003F28]">
                           Indisponível
                         </Badge>
                       )}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
                       Resgatar apenas o retorno mensal atual (sem multa)
                     </p>
                     {!selectedInvestment && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Selecione um investimento primeiro
                       </p>
                     )}
                     {selectedInvestment && !canWithdrawMonthlyReturn(selectedInvestment) && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Você precisa aguardar o período de liquidez da rentabilidade. 
                         {getMonthlyReturnAvailableDate(selectedInvestment) && (
                           <span className="block mt-1">
@@ -1268,7 +1270,7 @@ export function WithdrawFlow() {
                       </p>
                     )}
                     {selectedInvestment && canWithdrawMonthlyReturn(selectedInvestment) && !hasCurrentMonthlyReturn(selectedInvestment) && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Não há retorno mensal disponível para resgate
                       </p>
                     )}
@@ -1277,9 +1279,9 @@ export function WithdrawFlow() {
               </div>
               <div className={`flex items-center space-x-2 p-4 border rounded-lg ${
                 !selectedInvestment || !canWithdrawPartial(selectedInvestment) 
-                  ? 'opacity-50 cursor-not-allowed bg-gray-50' 
-                  : 'hover:bg-gray-50'
-              }`}>
+                  ? 'opacity-50 cursor-not-allowed bg-[#D9D9D9]' 
+                  : 'hover:bg-[#D9D9D9]/80 bg-[#D9D9D9]'
+              }`} style={{ borderRadius: '15px' }}>
                 <RadioGroupItem 
                   value="partial" 
                   id="partial" 
@@ -1287,19 +1289,19 @@ export function WithdrawFlow() {
                 />
                 <Label htmlFor="partial" className="flex-1 cursor-pointer">
                   <div>
-                    <p className="font-medium flex items-center">
+                    <p className="text-[#003F28] font-ibm-plex-sans font-normal text-lg flex items-center">
                       Resgate Parcial
                       {(!selectedInvestment || !canWithdrawPartial(selectedInvestment)) && (
-                        <Badge variant="secondary" className="ml-2 text-xs">
+                        <Badge variant="secondary" className="ml-2 text-xs bg-[#D9D9D9] text-[#003F28]">
                           Indisponível
                         </Badge>
                       )}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
                       Resgatar apenas parte do valor investido (mínimo R$ 1.000,00) - Perda da rentabilidade do período + 10% de desconto
                     </p>
                     {!selectedInvestment && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Selecione um investimento primeiro
                       </p>
                     )}
@@ -1308,9 +1310,9 @@ export function WithdrawFlow() {
               </div>
               <div className={`flex items-center space-x-2 p-4 border rounded-lg ${
                 !selectedInvestment || !canWithdrawPartial(selectedInvestment) 
-                  ? 'opacity-50 cursor-not-allowed bg-gray-50' 
-                  : 'hover:bg-gray-50'
-              }`}>
+                  ? 'opacity-50 cursor-not-allowed bg-[#D9D9D9]' 
+                  : 'hover:bg-[#D9D9D9]/80 bg-[#D9D9D9]'
+              }`} style={{ borderRadius: '15px' }}>
                 <RadioGroupItem 
                   value="total" 
                   id="total" 
@@ -1318,19 +1320,19 @@ export function WithdrawFlow() {
                 />
                 <Label htmlFor="total" className="flex-1 cursor-pointer">
                   <div>
-                    <p className="font-medium flex items-center">
+                    <p className="text-[#003F28] font-ibm-plex-sans font-normal text-lg flex items-center">
                       Resgate Total
                       {(!selectedInvestment || !canWithdrawPartial(selectedInvestment)) && (
-                        <Badge variant="secondary" className="ml-2 text-xs">
+                        <Badge variant="secondary" className="ml-2 text-xs bg-[#D9D9D9] text-[#003F28]">
                           Indisponível
                         </Badge>
                       )}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
                       Resgatar todo o valor investido e encerrar - Perda da rentabilidade do período + 20% de desconto
                     </p>
                     {!selectedInvestment && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-[#00BC6E] font-ibm-plex-sans font-normal text-sm mt-1">
                         Selecione um investimento primeiro
                       </p>
                     )}
@@ -1354,7 +1356,7 @@ export function WithdrawFlow() {
                   className={withdrawAmount && !isValidPartialWithdrawal(withdrawAmount, selectedInvestment) ? 'border-red-500' : ''}
                 />
                 <div className="mt-1 space-y-1">
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                     Valor mínimo: R$ 1.000,00 | Máximo disponível:{" "}
                     {formatCurrency(Number(selectedInvestment.amount) || 0)}
                   </p>
@@ -1396,27 +1398,27 @@ export function WithdrawFlow() {
               (withdrawType === "total") || 
               (withdrawType === "partial" && withdrawAmount && isValidPartialWithdrawal(withdrawAmount, selectedInvestment))) && (
               <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-blue-800 mb-2">
+                <h4 className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-800 mb-2">
                   Resumo do Resgate
                 </h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Valor do Resgate:</span>
-                    <span className="font-semibold">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                       {formatCurrency(calculateWithdrawAmount(selectedInvestment))}
                     </span>
                   </div>
                   {calculatePenaltyAmount(selectedInvestment) > 0 && (
                     <div className="flex justify-between text-red-600">
                       <span>Multa (20%):</span>
-                      <span className="font-semibold">
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                         -{formatCurrency(calculatePenaltyAmount(selectedInvestment))}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span>Valor Líquido:</span>
-                    <span className="font-semibold text-green-600">
+                    <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-green-600">
                       {formatCurrency(calculateWithdrawAmount(selectedInvestment) - calculatePenaltyAmount(selectedInvestment))}
                     </span>
                   </div>
@@ -1424,7 +1426,7 @@ export function WithdrawFlow() {
                     <>
                       <div className="flex justify-between">
                         <span>Valor Remanescente:</span>
-                        <span className="font-semibold text-blue-600">
+                        <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-600">
                           {formatCurrency(
                             (Number(selectedInvestment.amount) || 0) - calculateWithdrawAmount(selectedInvestment)
                           )}
@@ -1432,7 +1434,7 @@ export function WithdrawFlow() {
                       </div>
                       <div className="flex justify-between">
                         <span>Novo Retorno Mensal:</span>
-                        <span className="font-semibold text-blue-600">
+                        <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-blue-600">
                           {formatCurrency(
                             calculateRemainingReturn(calculateWithdrawAmount(selectedInvestment), selectedInvestment)
                           )}
@@ -1452,9 +1454,12 @@ export function WithdrawFlow() {
                 (withdrawType === "dividends_by_period" && (!canWithdrawDividendsByPeriod(selectedInvestment) || !hasDividendsByPeriod(selectedInvestment))) ||
                 (withdrawType === "monthly_return" && (!canWithdrawMonthlyReturn(selectedInvestment) || !hasCurrentMonthlyReturn(selectedInvestment)))
               }
-              className="w-full"
+              className="w-full text-white font-ibm-plex-sans font-bold text-lg"
               size="lg"
-              variant={withdrawType === "total" ? "destructive" : "default"}
+              style={{ 
+                backgroundColor: withdrawType === "total" ? '#dc2626' : '#012544',
+                borderRadius: '11px'
+              }}
             >
               {!selectedInvestment && "Selecione um Investimento"}
               {selectedInvestment && withdrawType === "dividends_by_period" && (!canWithdrawDividendsByPeriod(selectedInvestment) || !hasDividendsByPeriod(selectedInvestment)) && "Dividendos Indisponíveis"}

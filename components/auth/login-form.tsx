@@ -299,51 +299,70 @@ export function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+    <form onSubmit={handleSubmit} className="space-y-4 flex flex-col items-center">
+      <div className="space-y-2 w-full">
+        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">E-mail</Label>
         <Input
           id="email"
           type="email"
-          placeholder="seu@email.com"
+          placeholder="example@gmail.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+          style={{ width: '400px' }}
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Senha</Label>
+      
+      <div className="space-y-2 w-full">
+        <Label htmlFor="password" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Senha</Label>
         <Input
           id="password"
           type="password"
-          placeholder="********"
+          placeholder="@#*%"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+          style={{ width: '400px' }}
         />
       </div>
-      <div className="space-y-2">
-        <div className="text-right">
+      
+      <div className="space-y-2 w-full">
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-[#4A4D4C] font-ibm-plex-sans font-normal">Lembrar-me</span>
           <Link
             href="/resetPassword"
-            className="text-sm text-primary hover:underline"
+            className="text-sm text-[#00BC6E] hover:underline font-ibm-plex-sans font-normal"
           >
             Esqueceu sua senha?
           </Link>
         </div>
         <div className="text-center">
-          <span className="text-sm text-muted-foreground">ou</span>
+          <span className="text-sm text-[#4A4D4C] font-ibm-plex-sans font-normal">ou</span>
         </div>
         <div className="text-center">
           <Link
             href="/magicLink"
-            className="text-sm text-primary hover:underline font-medium"
+            className="text-sm text-[#00BC6E] hover:underline font-ibm-plex-sans font-medium"
           >
             Entrar com Magic Link
           </Link>
         </div>
       </div>
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      
+      <Button 
+        type="submit" 
+        className="text-white font-inter font-semibold text-xl leading-7" 
+        disabled={isLoading}
+        style={{ 
+          backgroundColor: '#012544',
+          borderRadius: '11px',
+          width: '400px',
+          letterSpacing: '0%',
+          verticalAlign: 'middle'
+        }}
+      >
         {isLoading ? "Entrando..." : "Entrar"}
       </Button>
     </form>

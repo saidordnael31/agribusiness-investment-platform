@@ -100,9 +100,9 @@ export function NewPasswordForm() {
   };
 
   return (
-    <form onSubmit={handleUpdatePassword} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="newPassword">Nova Senha</Label>
+    <form onSubmit={handleUpdatePassword} className="space-y-4 flex flex-col items-center">
+      <div className="space-y-2 w-full">
+        <Label htmlFor="newPassword" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Nova Senha</Label>
         <Input
           id="newPassword"
           type="password"
@@ -111,14 +111,16 @@ export function NewPasswordForm() {
           onChange={(e) => setNewPassword(e.target.value)}
           required
           minLength={6}
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+          style={{ width: '400px' }}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm">
           Mínimo de 6 caracteres
         </p>
       </div>
       
-      <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
+      <div className="space-y-2 w-full">
+        <Label htmlFor="confirmPassword" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Confirmar Nova Senha</Label>
         <Input
           id="confirmPassword"
           type="password"
@@ -127,10 +129,23 @@ export function NewPasswordForm() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           minLength={6}
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+          style={{ width: '400px' }}
         />
       </div>
       
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      <Button 
+        type="submit" 
+        className="text-white font-inter font-semibold text-xl leading-7" 
+        disabled={isLoading}
+        style={{ 
+          backgroundColor: '#012544',
+          borderRadius: '11px',
+          width: '400px',
+          letterSpacing: '0%',
+          verticalAlign: 'middle'
+        }}
+      >
         {isLoading ? "Atualizando..." : "Atualizar Senha"}
       </Button>
     </form>

@@ -277,69 +277,55 @@ export function DepositFlow() {
   if (step === "success") {
     return (
       <div className="max-w-2xl mx-auto">
-        <Card className="border-emerald-200">
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003562] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader className="text-center pb-6">
-            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Plus className="w-8 h-8 text-emerald-600" />
+            <div className="w-16 h-16 bg-[#00A568] rounded-full flex items-center justify-center mx-auto mb-4">
+              <Plus className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-2xl text-emerald-800">
+            <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
               Depósito Realizado!
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-emerald-50 p-6 rounded-lg">
-              <h3 className="font-semibold text-emerald-800 mb-4">
+            <div className="bg-[#D9D9D9] p-6 rounded-lg">
+              <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">
                 Detalhes do Depósito
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Protocolo:</span>
-                  <span className="font-mono text-sm">DEP-{Date.now()}</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Protocolo:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] font-mono">DEP-{Date.now()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor do Depósito:</span>
-                  <span className="font-semibold">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor do Depósito:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                     {formatCurrency(Number(depositAmount))}
                   </span>
                 </div>
-                {/* <div className="flex justify-between">
-                  <span className="text-gray-600">Novo Retorno Mensal:</span>
-                  <span className="font-semibold text-emerald-600">
-                    {formatCurrency(
-                      calculateNewReturn(
-                        allInvestmentsReturn,
-                        Number(depositAmount)
-                      )
-                    )}
-                  </span>
-                </div> */}
               </div>
             </div>
 
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-start space-x-3">
-                <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-blue-800">
-                    Processamento
-                  </p>
-                  <p className="text-sm text-blue-600">
-                    Seu depósito será processado em até 1 dia útil. Os
-                    rendimentos serão iniciados 30 dias após a data do depósito.
-                  </p>
-                </div>
-              </div>
+            <div className="bg-[#D9D9D9] p-6 rounded-lg">
+              <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">
+                Processamento:
+              </h3>
+              <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
+                Seu depósito será processado em até um dia útil. Os rendimentos serão iniciados 30 dias após a data do depósito.
+              </p>
             </div>
 
-            <div className="flex space-x-4">
+            <div className="flex gap-4">
               <Button
                 onClick={() => router.push("/investor")}
-                className="flex-1"
+                className="flex-1 text-white font-ibm-plex-sans font-bold text-lg"
+                style={{ 
+                  backgroundColor: '#00A568',
+                  borderRadius: '11px'
+                }}
               >
                 Voltar ao Dashboard
               </Button>
               <Button
-                variant="outline"
                 onClick={() => {
                   setStep("selection");
                   setSelectedInvestment(null);
@@ -347,7 +333,8 @@ export function DepositFlow() {
                   setCommitmentPeriod("");
                   setLiquidity("");
                 }}
-                className="flex-1"
+                className="flex-1 text-[#003F28] font-ibm-plex-sans font-bold text-lg bg-[#D9D9D9] hover:bg-[#D9D9D9]/80"
+                style={{ borderRadius: '11px' }}
               >
                 Novo Depósito
               </Button>
@@ -360,106 +347,110 @@ export function DepositFlow() {
 
   if (step === "confirmation") {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         <div className="flex items-center space-x-4 mb-6">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setStep("selection")}
+            className="text-white hover:bg-white/10"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-white">
             Confirmar Depósito
           </h1>
         </div>
 
-        <Card>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#00A568] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Plus className="w-5 h-5" />
-              <span>Confirmação de Depósito Adicional</span>
+            <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
+              Confirmação de Depósito Adicional
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h3 className="font-semibold mb-4">Resumo do Depósito</h3>
+            <div className="bg-[#D9D9D9] p-6 rounded-lg">
+              <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">Resumo do Depósito</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor do Depósito:</span>
-                  <span className="font-semibold">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                     {formatCurrency(Number(depositAmount))}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Valor Mínimo:</span>
-                  <span className="text-emerald-600 font-semibold">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Valor Mínimo:</span>
+                  <span className="text-[#00A568] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
                     R$ 5.000,00 ✓
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-blue-50 p-6 rounded-lg">
-              <h3 className="font-semibold text-blue-800 mb-4">
+            <div className="bg-[#003562] p-6 rounded-lg">
+              <h3 className="text-white font-urbanist font-bold text-[25px] leading-[28px] mb-4">
                 Condições do Investimento
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Prazo de Investimento:</span>
-                  <Badge variant="secondary">{commitmentPeriod} meses</Badge>
+                  <span className="text-white font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Prazo do Investimento:</span>
+                  <Badge className="bg-[#00A568] text-[#003F28]">{commitmentPeriod} meses</Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Liquidez da Rentabilidade:</span>
-                  <Badge variant="outline">{liquidity}</Badge>
+                  <span className="text-white font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Liquidez da Rentabilidade:</span>
+                  <Badge variant="outline" className="border-white text-white">{liquidity}</Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Taxa Mensal:</span>
-                  <span className="font-semibold text-blue-600">
-                    {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                  <span className="text-white font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Taxa Mensal:</span>
+                  <span className="text-white font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
+                    {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-emerald-50 p-6 rounded-lg">
-              <h3 className="font-semibold text-emerald-800 mb-4">
-                Projeção de Retorno
+            <div className="bg-[#00A568] p-6 rounded-lg">
+              <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">
+                Projeção do Retorno
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Retorno Mensal:</span>
-                  <span className="font-semibold text-emerald-600">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Mensal:</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
                     {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Retorno Total ({commitmentPeriod} meses):</span>
-                  <span className="font-semibold text-emerald-600">
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Total ({commitmentPeriod} meses):</span>
+                  <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
                     {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
                   </span>
                 </div>
-                <div className="border-t pt-3">
-                  <div className="flex justify-between">
-                    <span className="font-semibold">Valor Final:</span>
-                    <span className="font-semibold text-emerald-600">
-                      {formatCurrency(
-                        Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
-                      )}
-                    </span>
-                  </div>
-                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#00BC6E] p-6 rounded-lg">
+              <div className="flex justify-between">
+                <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">Valor Final:</span>
+                <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">
+                  {formatCurrency(
+                    Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
+                  )}
+                </span>
               </div>
             </div>
 
             <Button
               onClick={handleDepositConfirm}
               disabled={isProcessing}
-              className="w-full"
-              size="lg"
+              className="w-full text-white font-ibm-plex-sans font-bold text-lg"
+              style={{ 
+                backgroundColor: '#012544',
+                borderRadius: '11px'
+              }}
             >
-              {isProcessing ? "Processando..." : "Confirmar Depósito"}
+              {isProcessing ? "Processando..." : "Continuar"}
             </Button>
           </CardContent>
         </Card>
@@ -471,42 +462,42 @@ export function DepositFlow() {
             setStep("success");
           }}
         >
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md bg-white">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <QrCode className="w-5 h-5" />
+              <DialogTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px] text-center">
                 QR Code PIX Gerado
               </DialogTitle>
-              <DialogDescription>
-                Use o QR Code abaixo ou copie o código PIX para realizar o
-                pagamento.
+              <DialogDescription className="text-[#003F28] font-ibm-plex-sans font-normal text-lg text-center">
+                Use o QR Code abaixo ou copie o código PIX para realizar o pagamento.
               </DialogDescription>
             </DialogHeader>
 
             {qrCodeData && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex justify-center">
-                  <img
-                    src={qrCodeData.qrCode || "/placeholder.svg"}
-                    alt="QR Code PIX"
-                    className="w-64 h-64 border rounded-lg"
-                  />
+                  <div className="border-4 border-[#00A568] rounded-lg p-2">
+                    <img
+                      src={qrCodeData.qrCode || "/placeholder.svg"}
+                      alt="QR Code PIX"
+                      className="w-64 h-64"
+                    />
+                  </div>
                 </div>
 
                 {qrCodeData.paymentString && (
-                  <div className="space-y-2">
-                    <Label>Código PIX (Copia e Cola)</Label>
+                  <div className="space-y-3">
+                    <Label className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Código PIX (Copia e Cola)</Label>
                     <div className="flex gap-2">
                       <Input
                         value={qrCodeData.paymentString}
                         readOnly
-                        className="font-mono text-xs"
+                        className="font-mono text-sm bg-[#00A568]/20 border-[#00A568] text-[#003F28]"
                       />
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={copyPixCode}
-                        className="shrink-0 bg-transparent"
+                        className="shrink-0 bg-transparent border-[#00A568] text-[#003F28] hover:bg-[#00A568]/10"
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
@@ -519,6 +510,11 @@ export function DepositFlow() {
                     onClick={() => {
                       setShowQRModal(false);
                       setStep("success");
+                    }}
+                    className="text-white font-ibm-plex-sans font-bold text-lg"
+                    style={{ 
+                      backgroundColor: '#012544',
+                      borderRadius: '11px'
                     }}
                   >
                     Fechar
@@ -627,13 +623,13 @@ export function DepositFlow() {
         </Card> */}
 
         {/* {selectedInvestment && ( */}
-        <Card>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#00A568] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
-            <CardTitle>Configuração do Depósito</CardTitle>
+            <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">Configuração do Depósito</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="deposit-amount">Valor a Depositar</Label>
+              <Label htmlFor="deposit-amount" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Valor a Depositar</Label>
               <Input
                 id="deposit-amount"
                 type="number"
@@ -642,57 +638,61 @@ export function DepositFlow() {
                 onChange={(e) => setDepositAmount(e.target.value)}
                 min="5000"
                 step="5000"
+                className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+                style={{ width: '214px' }}
               />
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-[#00A568] font-ibm-plex-sans font-normal mt-1">
                 Valor mínimo: R$ 5.000,00
               </p>
             </div>
 
-            <div>
-              <Label htmlFor="commitment-period">Prazo de Investimento</Label>
-              <Select
-                value={commitmentPeriod}
-                onValueChange={(value) => {
-                  setCommitmentPeriod(value);
-                  setLiquidity(""); // Reset liquidez quando mudar o prazo
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o prazo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3">3 meses</SelectItem>
-                  <SelectItem value="6">6 meses</SelectItem>
-                  <SelectItem value="12">12 meses</SelectItem>
-                  <SelectItem value="24">24 meses</SelectItem>
-                  <SelectItem value="36">36 meses</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="flex gap-[175px]">
+              <div>
+                <Label htmlFor="commitment-period" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Prazo de Investimento</Label>
+                <Select
+                  value={commitmentPeriod}
+                  onValueChange={(value) => {
+                    setCommitmentPeriod(value);
+                    setLiquidity(""); // Reset liquidez quando mudar o prazo
+                  }}
+                >
+                  <SelectTrigger className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg" style={{ width: '214px' }}>
+                    <SelectValue placeholder="Selecione o prazo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3 meses</SelectItem>
+                    <SelectItem value="6">6 meses</SelectItem>
+                    <SelectItem value="12">12 meses</SelectItem>
+                    <SelectItem value="24">24 meses</SelectItem>
+                    <SelectItem value="36">36 meses</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <Label htmlFor="liquidity">Liquidez da Rentabilidade</Label>
-              <Select
-                value={liquidity}
-                onValueChange={setLiquidity}
-                disabled={!commitmentPeriod}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a liquidez" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableLiquidityOptions(Number(commitmentPeriod)).map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {commitmentPeriod && (
-                <p className="text-sm text-gray-600 mt-1">
-                  Taxa: {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
-                </p>
-              )}
+              <div>
+                <Label htmlFor="liquidity" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Liquidez da Rentabilidade</Label>
+                <Select
+                  value={liquidity}
+                  onValueChange={setLiquidity}
+                  disabled={!commitmentPeriod}
+                >
+                  <SelectTrigger className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg" style={{ width: '214px' }}>
+                    <SelectValue placeholder="Selecione a liquidez" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableLiquidityOptions(Number(commitmentPeriod)).map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {commitmentPeriod && (
+                  <p className="text-sm text-[#00A568] font-ibm-plex-sans font-normal mt-1">
+                    Taxa: {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                  </p>
+                )}
+              </div>
             </div>
 
 
@@ -723,43 +723,49 @@ export function DepositFlow() {
               </div>
             )} */}
 
-            {depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity && (
-              <div className="bg-emerald-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-emerald-800 mb-2">
-                  Projeção do Retorno
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Retorno Mensal:</span>
-                    <span className="font-semibold text-emerald-600">
-                      {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Retorno Total ({commitmentPeriod} meses):</span>
-                    <span className="font-semibold text-emerald-600">
-                      {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
-                    </span>
-                  </div>
-                  <div className="border-t pt-2">
+              {depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity && (
+                <div className="bg-[#D9D9D9] p-4 rounded-lg">
+                  <h4 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">
+                    Projeção do Retorno
+                  </h4>
+                  <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="font-semibold">Valor Final:</span>
-                      <span className="font-semibold text-emerald-600">
-                        {formatCurrency(
-                          Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
-                        )}
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Mensal:</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
+                        {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Total ({commitmentPeriod} meses):</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
+                        {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
                       </span>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity && (
+                <div className="bg-[#D9D9D9] p-4 rounded-lg">
+                  <div className="flex justify-between">
+                    <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">Valor Final:</span>
+                    <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">
+                      {formatCurrency(
+                        Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
 
             <Button
               onClick={() => setStep("confirmation")}
               disabled={!depositAmount || Number(depositAmount) < 5000 || !commitmentPeriod || !liquidity}
-              className="w-full"
-              size="lg"
+              className="w-full text-white font-ibm-plex-sans font-bold text-lg"
+              style={{ 
+                backgroundColor: '#012544',
+                borderRadius: '11px'
+              }}
             >
               Continuar
             </Button>

@@ -231,8 +231,8 @@ export function PerformanceChart() {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
-          <p className="text-sm text-muted-foreground">Carregando performance...</p>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+          <p className="text-sm text-white/80">Carregando performance...</p>
         </div>
       </div>
     )
@@ -241,20 +241,17 @@ export function PerformanceChart() {
   // Estado vazio quando não há investimentos
   if (totalInvested === 0) {
     return (
-      <div className="h-[300px] w-full flex flex-col items-center justify-center space-y-4">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <TrendingUp className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">
+      <div className="h-[300px] w-full text-center">
+        <div className="pt-16">
+          <h3 className="text-xl font-semibold text-[#4A4D4C] leading-[35px] mb-2">
             Nenhum investimento ativo
           </h3>
-          <p className="text-sm text-muted-foreground max-w-xs">
+          <p className="text-[#D9D9D9] font-ibm-plex-sans font-normal text-lg leading-[35px] text-center">
             Faça seu primeiro investimento para acompanhar a performance aqui
           </p>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Performance será calculada com base em juros compostos
+          <p className="text-[#D9D9D9] font-ibm-plex-sans font-normal text-lg leading-[35px] text-center">
+            Performance será calculada com base em juros compostos
+          </p>
         </div>
       </div>
     )
@@ -265,8 +262,8 @@ export function PerformanceChart() {
       {/* Métricas de Performance */}
       <div className="grid grid-cols-3 gap-4 text-center">
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Total Investido</p>
-          <p className="text-sm font-semibold">
+          <p className="text-xs text-white/70">Total Investido</p>
+          <p className="text-sm font-semibold text-white">
             {new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -275,8 +272,8 @@ export function PerformanceChart() {
           </p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Retornos</p>
-          <p className="text-sm font-semibold text-green-500">
+          <p className="text-xs text-white/70">Retornos</p>
+          <p className="text-sm font-semibold text-green-300">
             +{new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -285,7 +282,7 @@ export function PerformanceChart() {
           </p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Crescimento</p>
+          <p className="text-xs text-white/70">Crescimento</p>
           <div className="flex items-center justify-center gap-1">
             {getGrowthIcon()}
             <p className={`text-sm font-semibold ${getGrowthColor()}`}>
@@ -301,19 +298,19 @@ export function PerformanceChart() {
           <AreaChart data={performanceData}>
             <defs>
               <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
+                <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.05}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-white/20" />
             <XAxis 
               dataKey="month" 
-              className="text-xs"
-              tick={{ fontSize: 12 }}
+              className="text-xs text-white/70"
+              tick={{ fontSize: 12, fill: "rgba(255, 255, 255, 0.7)" }}
             />
             <YAxis
-              className="text-xs"
-              tick={{ fontSize: 12 }}
+              className="text-xs text-white/70"
+              tick={{ fontSize: 12, fill: "rgba(255, 255, 255, 0.7)" }}
               tickFormatter={(value) =>
                 new Intl.NumberFormat("pt-BR", {
                   style: "currency",
@@ -329,54 +326,54 @@ export function PerformanceChart() {
                 
                 return [
                   <div key="tooltip" className="space-y-1">
-                    <div className="font-semibold">
+                    <div className="font-semibold text-white">
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
                       }).format(data.value)}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-white/70">
                       Investido: {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
                       }).format(data.invested)}
                     </div>
-                    <div className="text-xs text-green-500">
+                    <div className="text-xs text-green-300">
                       Retornos: +{new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
                       }).format(data.returns)}
                     </div>
-                    <div className="text-xs">
+                    <div className="text-xs text-white">
                       Crescimento: {data.growth.toFixed(1)}%
                     </div>
                   </div>,
                   "Valor Total"
                 ]
               }}
-              labelStyle={{ color: "hsl(var(--foreground))" }}
+              labelStyle={{ color: "white" }}
               contentStyle={{
-                backgroundColor: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
                 borderRadius: "8px",
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3)",
               }}
             />
             <Area
               type="monotone"
               dataKey="value"
-              stroke="hsl(var(--primary))"
+              stroke="#60a5fa"
               strokeWidth={3}
               fill="url(#colorValue)"
-              dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 4 }}
-              activeDot={{ r: 6, stroke: "hsl(var(--primary))", strokeWidth: 2 }}
+              dot={{ fill: "#60a5fa", strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 6, stroke: "#60a5fa", strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
       {/* Informações adicionais */}
-      <div className="text-xs text-muted-foreground text-center">
+      <div className="text-xs text-white/70 text-center">
         <p>Performance baseada em juros compostos • Período: {performanceData.length} meses</p>
       </div>
     </div>

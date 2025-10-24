@@ -78,6 +78,9 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-urbanist: var(--font-urbanist);
+  --font-ibm-plex-sans: var(--font-ibm-plex-sans);
+  --font-inter: var(--font-inter);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -124,3 +127,35 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* CSS específico para páginas de redefinir senha */
+@layer utilities {
+  .password-reset-page {
+    background-image: url('/images/support.png') !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-attachment: fixed !important;
+    min-height: 100vh !important;
+    height: 100vh !important;
+  }
+  
+  /* Aplicar fundo no body para páginas de redefinir senha */
+  body:has(.password-reset-page) {
+    background-image: url('/images/support.png') !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-attachment: fixed !important;
+    min-height: 100vh !important;
+    height: 100vh !important;
+  }
+  
+  /* Sobrescrever o main para páginas de redefinir senha */
+  main:has(.password-reset-page) {
+    min-height: 0 !important;
+    height: 100vh !important;
+    background: transparent !important;
+  }
+}
+

@@ -87,36 +87,50 @@ export function ResetPasswordForm() {
   if (isEmailSent) {
     return (
       <div className="space-y-4 text-center">
-        <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-          <Mail className="h-8 w-8 text-green-600" />
+        <div className="mx-auto w-16 h-16 bg-[#00A568] rounded-full flex items-center justify-center">
+          <Mail className="h-8 w-8 text-white" />
         </div>
         
         <div className="space-y-2">
-          <h3 className="text-lg font-semibold text-foreground">
+          <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">
             Email enviado com sucesso!
           </h3>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
             Enviamos instruções para redefinir sua senha para <strong>{email}</strong>
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
             Verifique sua caixa de entrada e spam. O link expira em 1 hora.
           </p>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 flex flex-col items-center">
           <Button 
             onClick={() => {
               setIsEmailSent(false);
               setEmail("");
             }}
-            variant="outline" 
-            className="w-full"
+            className="text-white font-inter font-semibold text-xl leading-7"
+            style={{ 
+              backgroundColor: '#012544',
+              borderRadius: '11px',
+              width: '400px',
+              letterSpacing: '0%',
+              verticalAlign: 'middle'
+            }}
           >
             Enviar para outro email
           </Button>
           
           <Link href="/login">
-            <Button variant="ghost" className="w-full">
+            <Button 
+              className="text-[#003F28] bg-[#D9D9D9] hover:bg-[#D9D9D9]/80 font-inter font-semibold text-xl leading-7"
+              style={{ 
+                borderRadius: '11px', 
+                width: '400px',
+                letterSpacing: '0%',
+                verticalAlign: 'middle'
+              }}
+            >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar ao login
             </Button>
@@ -127,24 +141,37 @@ export function ResetPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+    <form onSubmit={handleSubmit} className="space-y-4 flex flex-col items-center">
+      <div className="space-y-2 w-full">
+        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">E-mail</Label>
         <Input
           id="email"
           type="email"
-          placeholder="seu@email.com"
+          placeholder="example@gmail.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
+          style={{ width: '400px' }}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm">
           Digite o email associado à sua conta
         </p>
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading ? "Enviando..." : "Enviar instruções de reset"}
+      <Button 
+        type="submit" 
+        className="text-white font-inter font-semibold text-xl leading-7" 
+        disabled={isLoading}
+        style={{ 
+          backgroundColor: '#012544',
+          borderRadius: '11px',
+          width: '400px',
+          letterSpacing: '0%',
+          verticalAlign: 'middle'
+        }}
+      >
+        {isLoading ? "Enviando..." : "Enviar"}
       </Button>
     </form>
   );
