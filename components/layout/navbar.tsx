@@ -35,6 +35,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,23 @@ export function Navbar() {
       }
     }
   }, []);
+
+  // Fechar menu quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isUserMenuOpen) {
+        const target = event.target as Element;
+        if (!target.closest('[data-user-menu]')) {
+          setIsUserMenuOpen(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUserMenuOpen]);
 
   const handleNewPassword = () => {
     window.location.href = "/newPassword";
@@ -260,124 +278,79 @@ export function Navbar() {
                   <Menu className="h-5 w-5" />
                 </Button>
 
-                {/* User Dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="flex items-center space-x-2 hover:bg-white/10 text-white"
-                    >
-                      <div className="h-4 w-4 relative">
-                        <img 
-                          src="/identity_platform.svg" 
-                          alt="User Icon" 
-                          className="h-4 w-4"
-                        />
-                      </div>
-                      <span className="hidden sm:inline">
-                        {getUserDisplayName()}
-                      </span>
-                      <Badge variant="secondary" className="hidden sm:inline bg-[#00BC6E] text-[#003F28]">
-                        {getUserTypeLabel()}
-                      </Badge>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">
+                {/* User Menu Button */}
+                <div data-user-menu className="relative">
+                  <Button
+                    variant="ghost"
+                    className="flex items-center space-x-2 hover:bg-white/10 text-white"
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  >
+                  <div className="h-4 w-4 relative">
+                    <img 
+                      src="/identity_platform.svg" 
+                      alt="User Icon" 
+                      className="h-4 w-4"
+                    />
+                  </div>
+                  <span className="hidden sm:inline">
+                    {getUserDisplayName()}
+                  </span>
+                  <Badge variant="secondary" className="hidden sm:inline bg-[#00BC6E] text-[#003F28]">
+                    {getUserTypeLabel()}
+                  </Badge>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${isUserMenuOpen ? 'rotate-90' : ''}`} />
+                  </Button>
+
+                  {/* User Menu Dropdown */}
+                  {isUserMenuOpen && (
+                  <div className="absolute top-16 right-4 bg-white rounded-lg shadow-lg border z-50 w-56">
+                    <div className="px-4 py-3 border-b">
+                      <p className="text-sm font-medium text-gray-900">
                         {getUserDisplayName()}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-gray-500">
                         {user.email}
                       </p>
                     </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href={getDashboardRoute()}>
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Dashboard
-                      </Link>
-                    </DropdownMenuItem>
-                    {user.user_type === "investor" && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link href="/deposit">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Depositar
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/withdraw">
-                            <Minus className="h-4 w-4 mr-2" />
-                            Resgatar
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {(user.user_type === "distributor" ||
-                      user.user_type === "admin" ||
-                      user.user_type === "advisor" ||
-                      user.user_type === "assessor") && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link href="/calculator">
-                            <Calculator className="h-4 w-4 mr-2" />
-                            Calculadora
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/bonifications">
-                            <Gift className="h-4 w-4 mr-2" />
-                            Bonificações
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {!isUserMenuOpen ? (
-                  <ChevronRight
-                    className="h-4 w-4 mr-2 cursor-pointer"
-                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  />
-                ) : (
-                  <>
-                    <Link href="/profile">
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer"
-                        size="sm"
-                        title="Meu Perfil"
+                    
+                    <div className="py-2">
+                      <Link 
+                        href="/profile"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsUserMenuOpen(false)}
                       >
-                        <User className="h-4" />
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      className="cursor-pointer"
-                      size="sm"
-                      onClick={handleNewPassword}
-                      title="Mudar Senha"
-                    >
-                      <Key className="h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="cursor-pointer"
-                      size="sm"
-                      onClick={handleLogout}
-                      title="Sair"
-                    >
-                      <LogOut className="h-4 mr-2" />
-                      Sair
-                    </Button>
-                    <ChevronLeft
-                      className="h-4 w-4 mr-2 cursor-pointer"
-                      onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                    />
-                  </>
-                )}
+                        <User className="h-4 w-4 mr-3" />
+                        Meu Perfil
+                      </Link>
+                      
+                      <button
+                        onClick={() => {
+                          handleNewPassword();
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <Key className="h-4 w-4 mr-3" />
+                        Mudar Senha
+                      </button>
+                      
+                      <div className="border-t my-2"></div>
+                      
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <LogOut className="h-4 w-4 mr-3" />
+                        Sair
+                      </button>
+                    </div>
+                  </div>
+                  )}
+                </div>
+
               </>
             ) : (
               <div className="flex items-center space-x-2">
@@ -398,33 +371,19 @@ export function Navbar() {
         {/* Mobile Navigation Menu */}
         {user && isMobileMenuOpen && (
           <div className="md:hidden border-t border-border py-4">
-            <nav className="flex flex-col space-y-2">
+            <nav className="flex flex-col space-y-1 px-4">
               <Link
                 href={getDashboardRoute()}
                 className={cn(
-                  "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                  "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
                   isActive(getDashboardRoute())
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
+                    ? "bg-accent text-white"
+                    : "text-white hover:text-white hover:bg-accent/80"
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <BarChart3 className="h-4 w-4 mr-2" />
+                <BarChart3 className="h-5 w-5 mr-3 text-white" />
                 Dashboard
-              </Link>
-
-              <Link
-                href="/documents"
-                className={cn(
-                  "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                  isActive("/documents")
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
-                )}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Documentos
               </Link>
 
               {user.user_type === "investor" && (
@@ -432,28 +391,28 @@ export function Navbar() {
                   <Link
                     href="/deposit"
                     className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                      "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
                       isActive("/deposit")
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
+                        ? "bg-accent text-white"
+                        : "text-white hover:text-white hover:bg-accent/80"
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="h-5 w-5 mr-3 text-white" />
                     Depositar
                   </Link>
 
                   <Link
                     href="/withdraw"
                     className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                      "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
                       isActive("/withdraw")
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
+                        ? "bg-accent text-white"
+                        : "text-white hover:text-white hover:bg-accent/80"
                     )}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <Minus className="h-4 w-4 mr-2" />
+                    <Minus className="h-5 w-5 mr-3 text-white" />
                     Resgatar
                   </Link>
                 </>
@@ -463,35 +422,19 @@ export function Navbar() {
                 user.user_type === "admin" ||
                 user.user_type === "advisor" ||
                 user.user_type === "assessor") && (
-                <>
-                  <Link
-                    href="/calculator"
-                    className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      isActive("/calculator")
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
-                    )}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Calculator className="h-4 w-4 mr-2" />
-                    Calculadora
-                  </Link>
-
-                  <Link
-                    href="/bonifications"
-                    className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      isActive("/bonifications")
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:text-accent-foreground hover:bg-accent/80"
-                    )}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Gift className="h-4 w-4 mr-2" />
-                    Bonificações
-                  </Link>
-                </>
+                <Link
+                  href="/calculator"
+                  className={cn(
+                    "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                    isActive("/calculator")
+                      ? "bg-accent text-white"
+                      : "text-white hover:text-white hover:bg-accent/80"
+                  )}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Calculator className="h-5 w-5 mr-3 text-white" />
+                  Calculadora
+                </Link>
               )}
             </nav>
           </div>

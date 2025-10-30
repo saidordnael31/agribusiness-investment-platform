@@ -353,7 +353,7 @@ export function InvestorDashboard() {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card className="bg-gradient-to-b from-[#00BC6E] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px' }}>
             <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center">
               <img 
@@ -363,12 +363,12 @@ export function InvestorDashboard() {
               />
             </div>
             <CardHeader className="space-y-0 pb-2">
-              <CardTitle className="text-white font-urbanist font-medium text-xl leading-7">
+              <CardTitle className="text-white font-urbanist font-medium text-lg sm:text-xl leading-7">
                 Total Investido
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-2">
-              <div className="text-white font-ibm-plex-sans font-bold text-4xl leading-7">
+              <div className="text-white font-ibm-plex-sans font-bold text-2xl sm:text-4xl leading-7">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
@@ -386,12 +386,12 @@ export function InvestorDashboard() {
               />
             </div>
             <CardHeader className="space-y-0 pb-2">
-              <CardTitle className="text-white font-urbanist font-medium text-xl leading-7">
+              <CardTitle className="text-white font-urbanist font-medium text-lg sm:text-xl leading-7">
                 Valor Atual
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-2">
-              <div className="text-[#00BC6E] font-ibm-plex-sans font-bold text-4xl leading-7" style={{ textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)' }}>
+              <div className="text-[#00BC6E] font-ibm-plex-sans font-bold text-2xl sm:text-4xl leading-7" style={{ textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)' }}>
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
@@ -409,18 +409,18 @@ export function InvestorDashboard() {
               />
             </div>
             <CardHeader className="space-y-0 pb-2">
-              <CardTitle className="text-white font-urbanist font-medium text-xl leading-7">
+              <CardTitle className="text-white font-urbanist font-medium text-lg sm:text-xl leading-7">
                 Retorno Mensal
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-2">
-              <div className="text-[#00BC6E] font-ibm-plex-sans font-bold text-4xl leading-7" style={{ textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)' }}>
+              <div className="text-[#00BC6E] font-ibm-plex-sans font-bold text-2xl sm:text-4xl leading-7" style={{ textShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)' }}>
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
                 }).format(investments.monthlyReturn)}
               </div>
-              <p className="text-white text-sm mt-1">
+              <p className="text-white text-xs sm:text-sm mt-1">
                 Baseado na rentabilidade das cotas
               </p>
             </CardContent>
@@ -431,10 +431,10 @@ export function InvestorDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
           <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #D9D9D9, rgba(0, 63, 40, 0.6))' }}>
             <CardHeader>
-              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
+              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-2xl sm:text-3xl lg:text-[35px] leading-[28px]">
                 Histórico de Transações
               </CardTitle>
-              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-xl leading-9">
+              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-base sm:text-lg lg:text-xl leading-9">
                 Seus investimentos e resgates no Clube AGRINVEST
               </CardDescription>
             </CardHeader>
@@ -538,10 +538,10 @@ export function InvestorDashboard() {
               />
             </div>
             <CardHeader>
-              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">
+              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-2xl sm:text-3xl lg:text-[35px] leading-[28px]">
                 Performance Mensal
               </CardTitle>
-              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-xl leading-9">
+              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-base sm:text-lg lg:text-xl leading-9">
                 Evolução dos seus investimentos
               </CardDescription>
             </CardHeader>

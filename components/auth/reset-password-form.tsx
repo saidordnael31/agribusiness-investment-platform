@@ -86,34 +86,33 @@ export function ResetPasswordForm() {
 
   if (isEmailSent) {
     return (
-      <div className="space-y-4 text-center">
+      <div className="space-y-3 text-center flex flex-col items-center">
         <div className="mx-auto w-16 h-16 bg-[#00A568] rounded-full flex items-center justify-center">
           <Mail className="h-8 w-8 text-white" />
         </div>
         
         <div className="space-y-2">
-          <h3 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">
+          <h3 className="text-[#003F28] font-urbanist font-bold text-xl sm:text-2xl leading-tight">
             Email enviado com sucesso!
           </h3>
-          <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
+          <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm sm:text-base">
             Enviamos instruções para redefinir sua senha para <strong>{email}</strong>
           </p>
-          <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-lg">
+          <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm sm:text-base">
             Verifique sua caixa de entrada e spam. O link expira em 1 hora.
           </p>
         </div>
 
-        <div className="space-y-2 flex flex-col items-center">
+        <div className="space-y-2 flex flex-col items-center w-full max-w-sm">
           <Button 
             onClick={() => {
               setIsEmailSent(false);
               setEmail("");
             }}
-            className="text-white font-inter font-semibold text-xl leading-7"
+            className="text-white font-inter font-semibold text-lg leading-6 w-full py-2"
             style={{ 
               backgroundColor: '#012544',
               borderRadius: '11px',
-              width: '400px',
               letterSpacing: '0%',
               verticalAlign: 'middle'
             }}
@@ -121,12 +120,11 @@ export function ResetPasswordForm() {
             Enviar para outro email
           </Button>
           
-          <Link href="/login">
+          <Link href="/login" className="w-full">
             <Button 
-              className="text-[#003F28] bg-[#D9D9D9] hover:bg-[#D9D9D9]/80 font-inter font-semibold text-xl leading-7"
+              className="text-[#003F28] bg-[#D9D9D9] hover:bg-[#D9D9D9]/80 font-inter font-semibold text-lg leading-6 w-full py-2"
               style={{ 
-                borderRadius: '11px', 
-                width: '400px',
+                borderRadius: '11px',
                 letterSpacing: '0%',
                 verticalAlign: 'middle'
               }}
@@ -141,9 +139,9 @@ export function ResetPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 flex flex-col items-center">
-      <div className="space-y-2 w-full">
-        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">E-mail</Label>
+    <form onSubmit={handleSubmit} className="space-y-3 flex flex-col items-center">
+      <div className="space-y-1 w-full max-w-sm">
+        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-base">E-mail</Label>
         <Input
           id="email"
           type="email"
@@ -151,8 +149,7 @@ export function ResetPasswordForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
-          style={{ width: '400px' }}
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-base w-full"
         />
         <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm">
           Digite o email associado à sua conta
@@ -161,12 +158,11 @@ export function ResetPasswordForm() {
 
       <Button 
         type="submit" 
-        className="text-white font-inter font-semibold text-xl leading-7" 
+        className="text-white font-inter font-semibold text-lg leading-6 w-full max-w-sm py-2" 
         disabled={isLoading}
         style={{ 
           backgroundColor: '#012544',
           borderRadius: '11px',
-          width: '400px',
           letterSpacing: '0%',
           verticalAlign: 'middle'
         }}

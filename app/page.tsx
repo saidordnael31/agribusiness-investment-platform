@@ -87,9 +87,8 @@ export default function HomePage() {
 
           {/* UMA NOVA FORMA DE INVESTIR */}
           <section 
-            className="py-20 px-4"
+            className="py-20 px-4 min-h-[800px]"
             style={{
-              height: '800px',
               background: 'linear-gradient(180deg, #00A568 0%, #003F28 100%)'
             }}
           >
@@ -164,14 +163,14 @@ export default function HomePage() {
             RENTABILIDADE COM SEGURANÇA E TRANSPARÊNCIA
           </h2>
           
-          <div className="flex justify-center gap-8 mb-12">
-            <Card className="bg-[#003562] border-0 text-center p-8">
-              <CardTitle className="text-6xl font-bold text-white mb-2 font-ibm-plex-sans">18</CardTitle>
-              <CardDescription className="text-white text-lg font-ibm-plex-sans">operações em curso</CardDescription>
+          <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-8 mb-12">
+            <Card className="bg-[#003562] border-0 text-center p-6 sm:p-8">
+              <CardTitle className="text-4xl sm:text-6xl font-bold text-white mb-2 font-ibm-plex-sans">18</CardTitle>
+              <CardDescription className="text-white text-base sm:text-lg font-ibm-plex-sans">operações em curso</CardDescription>
             </Card>
-            <Card className="bg-[#003562] border-0 text-center p-8">
-              <CardTitle className="text-6xl font-bold text-white mb-2 font-ibm-plex-sans">R$12.8M</CardTitle>
-              <CardDescription className="text-white text-lg font-ibm-plex-sans">volume financiado (30 dias)</CardDescription>
+            <Card className="bg-[#003562] border-0 text-center p-6 sm:p-8">
+              <CardTitle className="text-4xl sm:text-6xl font-bold text-white mb-2 font-ibm-plex-sans">R$12.8M</CardTitle>
+              <CardDescription className="text-white text-base sm:text-lg font-ibm-plex-sans">volume financiado (30 dias)</CardDescription>
             </Card>
           </div>
 
@@ -183,21 +182,21 @@ export default function HomePage() {
             
             <div className="space-y-4">
               {Object.entries(highlights.proj).map(([periodo, valores]) => (
-                <Card key={periodo} className="bg-[#D9D9D9] border-0 p-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold text-[#003F28] font-ibm-plex-sans">{periodo}</span>
-                    <div className="flex gap-8">
+                <Card key={periodo} className="bg-[#D9D9D9] border-0 p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <span className="text-xl sm:text-2xl font-bold text-[#003F28] font-ibm-plex-sans">{periodo}</span>
+                    <div className="flex gap-4 sm:gap-8">
                       <div className="text-center">
-                        <div className="text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.conservador}%</div>
-                        <div className="text-sm text-[#4A4D4C] font-ibm-plex-sans">conservador</div>
+                        <div className="text-lg sm:text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.conservador}%</div>
+                        <div className="text-xs sm:text-sm text-[#4A4D4C] font-ibm-plex-sans">conservador</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.base}%</div>
-                        <div className="text-sm text-[#4A4D4C] font-ibm-plex-sans">base</div>
+                        <div className="text-lg sm:text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.base}%</div>
+                        <div className="text-xs sm:text-sm text-[#4A4D4C] font-ibm-plex-sans">base</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-xl font-bold text-[#00BC6E] font-ibm-plex-sans">{valores.otimista}%</div>
-                        <div className="text-sm text-[#4A4D4C] font-ibm-plex-sans">otimista</div>
+                        <div className="text-lg sm:text-xl font-bold text-[#00BC6E] font-ibm-plex-sans">{valores.otimista}%</div>
+                        <div className="text-xs sm:text-sm text-[#4A4D4C] font-ibm-plex-sans">otimista</div>
                       </div>
                     </div>
                   </div>
@@ -210,11 +209,10 @@ export default function HomePage() {
 
       {/* Diferenciais + O AGRO do futuro + Footer - Background Unificado com blur-bg.png */}
       <div 
-        className="py-20 px-4 relative"
+        className="py-20 px-4 relative min-h-screen"
         style={{ 
           background: 'linear-gradient(180deg, #D9D9D9 0%, #003F28 50%, #000000 100%)',
-          marginTop: 0,
-          minHeight: '100vh'
+          marginTop: 0
         }}
       >
         {/* Imagem blur-bg.png como overlay unificado */}

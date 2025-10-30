@@ -164,7 +164,7 @@ export function AdvancedCalculator() {
         )} */}
 
         {/* Input Controls */}
-        <div className="grid md:grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="amount">Valor Total Captado (R$)</Label>
@@ -354,7 +354,7 @@ export function AdvancedCalculator() {
               </Card> */}
             </div>
 
-            <div className="grid md:grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">

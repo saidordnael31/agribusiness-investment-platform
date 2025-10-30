@@ -299,9 +299,9 @@ export function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 flex flex-col items-center">
-      <div className="space-y-2 w-full">
-        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">E-mail</Label>
+    <form onSubmit={handleSubmit} className="space-y-3 flex flex-col items-center">
+      <div className="space-y-1 w-full max-w-sm">
+        <Label htmlFor="email" className="text-[#003F28] font-ibm-plex-sans font-normal text-base">E-mail</Label>
         <Input
           id="email"
           type="email"
@@ -309,13 +309,12 @@ export function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
-          style={{ width: '400px' }}
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-base w-full"
         />
       </div>
       
-      <div className="space-y-2 w-full">
-        <Label htmlFor="password" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Senha</Label>
+      <div className="space-y-1 w-full max-w-sm">
+        <Label htmlFor="password" className="text-[#003F28] font-ibm-plex-sans font-normal text-base">Senha</Label>
         <Input
           id="password"
           type="password"
@@ -323,12 +322,11 @@ export function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-lg"
-          style={{ width: '400px' }}
+          className="bg-white border-gray-300 text-[#003F28] font-ibm-plex-sans font-normal text-base w-full"
         />
       </div>
       
-      <div className="space-y-2 w-full">
+      <div className="space-y-1 w-full max-w-sm">
         <div className="flex justify-between items-center">
           <span className="text-sm text-[#4A4D4C] font-ibm-plex-sans font-normal">Lembrar-me</span>
           <Link
@@ -353,12 +351,11 @@ export function LoginForm() {
       
       <Button 
         type="submit" 
-        className="text-white font-inter font-semibold text-xl leading-7" 
+        className="text-white font-inter font-semibold text-lg leading-6 w-full max-w-sm py-2" 
         disabled={isLoading}
         style={{ 
           backgroundColor: '#012544',
           borderRadius: '11px',
-          width: '400px',
           letterSpacing: '0%',
           verticalAlign: 'middle'
         }}
