@@ -127,6 +127,11 @@ interface CommissionData {
   advisorRate: number
   officeCommission: number
   advisorCommission: number
+  advisorName?: string
+  advisorEmail?: string
+  officeName?: string
+  officeEmail?: string
+  investmentStartDate?: string
 }
 
 interface PeriodFilter {
@@ -444,6 +449,81 @@ export function ReportsManager() {
 
       if (investmentsError) throw investmentsError
 
+      // Buscar informações de hierarquia (assessor e escritório) para cada investidor
+      // Estrutura: Investidor (user_id) -> parent_id (assessor) -> office_id (escritório)
+      const userIds = investments?.map((inv: any) => inv.user_id) || []
+      let advisorMap = new Map<string, any>() // Mapa: investidor_user_id -> dados do assessor
+      let officeMap = new Map<string, any>()  // Mapa: office_id -> dados do escritório
+
+      if (userIds.length > 0) {
+        // 1. Buscar perfis dos investidores para obter seus parent_id (que são os IDs dos assessores)
+        const { data: investorProfiles, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, parent_id")
+          .in("id", userIds)
+
+        if (!profilesError && investorProfiles) {
+          // Criar um mapa de user_id -> parent_id para acesso rápido
+          const investorToParentMap = new Map()
+          investorProfiles.forEach((profile: any) => {
+            investorToParentMap.set(profile.id, profile.parent_id)
+          })
+
+          // 2. Extrair IDs únicos dos assessores (parent_id dos investidores)
+          const advisorIds = investorProfiles
+            .filter((p: any) => p.parent_id)
+            .map((p: any) => p.parent_id)
+            .filter((id: any, index: number, self: any[]) => self.indexOf(id) === index)
+
+          if (advisorIds.length > 0) {
+            // 3. Buscar dados completos dos assessores (incluindo office_id)
+            const { data: advisors, error: advisorsError } = await supabase
+              .from("profiles")
+              .select("id, full_name, email, office_id")
+              .in("id", advisorIds)
+
+            if (!advisorsError && advisors) {
+              // Mapear assessores por ID para acesso rápido
+              const advisorByIdMap = new Map()
+              advisors.forEach((advisor: any) => {
+                advisorByIdMap.set(advisor.id, advisor)
+              })
+
+              // 4. Extrair IDs únicos dos escritórios (office_id dos assessores)
+              const officeIds = advisors
+                .filter((a: any) => a.office_id)
+                .map((a: any) => a.office_id)
+                .filter((id: any, index: number, self: any[]) => self.indexOf(id) === index)
+
+              if (officeIds.length > 0) {
+                // 5. Buscar dados dos escritórios pelo office_id
+                const { data: offices, error: officesError } = await supabase
+                  .from("profiles")
+                  .select("id, full_name, email")
+                  .in("id", officeIds)
+
+                if (!officesError && offices) {
+                  // Mapear escritórios por ID para acesso rápido
+                  offices.forEach((office: any) => {
+                    officeMap.set(office.id, office)
+                  })
+                }
+              }
+
+              // 6. Criar mapa final: investidor_user_id -> dados do assessor
+              // Para cada user_id de investidor, buscar seu parent_id e depois o assessor
+              investorProfiles.forEach((profile: any) => {
+                const parentId = investorToParentMap.get(profile.id)
+                if (parentId && advisorByIdMap.has(parentId)) {
+                  // Mapear usando o user_id (id do perfil) como chave
+                  advisorMap.set(profile.id, advisorByIdMap.get(parentId))
+                }
+              })
+            }
+          }
+        }
+      }
+
       // Processar dados de comissões - gerar uma entrada para cada mês de pagamento
       const processedCommissions: CommissionData[] = []
       
@@ -569,6 +649,26 @@ export function ReportsManager() {
             nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 1, dueDateForMonth.getDate())
           }
 
+          // Buscar informações de assessor e escritório
+          // 1. Pegar o user_id do investimento (investidor)
+          // 2. Buscar o parent_id desse investidor no mapa advisorMap
+          // 3. O parent_id é o ID do assessor
+          // 4. Usar o office_id do assessor para buscar o escritório
+          const advisorInfo = advisorMap.get(investment.user_id)
+          const officeInfo = advisorInfo?.office_id ? officeMap.get(advisorInfo.office_id) : null
+          
+          // Debug: verificar se encontrou o assessor
+          if (!advisorInfo && investment.user_type === 'investor') {
+            console.log(`Assessor não encontrado para investidor ${investment.user_id} (${investment.full_name})`)
+          }
+          
+          // Calcular tempo de investimento (em meses desde o início)
+          const investmentStartDate = investment.payment_date ? new Date(investment.payment_date) : new Date(investment.created_at)
+          const investmentTimeMonths = Math.max(1, month) // Meses desde o início do investimento
+
+          // Calcular total pago: soma de todas as comissões (investidor + escritório + assessor)
+          const totalCommissionPaid = monthlyCommission + officeCommission + advisorCommission
+
           processedCommissions.push({
             id: `${investment.id}-${month}`, // ID único para cada mês
             userId: investment.user_id,
@@ -579,7 +679,7 @@ export function ReportsManager() {
             investmentAmount: investment.amount,
             commissionRate,
             monthlyCommission,
-            totalCommission: monthlyCommission, // Comissão deste mês específico
+            totalCommission: totalCommissionPaid, // Total pago: investidor + escritório + assessor
             paymentDate: dueDateForMonth.toISOString(),
             nextPaymentDate: nextPaymentDate.toISOString(),
             status,
@@ -595,7 +695,12 @@ export function ReportsManager() {
             officeRate: 0.01, // Escritório sempre ganha 1%
             advisorRate: 0.03, // Assessor sempre ganha 3%
             officeCommission, // Comissão mensal do escritório
-            advisorCommission // Comissão mensal do assessor
+            advisorCommission, // Comissão mensal do assessor
+            advisorName: advisorInfo?.full_name || 'N/A',
+            advisorEmail: advisorInfo?.email || 'N/A',
+            officeName: officeInfo?.full_name || 'N/A',
+            officeEmail: officeInfo?.email || 'N/A',
+            investmentStartDate: investmentStartDate.toISOString()
           })
         }
       })
@@ -659,6 +764,8 @@ export function ReportsManager() {
 
   // Calcular totais das comissões
   const totalCommissions = filteredCommissions.reduce((sum, c) => sum + c.monthlyCommission, 0)
+  const totalOfficeCommissions = filteredCommissions.reduce((sum, c) => sum + c.officeCommission, 0)
+  const totalAdvisorCommissions = filteredCommissions.reduce((sum, c) => sum + c.advisorCommission, 0)
   const totalPaid = filteredCommissions.reduce((sum, c) => sum + c.totalCommission, 0)
   const pendingCommissions = filteredCommissions.filter(c => c.status === 'pending').length
   const overdueCommissions = filteredCommissions.filter(c => c.status === 'overdue').length
@@ -1044,47 +1151,58 @@ export function ReportsManager() {
   const exportCommissionsExcel = () => {
     try {
       // Preparar dados para Excel
-      const excelData = filteredCommissions.map(commission => ({
-        "Usuário": commission.userName,
-        "Email": commission.userEmail,
-        "Tipo": commission.userType === 'investor' ? 'Investidor' : 
-                commission.userType === 'distributor' ? 'Distribuidor' : 'Administrador',
-        "Investimento": commission.investmentAmount,
-        "Taxa Aplicada (%)": (commission.commissionRate * 100).toFixed(2),
-        "Prazo Resgate (meses)": commission.resgateMonths,
-        "Liquidez": commission.liquidityType,
-        "Comissão Mensal": commission.monthlyCommission,
-        "Total Pago": commission.totalCommission,
-        "Status": getStatusText(commission.status),
-        "Data Pagamento": formatDate(commission.paymentDate),
-        "Próximo Pagamento": formatDate(commission.nextPaymentDate),
-        "Meses Passados": commission.monthsPassed,
-        "Meses Restantes": commission.remainingMonths,
-        "Taxa Investidor (%)": (commission.investorRate * 100).toFixed(2),
-        "Taxa Escritório (%)": (commission.officeRate * 100).toFixed(2),
-        "Taxa Assessor (%)": (commission.advisorRate * 100).toFixed(2),
-        "Rentabilidade": commission.profitability,
-        "Tipo Rentabilidade": commission.rentabilityType === 'monthly' ? 'Mensal' : 'Anual',
-        "Período Compromisso": commission.commitmentPeriod
-      }))
+      const excelData = filteredCommissions.map(commission => {
+        return {
+          "ID Investimento": commission.investmentId,
+          "Valor Investimento": commission.investmentAmount, // Valor numérico para formatação no Excel
+          "Data Início Investimento": commission.investmentStartDate ? formatDate(commission.investmentStartDate) : 'N/A',
+          "Investidor": commission.userName,
+          "Email Investidor": commission.userEmail,
+          "Assessor": commission.advisorName || 'N/A',
+          "Email Assessor": commission.advisorEmail || 'N/A',
+          "Escritório": commission.officeName || 'N/A',
+          "Email Escritório": commission.officeEmail || 'N/A',
+          "Comissão Mensal (Investidor)": commission.monthlyCommission, // Valor numérico para formatação no Excel
+          "Comissão Escritório": commission.officeCommission, // Valor numérico para formatação no Excel
+          "Comissão Assessor": commission.advisorCommission, // Valor numérico para formatação no Excel
+          "Total Pago": commission.totalCommission, // Total: investidor + escritório + assessor (valor numérico)
+          "Data Pagamento": formatDate(commission.paymentDate),
+          "Próximo Pagamento": formatDate(commission.nextPaymentDate)
+        }
+      })
 
       // Criar workbook
       const wb = XLSX.utils.book_new()
       
-      // Adicionar resumo
+      // Adicionar resumo com informações completas
+      const periodText = periodFilter.type === 'custom' 
+        ? `${formatDate(periodFilter.startDate)} - ${formatDate(periodFilter.endDate)}`
+        : periodFilter.type === 'this_month' ? 'Deste mês' : 
+          periodFilter.type === 'next_month' ? 'Próximo mês' : 
+          'Próximos 6 meses'
+      
       const summaryData = [
+        ["RELATÓRIO DE COMISSÕES"],
+        ["", ""],
         ["RESUMO GERAL"],
-        ["Total Mensal", formatCurrency(totalCommissions)],
+        ["Total Mensal (Investidor)", formatCurrency(totalCommissions)],
+        ["Total Mensal Escritório", formatCurrency(totalOfficeCommissions)],
+        ["Total Mensal Assessor", formatCurrency(totalAdvisorCommissions)],
         ["Total Pago", formatCurrency(totalPaid)],
         ["Pendentes", pendingCommissions],
         ["Atrasadas", overdueCommissions],
-        [""],
+        ["", ""],
         ["PERÍODO"],
         ["Tipo", periodFilter.type === 'this_month' ? 'Deste mês' : 
                  periodFilter.type === 'next_month' ? 'Próximo mês' : 
                  periodFilter.type === 'next_6_months' ? 'Próximos 6 meses' : 'Personalizado'],
-        ["Data Início", periodFilter.startDate],
-        ["Data Fim", periodFilter.endDate]
+        ["Período", periodText],
+        ["Data Início", formatDate(periodFilter.startDate)],
+        ["Data Fim", formatDate(periodFilter.endDate)],
+        ["", ""],
+        ["INFORMAÇÕES DO RELATÓRIO"],
+        ["Gerado em", new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR")],
+        ["Plataforma", "Plataforma de Investimentos Agronegócio"]
       ]
 
       const summaryWS = XLSX.utils.aoa_to_sheet(summaryData)
@@ -1093,51 +1211,509 @@ export function ReportsManager() {
       // Adicionar dados detalhados
       const dataWS = XLSX.utils.json_to_sheet(excelData)
       
-      // Aplicar formatação condicional para status "Atrasado"
+      // Aplicar formatação monetária
       const range = XLSX.utils.decode_range(dataWS['!ref'] || 'A1')
+      
+      // Definir colunas que são valores monetários (começando do índice 0)
+      // Coluna 1 = Valor Investimento, 9 = Comissão Mensal, 10 = Comissão Escritório, 
+      // 11 = Comissão Assessor, 12 = Total Pago
+      const currencyColumns = [1, 9, 10, 11, 12]
+      
       for (let row = range.s.r + 1; row <= range.e.r; row++) {
-        const statusCell = XLSX.utils.encode_cell({ r: row, c: 9 }) // Coluna Status
-        if (dataWS[statusCell] && dataWS[statusCell].v === 'Atrasado') {
-          if (!dataWS[statusCell].s) dataWS[statusCell].s = {}
-          dataWS[statusCell].s = {
-            ...dataWS[statusCell].s,
-            font: { color: { rgb: "DC2626" } }, // Vermelho
-            fill: { fgColor: { rgb: "FEF2F2" } } // Fundo vermelho claro
+        // Formatação monetária para colunas de valores
+        currencyColumns.forEach(colIndex => {
+          const cell = XLSX.utils.encode_cell({ r: row, c: colIndex })
+          if (dataWS[cell] && typeof dataWS[cell].v === 'number') {
+            if (!dataWS[cell].s) dataWS[cell].s = {}
+            dataWS[cell].s = {
+              ...dataWS[cell].s,
+              numFmt: '"R$"#,##0.00' // Formato de moeda brasileira
+            }
           }
-        }
+        })
       }
+      
+      // Aplicar formatação monetária no cabeçalho também (opcional, para valores no resumo)
       
       // Ajustar largura das colunas
       const colWidths = [
-        { wch: 25 }, // Usuário
-        { wch: 30 }, // Email
-        { wch: 15 }, // Tipo
-        { wch: 15 }, // Investimento
-        { wch: 12 }, // Taxa Aplicada
-        { wch: 15 }, // Prazo Resgate (meses)
-        { wch: 12 }, // Liquidez
-        { wch: 15 }, // Comissão Mensal
+        { wch: 18 }, // ID Investimento
+        { wch: 18 }, // Valor Investimento
+        { wch: 20 }, // Data Início Investimento
+        { wch: 25 }, // Investidor
+        { wch: 30 }, // Email Investidor
+        { wch: 25 }, // Assessor
+        { wch: 30 }, // Email Assessor
+        { wch: 25 }, // Escritório
+        { wch: 30 }, // Email Escritório
+        { wch: 20 }, // Comissão Mensal (Investidor)
+        { wch: 15 }, // Comissão Escritório
+        { wch: 15 }, // Comissão Assessor
         { wch: 15 }, // Total Pago
-        { wch: 12 }, // Status
         { wch: 15 }, // Data Pagamento
-        { wch: 15 }, // Próximo Pagamento
-        { wch: 12 }, // Meses Passados
-        { wch: 12 }, // Meses Restantes
-        { wch: 15 }, // Taxa Investidor
-        { wch: 15 }, // Taxa Escritório
-        { wch: 15 }, // Taxa Assessor
-        { wch: 15 }, // Rentabilidade
-        { wch: 15 }, // Tipo Rentabilidade
-        { wch: 15 }  // Período Compromisso
+        { wch: 15 }  // Próximo Pagamento
       ]
       dataWS['!cols'] = colWidths
 
       XLSX.utils.book_append_sheet(wb, dataWS, "Comissões Detalhadas")
 
+      // Adicionar aba separada para pagamentos dos assessores (agrupado por mês e assessor)
+      // Agrupar por mês e assessor, somando todos os pagamentos mensais
+      const advisorPaymentsByMonth = new Map<string, Map<string, {
+        advisorName: string
+        advisorEmail: string
+        totalCommission: number
+        paymentCount: number
+      }>>()
+
+      filteredCommissions
+        .filter(commission => commission.advisorName && commission.advisorName !== 'N/A')
+        .forEach(commission => {
+          const paymentDate = new Date(commission.paymentDate)
+          const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`
+          const monthName = paymentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+          
+          if (!advisorPaymentsByMonth.has(monthKey)) {
+            advisorPaymentsByMonth.set(monthKey, new Map())
+          }
+          
+          const monthMap = advisorPaymentsByMonth.get(monthKey)!
+          const advisorKey = commission.advisorEmail || commission.advisorName
+          const existing = monthMap.get(advisorKey)
+          
+          if (existing) {
+            existing.totalCommission += commission.advisorCommission
+            existing.paymentCount += 1
+          } else {
+            monthMap.set(advisorKey, {
+              advisorName: commission.advisorName,
+              advisorEmail: commission.advisorEmail || 'N/A',
+              totalCommission: commission.advisorCommission,
+              paymentCount: 1
+            })
+          }
+        })
+
+      // Preparar dados organizados por mês
+      const advisorPaymentsData: any[] = []
+      const sortedAdvisorMonths = Array.from(advisorPaymentsByMonth.keys()).sort()
+      
+      sortedAdvisorMonths.forEach(monthKey => {
+        const monthMap = advisorPaymentsByMonth.get(monthKey)!
+        const paymentDate = new Date(monthKey + '-01')
+        const monthName = paymentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        
+        // Adicionar título do mês
+        advisorPaymentsData.push({
+          "Assessor": `----------- ${monthName.toUpperCase()} -----------`,
+          "Email Assessor": "",
+          "Total a Receber": "",
+          "Quantidade de Pagamentos": ""
+        })
+        
+        // Adicionar dados dos assessores desse mês
+        let monthTotal = 0
+        let monthPaymentCount = 0
+        
+        Array.from(monthMap.values())
+          .sort((a, b) => a.advisorName.localeCompare(b.advisorName))
+          .forEach(advisor => {
+            monthTotal += advisor.totalCommission
+            monthPaymentCount += advisor.paymentCount
+            advisorPaymentsData.push({
+              "Assessor": advisor.advisorName,
+              "Email Assessor": advisor.advisorEmail,
+              "Total a Receber": advisor.totalCommission,
+              "Quantidade de Pagamentos": advisor.paymentCount
+            })
+          })
+        
+        // Adicionar linha de TOTAL do mês
+        advisorPaymentsData.push({
+          "Assessor": `TOTAL ${monthName.toUpperCase()}`,
+          "Email Assessor": "",
+          "Total a Receber": monthTotal,
+          "Quantidade de Pagamentos": monthPaymentCount
+        })
+        
+        // Linha em branco entre meses
+        advisorPaymentsData.push({
+          "Assessor": "",
+          "Email Assessor": "",
+          "Total a Receber": "",
+          "Quantidade de Pagamentos": ""
+        })
+      })
+
+      if (advisorPaymentsData.length > 0) {
+        const advisorPaymentsWS = XLSX.utils.json_to_sheet(advisorPaymentsData)
+        
+        // Aplicar formatação monetária e estilo aos títulos dos meses
+        const advisorRange = XLSX.utils.decode_range(advisorPaymentsWS['!ref'] || 'A1')
+        
+        for (let row = advisorRange.s.r; row <= advisorRange.e.r; row++) {
+          const assessorCell = XLSX.utils.encode_cell({ r: row, c: 0 })
+          const cellValue = advisorPaymentsWS[assessorCell]?.v
+          
+          // Formatação para títulos dos meses (linhas que contêm "-----------")
+          if (typeof cellValue === 'string' && cellValue.includes('-----------')) {
+            if (!advisorPaymentsWS[assessorCell].s) advisorPaymentsWS[assessorCell].s = {}
+            advisorPaymentsWS[assessorCell].s = {
+              font: { bold: true, sz: 12 },
+              alignment: { horizontal: 'center' }
+            }
+          }
+          
+          // Formatação para linhas de TOTAL
+          if (typeof cellValue === 'string' && cellValue.startsWith('TOTAL')) {
+            if (!advisorPaymentsWS[assessorCell].s) advisorPaymentsWS[assessorCell].s = {}
+            advisorPaymentsWS[assessorCell].s = {
+              font: { bold: true, sz: 11 }
+            }
+            // Formatar também o total monetário
+            const totalCell = XLSX.utils.encode_cell({ r: row, c: 2 })
+            if (advisorPaymentsWS[totalCell] && typeof advisorPaymentsWS[totalCell].v === 'number') {
+              if (!advisorPaymentsWS[totalCell].s) advisorPaymentsWS[totalCell].s = {}
+              advisorPaymentsWS[totalCell].s = {
+                ...advisorPaymentsWS[totalCell].s,
+                numFmt: '"R$"#,##0.00',
+                font: { bold: true }
+              }
+            }
+          }
+          
+          // Formatação monetária para valores
+          const totalCell = XLSX.utils.encode_cell({ r: row, c: 2 })
+          if (advisorPaymentsWS[totalCell] && typeof advisorPaymentsWS[totalCell].v === 'number') {
+            if (!advisorPaymentsWS[totalCell].s) advisorPaymentsWS[totalCell].s = {}
+            advisorPaymentsWS[totalCell].s = {
+              ...advisorPaymentsWS[totalCell].s,
+              numFmt: '"R$"#,##0.00'
+            }
+          }
+        }
+        
+        advisorPaymentsWS['!cols'] = [
+          { wch: 25 }, // Assessor
+          { wch: 30 }, // Email Assessor
+          { wch: 20 }, // Total a Receber
+          { wch: 20 }  // Quantidade de Pagamentos
+        ]
+        
+        XLSX.utils.book_append_sheet(wb, advisorPaymentsWS, "Pagamentos Assessores")
+      }
+
+      // Adicionar aba separada para pagamentos dos escritórios (agrupado por mês e escritório)
+      // Agrupar por mês e escritório, somando todos os pagamentos mensais
+      const officePaymentsByMonth = new Map<string, Map<string, {
+        officeName: string
+        officeEmail: string
+        totalCommission: number
+        paymentCount: number
+      }>>()
+
+      filteredCommissions
+        .filter(commission => commission.officeName && commission.officeName !== 'N/A')
+        .forEach(commission => {
+          const paymentDate = new Date(commission.paymentDate)
+          const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`
+          
+          if (!officePaymentsByMonth.has(monthKey)) {
+            officePaymentsByMonth.set(monthKey, new Map())
+          }
+          
+          const monthMap = officePaymentsByMonth.get(monthKey)!
+          const officeKey = commission.officeEmail || commission.officeName
+          const existing = monthMap.get(officeKey)
+          
+          if (existing) {
+            existing.totalCommission += commission.officeCommission
+            existing.paymentCount += 1
+          } else {
+            monthMap.set(officeKey, {
+              officeName: commission.officeName,
+              officeEmail: commission.officeEmail || 'N/A',
+              totalCommission: commission.officeCommission,
+              paymentCount: 1
+            })
+          }
+        })
+
+      // Preparar dados organizados por mês
+      const officePaymentsData: any[] = []
+      const sortedOfficeMonths = Array.from(officePaymentsByMonth.keys()).sort()
+      
+      sortedOfficeMonths.forEach(monthKey => {
+        const monthMap = officePaymentsByMonth.get(monthKey)!
+        const paymentDate = new Date(monthKey + '-01')
+        const monthName = paymentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        
+        // Adicionar título do mês
+        officePaymentsData.push({
+          "Escritório": `----------- ${monthName.toUpperCase()} -----------`,
+          "Email Escritório": "",
+          "Total a Receber": "",
+          "Quantidade de Pagamentos": ""
+        })
+        
+        // Adicionar dados dos escritórios desse mês
+        let monthTotal = 0
+        let monthPaymentCount = 0
+        
+        Array.from(monthMap.values())
+          .sort((a, b) => a.officeName.localeCompare(b.officeName))
+          .forEach(office => {
+            monthTotal += office.totalCommission
+            monthPaymentCount += office.paymentCount
+            officePaymentsData.push({
+              "Escritório": office.officeName,
+              "Email Escritório": office.officeEmail,
+              "Total a Receber": office.totalCommission,
+              "Quantidade de Pagamentos": office.paymentCount
+            })
+          })
+        
+        // Adicionar linha de TOTAL do mês
+        officePaymentsData.push({
+          "Escritório": `TOTAL ${monthName.toUpperCase()}`,
+          "Email Escritório": "",
+          "Total a Receber": monthTotal,
+          "Quantidade de Pagamentos": monthPaymentCount
+        })
+        
+        // Linha em branco entre meses
+        officePaymentsData.push({
+          "Escritório": "",
+          "Email Escritório": "",
+          "Total a Receber": "",
+          "Quantidade de Pagamentos": ""
+        })
+      })
+
+      if (officePaymentsData.length > 0) {
+        const officePaymentsWS = XLSX.utils.json_to_sheet(officePaymentsData)
+        
+        // Aplicar formatação monetária e estilo aos títulos dos meses
+        const officeRange = XLSX.utils.decode_range(officePaymentsWS['!ref'] || 'A1')
+        
+        for (let row = officeRange.s.r; row <= officeRange.e.r; row++) {
+          const officeCell = XLSX.utils.encode_cell({ r: row, c: 0 })
+          const cellValue = officePaymentsWS[officeCell]?.v
+          
+          // Formatação para títulos dos meses (linhas que contêm "-----------")
+          if (typeof cellValue === 'string' && cellValue.includes('-----------')) {
+            if (!officePaymentsWS[officeCell].s) officePaymentsWS[officeCell].s = {}
+            officePaymentsWS[officeCell].s = {
+              font: { bold: true, sz: 12 },
+              alignment: { horizontal: 'center' }
+            }
+          }
+          
+          // Formatação para linhas de TOTAL
+          if (typeof cellValue === 'string' && cellValue.startsWith('TOTAL')) {
+            if (!officePaymentsWS[officeCell].s) officePaymentsWS[officeCell].s = {}
+            officePaymentsWS[officeCell].s = {
+              font: { bold: true, sz: 11 }
+            }
+            // Formatar também o total monetário
+            const totalCell = XLSX.utils.encode_cell({ r: row, c: 2 })
+            if (officePaymentsWS[totalCell] && typeof officePaymentsWS[totalCell].v === 'number') {
+              if (!officePaymentsWS[totalCell].s) officePaymentsWS[totalCell].s = {}
+              officePaymentsWS[totalCell].s = {
+                ...officePaymentsWS[totalCell].s,
+                numFmt: '"R$"#,##0.00',
+                font: { bold: true }
+              }
+            }
+          }
+          
+          // Formatação monetária para valores
+          const totalCell = XLSX.utils.encode_cell({ r: row, c: 2 })
+          if (officePaymentsWS[totalCell] && typeof officePaymentsWS[totalCell].v === 'number') {
+            if (!officePaymentsWS[totalCell].s) officePaymentsWS[totalCell].s = {}
+            officePaymentsWS[totalCell].s = {
+              ...officePaymentsWS[totalCell].s,
+              numFmt: '"R$"#,##0.00'
+            }
+          }
+        }
+        
+        officePaymentsWS['!cols'] = [
+          { wch: 25 }, // Escritório
+          { wch: 30 }, // Email Escritório
+          { wch: 20 }, // Total a Receber
+          { wch: 20 }  // Quantidade de Pagamentos
+        ]
+        
+        XLSX.utils.book_append_sheet(wb, officePaymentsWS, "Pagamentos Escritórios")
+      }
+
+      // Adicionar aba separada para pagamentos dos investidores (agrupado por mês e investidor)
+      // Agrupar por mês e investidor, somando todos os pagamentos mensais
+      const investorPaymentsByMonth = new Map<string, Map<string, {
+        investorName: string
+        investorEmail: string
+        totalCommission: number
+        paymentCount: number
+        depositDate: string | null
+      }>>()
+
+      filteredCommissions
+        .filter(commission => commission.userType === 'investor')
+        .forEach(commission => {
+          const paymentDate = new Date(commission.paymentDate)
+          const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`
+          
+          if (!investorPaymentsByMonth.has(monthKey)) {
+            investorPaymentsByMonth.set(monthKey, new Map())
+          }
+          
+          const monthMap = investorPaymentsByMonth.get(monthKey)!
+          const investorKey = commission.userEmail || commission.userName
+          const existing = monthMap.get(investorKey)
+          
+          // Data de depósito (data de início do investimento)
+          const depositDate = commission.investmentStartDate ? commission.investmentStartDate : null
+          
+          if (existing) {
+            existing.totalCommission += commission.monthlyCommission
+            existing.paymentCount += 1
+            // Manter a data de depósito mais antiga se houver múltiplas comissões
+            if (depositDate && (!existing.depositDate || depositDate < existing.depositDate)) {
+              existing.depositDate = depositDate
+            }
+          } else {
+            monthMap.set(investorKey, {
+              investorName: commission.userName,
+              investorEmail: commission.userEmail || 'N/A',
+              totalCommission: commission.monthlyCommission,
+              paymentCount: 1,
+              depositDate: depositDate
+            })
+          }
+        })
+
+      // Preparar dados organizados por mês
+      const investorPaymentsData: any[] = []
+      const sortedInvestorMonths = Array.from(investorPaymentsByMonth.keys()).sort()
+      
+      sortedInvestorMonths.forEach(monthKey => {
+        const monthMap = investorPaymentsByMonth.get(monthKey)!
+        const paymentDate = new Date(monthKey + '-01')
+        const monthName = paymentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        
+        // Adicionar título do mês
+        investorPaymentsData.push({
+          "Investidor": `----------- ${monthName.toUpperCase()} -----------`,
+          "Email Investidor": "",
+          "Data de Depósito": "",
+          "Total a Receber": "",
+          "Quantidade de Pagamentos": ""
+        })
+        
+        // Adicionar dados dos investidores desse mês
+        let monthTotal = 0
+        let monthPaymentCount = 0
+        
+        Array.from(monthMap.values())
+          .sort((a, b) => a.investorName.localeCompare(b.investorName))
+          .forEach(investor => {
+            monthTotal += investor.totalCommission
+            monthPaymentCount += investor.paymentCount
+            investorPaymentsData.push({
+              "Investidor": investor.investorName,
+              "Email Investidor": investor.investorEmail,
+              "Data de Depósito": investor.depositDate ? formatDate(investor.depositDate) : 'N/A',
+              "Total a Receber": investor.totalCommission,
+              "Quantidade de Pagamentos": investor.paymentCount
+            })
+          })
+        
+        // Adicionar linha de TOTAL do mês
+        investorPaymentsData.push({
+          "Investidor": `TOTAL ${monthName.toUpperCase()}`,
+          "Email Investidor": "",
+          "Data de Depósito": "",
+          "Total a Receber": monthTotal,
+          "Quantidade de Pagamentos": monthPaymentCount
+        })
+        
+        // Linha em branco entre meses
+        investorPaymentsData.push({
+          "Investidor": "",
+          "Email Investidor": "",
+          "Data de Depósito": "",
+          "Total a Receber": "",
+          "Quantidade de Pagamentos": ""
+        })
+      })
+
+      if (investorPaymentsData.length > 0) {
+        const investorPaymentsWS = XLSX.utils.json_to_sheet(investorPaymentsData)
+        
+        // Aplicar formatação monetária e estilo aos títulos dos meses
+        const investorRange = XLSX.utils.decode_range(investorPaymentsWS['!ref'] || 'A1')
+        
+        for (let row = investorRange.s.r; row <= investorRange.e.r; row++) {
+          const investorCell = XLSX.utils.encode_cell({ r: row, c: 0 })
+          const cellValue = investorPaymentsWS[investorCell]?.v
+          
+          // Formatação para títulos dos meses (linhas que contêm "-----------")
+          if (typeof cellValue === 'string' && cellValue.includes('-----------')) {
+            if (!investorPaymentsWS[investorCell].s) investorPaymentsWS[investorCell].s = {}
+            investorPaymentsWS[investorCell].s = {
+              font: { bold: true, sz: 12 },
+              alignment: { horizontal: 'center' }
+            }
+          }
+          
+          // Formatação para linhas de TOTAL
+          if (typeof cellValue === 'string' && cellValue.startsWith('TOTAL')) {
+            if (!investorPaymentsWS[investorCell].s) investorPaymentsWS[investorCell].s = {}
+            investorPaymentsWS[investorCell].s = {
+              font: { bold: true, sz: 11 }
+            }
+            // Formatar também o total monetário (coluna 3 = Total a Receber)
+            const totalCell = XLSX.utils.encode_cell({ r: row, c: 3 })
+            if (investorPaymentsWS[totalCell] && typeof investorPaymentsWS[totalCell].v === 'number') {
+              if (!investorPaymentsWS[totalCell].s) investorPaymentsWS[totalCell].s = {}
+              investorPaymentsWS[totalCell].s = {
+                ...investorPaymentsWS[totalCell].s,
+                numFmt: '"R$"#,##0.00',
+                font: { bold: true }
+              }
+            }
+          }
+          
+          // Formatação monetária para valores (coluna 3 = Total a Receber)
+          const totalCell = XLSX.utils.encode_cell({ r: row, c: 3 })
+          if (investorPaymentsWS[totalCell] && typeof investorPaymentsWS[totalCell].v === 'number') {
+            if (!investorPaymentsWS[totalCell].s) investorPaymentsWS[totalCell].s = {}
+            investorPaymentsWS[totalCell].s = {
+              ...investorPaymentsWS[totalCell].s,
+              numFmt: '"R$"#,##0.00'
+            }
+          }
+        }
+        
+        investorPaymentsWS['!cols'] = [
+          { wch: 25 }, // Investidor
+          { wch: 30 }, // Email Investidor
+          { wch: 18 }, // Data de Depósito
+          { wch: 20 }, // Total a Receber
+          { wch: 20 }  // Quantidade de Pagamentos
+        ]
+        
+        XLSX.utils.book_append_sheet(wb, investorPaymentsWS, "Pagamentos Investidores")
+      }
+
       // Adicionar análise por tipo
       const typeAnalysis = Object.entries(commissionsByType).map(([type, commissions]) => {
         const totalAmount = commissions.reduce((sum, c) => sum + c.investmentAmount, 0)
         const totalCommission = commissions.reduce((sum, c) => sum + c.monthlyCommission, 0)
+        const totalOfficeCommission = commissions.reduce((sum, c) => sum + c.officeCommission, 0)
+        const totalAdvisorCommission = commissions.reduce((sum, c) => sum + c.advisorCommission, 0)
+        // Total pago = soma de todas as comissões (investidor + escritório + assessor)
         const totalPaid = commissions.reduce((sum, c) => sum + c.totalCommission, 0)
         
         return {
@@ -1146,6 +1722,8 @@ export function ReportsManager() {
           "Quantidade": commissions.length,
           "Total Investido": totalAmount,
           "Comissão Mensal": totalCommission,
+          "Comissão Escritório": totalOfficeCommission,
+          "Comissão Assessor": totalAdvisorCommission,
           "Total Pago": totalPaid,
           "Taxa Média (%)": commissions.length > 0 ? 
             (commissions.reduce((sum, c) => sum + c.commissionRate, 0) / commissions.length * 100).toFixed(1) : 0
@@ -1153,11 +1731,33 @@ export function ReportsManager() {
       })
 
       const analysisWS = XLSX.utils.json_to_sheet(typeAnalysis)
+      
+      // Aplicar formatação monetária na planilha de análise
+      const analysisRange = XLSX.utils.decode_range(analysisWS['!ref'] || 'A1')
+      // Colunas monetárias: 2 = Total Investido, 3 = Comissão Mensal, 4 = Comissão Escritório, 
+      // 5 = Comissão Assessor, 6 = Total Pago
+      const analysisCurrencyColumns = [2, 3, 4, 5, 6]
+      
+      for (let row = analysisRange.s.r + 1; row <= analysisRange.e.r; row++) {
+        analysisCurrencyColumns.forEach(colIndex => {
+          const cell = XLSX.utils.encode_cell({ r: row, c: colIndex })
+          if (analysisWS[cell] && typeof analysisWS[cell].v === 'number') {
+            if (!analysisWS[cell].s) analysisWS[cell].s = {}
+            analysisWS[cell].s = {
+              ...analysisWS[cell].s,
+              numFmt: '"R$"#,##0.00' // Formato de moeda brasileira
+            }
+          }
+        })
+      }
+      
       analysisWS['!cols'] = [
         { wch: 15 }, // Tipo
         { wch: 12 }, // Quantidade
         { wch: 15 }, // Total Investido
         { wch: 15 }, // Comissão Mensal
+        { wch: 15 }, // Comissão Escritório
+        { wch: 15 }, // Comissão Assessor
         { wch: 15 }, // Total Pago
         { wch: 15 }  // Taxa Média
       ]
@@ -3327,10 +3927,16 @@ export function ReportsManager() {
                             <div className="text-center">
                               <p className="font-semibold text-blue-600">{formatCurrency(commission.officeCommission)}</p>
                               <p className="text-xs text-muted-foreground">Escritório</p>
+                              {commission.officeName && (
+                                <p className="text-xs text-blue-500 font-medium">{commission.officeName}</p>
+                              )}
                             </div>
                             <div className="text-center">
                               <p className="font-semibold text-green-600">{formatCurrency(commission.advisorCommission)}</p>
                               <p className="text-xs text-muted-foreground">Assessor</p>
+                              {commission.advisorName && (
+                                <p className="text-xs text-green-500 font-medium">{commission.advisorName}</p>
+                              )}
                             </div>
                           </div>
 
@@ -3436,10 +4042,16 @@ export function ReportsManager() {
                             <div className="text-center">
                               <p className="font-semibold text-blue-600">{formatCurrency(commission.officeCommission)}</p>
                               <p className="text-xs text-muted-foreground">Escritório</p>
+                              {commission.officeName && (
+                                <p className="text-xs text-blue-500 font-medium">{commission.officeName}</p>
+                              )}
                             </div>
                             <div className="text-center">
                               <p className="font-semibold text-green-600">{formatCurrency(commission.advisorCommission)}</p>
                               <p className="text-xs text-muted-foreground">Assessor</p>
+                              {commission.advisorName && (
+                                <p className="text-xs text-green-500 font-medium">{commission.advisorName}</p>
+                              )}
                             </div>
                           </div>
 
@@ -3535,10 +4147,16 @@ export function ReportsManager() {
                             <div className="text-center">
                               <p className="font-semibold text-blue-600">{formatCurrency(commission.officeCommission)}</p>
                               <p className="text-xs text-muted-foreground">Escritório</p>
+                              {commission.officeName && (
+                                <p className="text-xs text-blue-500 font-medium">{commission.officeName}</p>
+                              )}
                             </div>
                             <div className="text-center">
                               <p className="font-semibold text-green-600">{formatCurrency(commission.advisorCommission)}</p>
                               <p className="text-xs text-muted-foreground">Assessor</p>
+                              {commission.advisorName && (
+                                <p className="text-xs text-green-500 font-medium">{commission.advisorName}</p>
+                              )}
                             </div>
                           </div>
 
@@ -3634,10 +4252,16 @@ export function ReportsManager() {
                             <div className="text-center">
                               <p className="font-semibold text-blue-600">{formatCurrency(commission.officeCommission)}</p>
                               <p className="text-xs text-muted-foreground">Escritório</p>
+                              {commission.officeName && (
+                                <p className="text-xs text-blue-500 font-medium">{commission.officeName}</p>
+                              )}
                             </div>
                             <div className="text-center">
                               <p className="font-semibold text-green-600">{formatCurrency(commission.advisorCommission)}</p>
                               <p className="text-xs text-muted-foreground">Assessor</p>
+                              {commission.advisorName && (
+                                <p className="text-xs text-green-500 font-medium">{commission.advisorName}</p>
+                              )}
                             </div>
                           </div>
 
@@ -3819,3 +4443,4 @@ export function ReportsManager() {
     </div>
   )
 }
+
