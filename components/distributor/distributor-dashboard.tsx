@@ -754,6 +754,7 @@ export function DistributorDashboard() {
               investorForm.liquidity
             ),
             p_commitment_period: Number(investorForm.commitmentPeriod),
+            p_profitability_liquidity: investorForm.liquidity,
           });
 
         if (investmentError) {
