@@ -46,6 +46,7 @@ import {
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
 import { ApproveInvestmentModal } from "./approve-investment-modal";
+import { AdvisorCommissionsDetail } from "./advisor-commissions-detail";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -1763,11 +1764,14 @@ export function DistributorDashboard() {
         <Tabs defaultValue="simulator" className="space-y-6">
           <TabsList
             className={`grid w-full grid-cols-${
-              user.role === "escritorio" ? 4 : 3
+              user.role === "escritorio" ? 5 : 4
             }`}
           >
             <TabsTrigger value="simulator" className="text-sm">
               Simulador
+            </TabsTrigger>
+            <TabsTrigger value="commissions" className="text-sm">
+              Minhas Comissões
             </TabsTrigger>
             <TabsTrigger value="investors" className="text-sm">
               Meus Investidores
@@ -1788,6 +1792,10 @@ export function DistributorDashboard() {
 
               <InvestmentSimulator title="Simule o investimento do cliente" />
             </div>
+          </TabsContent>
+
+          <TabsContent value="commissions">
+            <AdvisorCommissionsDetail />
           </TabsContent>
 
           <TabsContent value="investors">

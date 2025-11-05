@@ -1,10 +1,6 @@
 "use client"
 
 import { CardDescription } from "@/components/ui/card"
-
-import { useState, useEffect } from "react"
-import { useNotifications } from "@/hooks/use-notifications"
-import { ApproveInvestmentModal } from "./approve-investment-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,110 +31,43 @@ import {
   Trash2,
   Plus,
 } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
-
-interface Notification {
-  id: string
-  type: "withdrawal_request" | "campaign_expiry" | "performance_goal" | "recurrence_risk" | "system_alert"
-  title: string
-  message: string
-  priority: "low" | "medium" | "high" | "critical"
-  recipients: string[]
-  recipientType: "admin" | "office" | "advisor" | "investor" | "all"
-  status: "pending" | "sent" | "read" | "dismissed"
-  createdAt: string
-  scheduledFor?: string
-  relatedData?: {
-    investorName?: string
-    advisorName?: string
-    officeName?: string
-    amount?: number
-    campaignName?: string
-    impactAmount?: number
-    quotaType?: string
-    commitmentPeriod?: number
-    monthlyReturnRate?: number
-  }
-  actions?: {
-    approve?: boolean
-    reject?: boolean
-    acknowledge?: boolean
-  }
-}
-
-interface AlertRule {
-  id: string
-  name: string
-  description: string
-  trigger: "withdrawal_request" | "campaign_expiry" | "performance_achieved" | "recurrence_at_risk" | "low_activity"
-  conditions: {
-    amount?: number
-    daysBeforeExpiry?: number
-    riskThreshold?: number
-    inactivityDays?: number
-  }
-  recipients: string[]
-  isActive: boolean
-  lastTriggered?: string
-  triggerCount: number
-}
-
-interface NotificationTemplate {
-  id: string
-  name: string
-  type: string
-  subject: string
-  body: string
-  variables: string[]
-  isActive: boolean
-}
+import { ApproveInvestmentModal } from "../approve-investment-modal"
+import { useNotificationSystem } from "./useNotificationSystem"
 
 export function NotificationSystem() {
-  const { toast } = useToast()
-  const { notifications, loading, error, refetch, processInvestmentAction } = useNotifications()
-
-  const [alertRules, setAlertRules] = useState<AlertRule[]>([])
-
-  const [templates, setTemplates] = useState<NotificationTemplate[]>([])
-
-  const [selectedFilter, setSelectedFilter] = useState<string>("all")
-  const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false)
-  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
-
-  // Estados para o modal de aprovação
-  const [approveModalOpen, setApproveModalOpen] = useState(false)
-  const [selectedInvestment, setSelectedInvestment] = useState<{
-    id: string
-    amount: number
-    investorName: string
-  } | null>(null)
-
-  // Stats
-  const totalNotifications = notifications.length
-  const pendingNotifications = notifications.filter((n) => n.status === "pending").length
-  const highPriorityNotifications = notifications.filter(
-    (n) => n.priority === "high",
-  ).length
-  const activeRules = alertRules.filter((r) => r.isActive).length
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "critical":
-        return "destructive"
-      case "high":
-        return "destructive"
-      case "medium":
-        return "default"
-      case "low":
-        return "secondary"
-      default:
-        return "secondary"
-    }
-  }
+  const {
+    notifications,
+    loading,
+    error,
+    refetch,
+    alertRules,
+    templates,
+    selectedFilter,
+    isRuleDialogOpen,
+    isTemplateDialogOpen,
+    approveModalOpen,
+    selectedInvestment,
+    totalNotifications,
+    pendingNotifications,
+    highPriorityNotifications,
+    activeRules,
+    filteredNotifications,
+    setSelectedFilter,
+    setIsRuleDialogOpen,
+    setIsTemplateDialogOpen,
+    setApproveModalOpen,
+    handleNotificationAction,
+    sendBulkNotification,
+    handleApprovalSuccess,
+    handleCloseApprovalModal,
+    getPriorityColor,
+    getPriorityIconName,
+    getStatusColor,
+    formatCurrency,
+  } = useNotificationSystem()
 
   const getPriorityIcon = (priority: string) => {
-    switch (priority) {
+    switch (getPriorityIconName(priority)) {
       case "critical":
         return <XCircle className="w-4 h-4" />
       case "high":
@@ -151,71 +80,6 @@ export function NotificationSystem() {
         return <Bell className="w-4 h-4" />
     }
   }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "destructive"
-      case "sent":
-        return "default"
-      case "read":
-        return "secondary"
-      case "dismissed":
-        return "outline"
-      default:
-        return "secondary"
-    }
-  }
-
-  const handleNotificationAction = async (notificationId: string, action: string) => {
-    if (action === 'approve') {
-      // Buscar informações do investimento para o modal
-      const notification = notifications.find(n => n.id === notificationId)
-      if (notification) {
-        const realId = notificationId.replace(/^investment_/, '')
-        setSelectedInvestment({
-          id: realId,
-          amount: notification.amount || 0,
-          investorName: notification.title.split(' - ')[0] || 'Investidor'
-        })
-        setApproveModalOpen(true)
-      }
-      return
-    }
-
-    // Para rejeição, usar a API normal
-    try {
-      const realId = notificationId.replace(/^investment_/, '')
-      await processInvestmentAction(realId, 'reject')
-
-      toast({
-        title: "Investimento rejeitado!",
-        description: "O investimento foi rejeitado e removido com sucesso.",
-      })
-    } catch (error) {
-      console.error('Error handling notification action:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao processar a ação. Tente novamente.",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const sendBulkNotification = () => {
-    toast({
-      title: "Notificações enviadas!",
-      description: "Todas as notificações pendentes foram enviadas.",
-    })
-  }
-
-  const handleApprovalSuccess = () => {
-    // Recarregar as notificações após aprovação bem-sucedida
-    refetch()
-  }
-
-  const filteredNotifications =
-    selectedFilter === "all" ? notifications : notifications.filter((n) => n.status === selectedFilter)
 
   return (
     <div className="space-y-6">
@@ -745,10 +609,7 @@ export function NotificationSystem() {
       {selectedInvestment && (
         <ApproveInvestmentModal
           isOpen={approveModalOpen}
-          onClose={() => {
-            setApproveModalOpen(false)
-            setSelectedInvestment(null)
-          }}
+          onClose={handleCloseApprovalModal}
           investmentId={selectedInvestment.id}
           investmentAmount={selectedInvestment.amount}
           investorName={selectedInvestment.investorName}
@@ -758,3 +619,4 @@ export function NotificationSystem() {
     </div>
   )
 }
+

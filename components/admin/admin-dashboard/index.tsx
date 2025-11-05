@@ -1,6 +1,5 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -9,545 +8,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Users, DollarSign, TrendingUp, Gift, Target, BarChart3, Shield, AlertCircle, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { PromotionManager } from "./promotion-manager"
-import { BonificationManager } from "./bonification-manager"
-import { UserManager } from "./user-manager"
-import { ReportsManager } from "./reports-manager"
-import { AdminSettings } from "./admin-settings"
-import { HierarchyManager } from "./hierarchy-manager"
-import { RecurrenceCalculator } from "./recurrence-calculator"
-import { NotificationSystem } from "./notification-system"
-import { ApproveInvestmentModal } from "./approve-investment-modal"
-import { InvestmentsManager } from "./investments-manager"
-import AkintecManager from "./akintec-manager"
-import { createClient } from "@/lib/supabase/client"
-
-interface UserData {
-  name: string
-  email: string
-  user_type: string
-}
-
-interface PlatformStats {
-  totalUsers: number
-  totalInvestors: number
-  totalDistributors: number
-  totalInvested: number
-  monthlyRevenue: number
-  activePromotions: number
-  pendingApprovals: number
-}
-
-interface RecentActivity {
-  id: string
-  type: "investment" | "withdrawal" | "goal_achieved" | "pending_investment" | "user_created" | "active_investment_pending_admin"
-  title: string
-  description: string
-  timestamp: string
-  color: string
-  actions?: {
-    approve?: boolean
-    reject?: boolean
-  }
-  relatedData?: {
-    investmentId?: string
-    amount?: number
-    quotaType?: string
-    commitmentPeriod?: number
-    monthlyReturnRate?: number
-    approvedByAdmin?: boolean
-  }
-}
+import { PromotionManager } from "../promotion-manager"
+import { BonificationManager } from "../bonification-manager"
+import { UserManager } from "../user-manager"
+import { ReportsManager } from "../reports-manager"
+import { AdminSettings } from "../admin-settings"
+import { HierarchyManager } from "../hierarchy-manager"
+import { RecurrenceCalculator } from "../recurrence-calculator"
+import { NotificationSystem } from "../notification-system"
+import { ApproveInvestmentModal } from "../approve-investment-modal"
+import { InvestmentsManager } from "../investments-manager"
+import AkintecManager from "../akintec-manager"
+import { OfficeCommissionsDetail } from "../office-commissions-detail"
+import { useAdminDashboard } from "./useAdminDashboard"
 
 export function AdminDashboard() {
-  const { toast } = useToast()
-  const [user, setUser] = useState<UserData | null>(null)
-  const [stats, setStats] = useState<PlatformStats>({
-    totalUsers: 0,
-    totalInvestors: 0,
-    totalDistributors: 0,
-    totalInvested: 0,
-    monthlyRevenue: 0,
-    activePromotions: 0,
-    pendingApprovals: 0,
-  })
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
-  const [loading, setLoading] = useState(true)
-  
-  // Estados para filtros e paginação
-  const [activityFilters, setActivityFilters] = useState({
-    type: "all",
-    dateFrom: "",
-    dateTo: ""
-  })
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalActivities, setTotalActivities] = useState(0)
-  const itemsPerPage = 10
-
-  // Estados para o modal de aprovação
-  const [approveModalOpen, setApproveModalOpen] = useState(false)
-  const [selectedInvestment, setSelectedInvestment] = useState<{
-    id: string
-    amount: number
-    investorName: string
-  } | null>(null)
-
-
-  const fetchRecentActivities = async (page: number = 1, filters: typeof activityFilters = activityFilters) => {
-    try {
-      const activities: RecentActivity[] = []
-      const limit = itemsPerPage
-      const offset = (page - 1) * limit
-
-      // Função para aplicar filtro de data
-      const applyDateFilter = (dateStr: string) => {
-        if (!filters.dateFrom && !filters.dateTo) return true
-        const activityDate = new Date(dateStr)
-        const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : null
-        const toDate = filters.dateTo ? new Date(filters.dateTo + "T23:59:59") : null
-        
-        if (fromDate && activityDate < fromDate) return false
-        if (toDate && activityDate > toDate) return false
-        return true
-      }
-
-      // Buscar investimentos pendentes usando a API (mesmo modelo das notificações)
-      if (filters.type === "all" || filters.type === "pending_investment" || filters.type === "investment") {
-        try {
-          const investmentsResponse = await fetch('/api/investments?status=pending')
-          const investmentsData = await investmentsResponse.json()
-
-          if (investmentsData.success && investmentsData.data) {
-            investmentsData.data
-              .filter((inv: any) => applyDateFilter(inv.created_at))
-              .forEach((inv: any) => {
-                const investorName = inv.profiles?.full_name || `Investidor ${inv.user_id?.slice(0, 8) || 'N/A'}`
-                activities.push({
-                  id: `pending-inv-${inv.id}`,
-                  type: "pending_investment",
-                  title: `Investimento pendente - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
-                  description: `${investorName} - ${inv.quota_type || 'Tipo não especificado'} - Aguardando aprovação`,
-                  timestamp: new Date(inv.created_at).toLocaleString("pt-BR"),
-                  color: "bg-orange-500",
-                  actions: {
-                    approve: true,
-                    reject: true
-                  },
-                  relatedData: {
-                    investmentId: inv.id,
-                    amount: inv.amount,
-                    quotaType: inv.quota_type,
-                    commitmentPeriod: inv.commitment_period,
-                    monthlyReturnRate: inv.monthly_return_rate
-                  }
-                })
-              })
-          }
-        } catch (error) {
-          console.error("Erro ao buscar investimentos pendentes:", error)
-        }
-      }
-
-
-      // Buscar investimentos ativos (status active) usando a API
-      if (filters.type === "all" || filters.type === "investment" || filters.type === "active_investment_pending_admin") {
-        try {
-          const activeResponse = await fetch('/api/investments?status=active')
-          const activeData = await activeResponse.json()
-
-          console.log("Investimentos ativos encontrados:", activeData)
-
-          if (activeData.success && activeData.data) {
-            activeData.data
-              .filter((inv: any) => applyDateFilter(inv.updated_at || inv.created_at))
-              .forEach((inv: any) => {
-                // Verificar se foi aprovado pelo admin
-                const isApprovedByAdmin = inv.approved_by_admin === true
-                
-                if (!isApprovedByAdmin) {
-                  // Investimento ativo mas não aprovado pelo admin
-                  if (filters.type === "all" || filters.type === "active_investment_pending_admin") {
-                    activities.push({
-                      id: `active-pending-admin-${inv.id}`,
-                      type: "active_investment_pending_admin",
-                      title: `Investimento ativo - Aguardando aprovação do admin - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
-                      description: `${inv.profiles?.full_name || "Usuário"} - ${inv.quota_type || 'Tipo não especificado'} - Aprovado pelo assessor, aguardando admin`,
-                      timestamp: new Date(inv.updated_at || inv.created_at).toLocaleString("pt-BR"),
-                      color: "bg-yellow-500",
-                      actions: {
-                        approve: true,
-                        reject: true
-                      },
-                      relatedData: {
-                        investmentId: inv.id,
-                        amount: inv.amount,
-                        quotaType: inv.quota_type,
-                        commitmentPeriod: inv.commitment_period,
-                        monthlyReturnRate: inv.monthly_return_rate,
-                        approvedByAdmin: false
-                      }
-                    })
-                  }
-                } else {
-                  // Investimento ativo e aprovado pelo admin
-                  if (filters.type === "all" || filters.type === "investment") {
-                    activities.push({
-                      id: `active-inv-${inv.id}`,
-                      type: "investment",
-                      title: `Investimento ativo - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(inv.amount)}`,
-                      description: `${inv.profiles?.full_name || "Usuário"} - ${inv.quota_type || 'Tipo não especificado'} - Investimento ativo`,
-                      timestamp: new Date(inv.updated_at || inv.created_at).toLocaleString("pt-BR"),
-                      color: "bg-green-500",
-                      relatedData: {
-                        investmentId: inv.id,
-                        amount: inv.amount,
-                        quotaType: inv.quota_type,
-                        commitmentPeriod: inv.commitment_period,
-                        monthlyReturnRate: inv.monthly_return_rate,
-                        approvedByAdmin: true
-                      }
-                    })
-                  }
-                }
-              })
-          }
-        } catch (error) {
-          console.error("Erro ao buscar investimentos ativos:", error)
-        }
-      }
-
-      // Buscar transações pendentes e aprovadas
-      if (filters.type === "all" || filters.type === "withdrawal") {
-        try {
-          const supabase = createClient()
-          
-          // Buscar transações pendentes
-          const { data: pendingTransactions, error: pendingError } = await supabase
-            .from("transactions")
-            .select(`
-              id,
-              amount,
-              transaction_type,
-              status,
-              created_at,
-              user_id,
-              profiles!inner(full_name)
-            `)
-            .eq("status", "pending")
-            .order("created_at", { ascending: false })
-
-          if (!pendingError && pendingTransactions) {
-            pendingTransactions
-              .filter(tx => applyDateFilter(tx.created_at))
-              .forEach((tx) => {
-                const transactionType = tx.transaction_type === 'withdrawal' ? 'Resgate' : 'Depósito'
-                activities.push({
-                  id: `pending-tx-${tx.id}`,
-                  type: "withdrawal",
-                  title: `${transactionType} pendente - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(tx.amount)}`,
-                  description: `${(tx.profiles as any)?.full_name || "Usuário"} - Aguardando aprovação`,
-                  timestamp: new Date(tx.created_at).toLocaleString("pt-BR"),
-                  color: "bg-yellow-500",
-                })
-              })
-          }
-
-          // Buscar transações aprovadas recentes
-          const { data: approvedTransactions, error: approvedError } = await supabase
-            .from("transactions")
-            .select(`
-              id,
-              amount,
-              transaction_type,
-              status,
-              created_at,
-              processed_at,
-              user_id,
-              profiles!inner(full_name)
-            `)
-            .eq("status", "completed")
-            .order("processed_at", { ascending: false })
-
-          if (!approvedError && approvedTransactions) {
-            approvedTransactions
-              .filter(tx => applyDateFilter(tx.processed_at || tx.created_at))
-              .forEach((tx) => {
-                const transactionType = tx.transaction_type === 'withdrawal' ? 'Resgate' : 'Depósito'
-                activities.push({
-                  id: `approved-tx-${tx.id}`,
-                  type: "withdrawal",
-                  title: `${transactionType} aprovado - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(tx.amount)}`,
-                  description: `${(tx.profiles as any)?.full_name || "Usuário"} - Processado`,
-                  timestamp: new Date(tx.processed_at || tx.created_at).toLocaleString("pt-BR"),
-                  color: "bg-blue-500",
-                })
-              })
-          }
-        } catch (error) {
-          console.error("Erro ao buscar transações:", error)
-        }
-      }
-
-      // Buscar usuários criados recentemente
-      if (filters.type === "all" || filters.type === "user_created") {
-        try {
-          const supabase = createClient()
-          const { data: newUsers, error: newUsersError } = await supabase
-            .from("profiles")
-            .select(`
-              id,
-              full_name,
-              user_type,
-              created_at,
-              parent_id,
-              parent:parent_id(full_name)
-            `)
-            .order("created_at", { ascending: false })
-
-          if (!newUsersError && newUsers) {
-            newUsers
-              .filter(user => applyDateFilter(user.created_at))
-              .forEach((user) => {
-                const userTypeLabel = user.user_type === "investor" ? "Investidor" : 
-                                     user.user_type === "distributor" ? "Distribuidor" :
-                                     user.user_type === "assessor" ? "Assessor" :
-                                     user.user_type === "lider" ? "Líder" :
-                                     user.user_type === "gestor" ? "Gestor" :
-                                     user.user_type === "escritorio" ? "Escritório" : "Usuário"
-                
-                const createdBy = (user.parent as any)?.full_name || "Sistema"
-                
-                activities.push({
-                  id: `user-${user.id}`,
-                  type: "user_created",
-                  title: `${userTypeLabel} ${user.full_name} foi criado`,
-                  description: `Criado por ${createdBy}`,
-                  timestamp: new Date(user.created_at).toLocaleString("pt-BR"),
-                  color: "bg-indigo-500",
-                })
-              })
-          }
-        } catch (error) {
-          console.error("Erro ao buscar usuários:", error)
-        }
-      }
-
-      // Buscar metas atingidas recentes
-      if (filters.type === "all" || filters.type === "goal_achieved") {
-        try {
-          const supabase = createClient()
-          const { data: goals, error: goalsError } = await supabase
-            .from("performance_goals")
-            .select(`
-              id,
-              target_amount,
-              achieved_at,
-              profiles!inner(full_name)
-            `)
-            .not("achieved_at", "is", null)
-            .order("achieved_at", { ascending: false })
-
-          if (!goalsError && goals) {
-            goals
-              .filter(goal => applyDateFilter(goal.achieved_at))
-              .forEach((goal) => {
-                activities.push({
-                  id: `goal-${goal.id}`,
-                  type: "goal_achieved",
-                  title: "Meta atingida por distribuidor",
-                  description: `${(goal.profiles as any)?.full_name || "Usuário"} - ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(goal.target_amount)} captados`,
-                  timestamp: new Date(goal.achieved_at).toLocaleString("pt-BR"),
-                  color: "bg-purple-500",
-                })
-              })
-          }
-        } catch (error) {
-          console.error("Erro ao buscar metas:", error)
-        }
-      }
-
-      // Ordenar por timestamp
-      activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      
-      // Debug: log das atividades encontradas
-      console.log("Atividades encontradas:", activities.length, activities)
-      
-      // Calcular paginação
-      const totalItems = activities.length
-      const totalPagesCount = Math.ceil(totalItems / itemsPerPage)
-      const paginatedActivities = activities.slice(offset, offset + limit)
-      
-      setTotalActivities(totalItems)
-      setTotalPages(totalPagesCount)
-      setRecentActivities(paginatedActivities)
-    } catch (error) {
-      console.error("Erro ao buscar atividades recentes:", error)
-    }
-  }
-
-  const fetchPlatformStats = async () => {
-    try {
-      const supabase = createClient()
-
-      const { data: profiles, error: profilesError } = await supabase.from("profiles").select("user_type")
-
-      if (profilesError) {
-        console.error("Erro ao buscar profiles:", profilesError)
-        return
-      }
-
-      const totalUsers = profiles?.length || 0
-      const totalInvestors = profiles?.filter((p) => p.user_type === "investor").length || 0
-      const totalDistributors =
-        profiles?.filter((p) => ["distributor", "assessor", "lider", "gestor", "escritorio"].includes(p.user_type))
-          .length || 0
-
-      const { data: investments, error: investmentsError } = await supabase
-        .from("investments")
-        .select("amount")
-        .eq("status", "active")
-
-      if (investmentsError) {
-        console.error("Erro ao buscar investimentos:", investmentsError)
-      }
-
-      const totalInvested = investments?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0
-
-      const monthlyRevenue = totalInvested * 0.02
-
-      const { data: campaigns, error: campaignsError } = await supabase
-        .from("promotional_campaigns")
-        .select("id")
-        .eq("is_active", true)
-
-      if (campaignsError) {
-        console.error("Erro ao buscar campanhas:", campaignsError)
-      }
-
-      const activePromotions = campaigns?.length || 0
-
-      const { data: approvals, error: approvalsError } = await supabase
-        .from("transaction_approvals")
-        .select("id")
-        .eq("status", "pending")
-
-      if (approvalsError) {
-        console.error("Erro ao buscar aprovações:", approvalsError)
-      }
-
-      const pendingApprovals = approvals?.length || 0
-
-      setStats({
-        totalUsers,
-        totalInvestors,
-        totalDistributors,
-        totalInvested,
-        monthlyRevenue,
-        activePromotions,
-        pendingApprovals,
-      })
-    } catch (error) {
-      console.error("Erro ao buscar estatísticas:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Funções para lidar com filtros e paginação
-  const handleFilterChange = (newFilters: Partial<typeof activityFilters>) => {
-    const updatedFilters = { ...activityFilters, ...newFilters }
-    setActivityFilters(updatedFilters)
-    setCurrentPage(1) // Reset para primeira página ao filtrar
-    fetchRecentActivities(1, updatedFilters)
-  }
-
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage)
-    fetchRecentActivities(newPage, activityFilters)
-  }
-
-  const clearFilters = () => {
-    const clearedFilters = { type: "all", dateFrom: "", dateTo: "" }
-    setActivityFilters(clearedFilters)
-    setCurrentPage(1)
-    fetchRecentActivities(1, clearedFilters)
-  }
-
-  // Função para processar ações de investimento
-  const processInvestmentAction = async (investmentId: string, action: 'approve' | 'reject') => {
-    if (action === 'approve') {
-      // Buscar informações do investimento para o modal
-      const activity = recentActivities.find(a => a.relatedData?.investmentId === investmentId)
-      if (activity) {
-        setSelectedInvestment({
-          id: investmentId,
-          amount: activity.relatedData?.amount || 0,
-          investorName: activity.description.split(' - ')[0] || 'Investidor'
-        })
-        setApproveModalOpen(true)
-      }
-      return
-    }
-
-    // Para rejeição, usar a API normal
-    try {
-      const response = await fetch('/api/investments/action', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          investmentId,
-          action: 'reject',
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao processar ação')
-      }
-
-      toast({
-        title: "Investimento rejeitado!",
-        description: "O investimento foi rejeitado e removido com sucesso.",
-      })
-
-      // Recarregar as atividades
-      fetchRecentActivities(currentPage, activityFilters)
-    } catch (error) {
-      console.error('Error processing investment action:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao processar a ação. Tente novamente.",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleActivityAction = async (activityId: string, action: 'approve' | 'reject') => {
-    // Extrair o ID real do investimento do ID da atividade
-    let realId = activityId.replace(/^pending-inv-/, '')
-    realId = realId.replace(/^active-pending-admin-/, '')
-    await processInvestmentAction(realId, action)
-  }
-
-  const handleApprovalSuccess = () => {
-    // Recarregar as atividades após aprovação bem-sucedida
-    fetchRecentActivities(currentPage, activityFilters)
-  }
-
-  useEffect(() => {
-    const userStr = localStorage.getItem("user")
-    if (userStr) {
-      setUser(JSON.parse(userStr))
-    }
-
-    fetchPlatformStats()
-    fetchRecentActivities()
-  }, [])
+  const {
+    user,
+    stats,
+    recentActivities,
+    loading,
+    activityFilters,
+    currentPage,
+    totalPages,
+    totalActivities,
+    approveModalOpen,
+    selectedInvestment,
+    handleFilterChange,
+    handlePageChange,
+    clearFilters,
+    handleActivityAction,
+    handleApprovalSuccess,
+    closeApprovalModal,
+    formatCurrency,
+  } = useAdminDashboard()
 
   if (!user || user.user_type !== "admin") {
     return (
@@ -561,13 +55,6 @@ export function AdminDashboard() {
         </Card>
       </div>
     )
-  }
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value)
   }
 
   if (loading) {
@@ -648,7 +135,7 @@ export function AdminDashboard() {
       {/* Main Content */}
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="overflow-x-auto">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-11 min-w-max">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-12 min-w-max">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Visão Geral</TabsTrigger>
             <TabsTrigger value="investments" className="text-xs sm:text-sm">Investimentos</TabsTrigger>
             <TabsTrigger value="akintec" className="text-xs sm:text-sm">Akintec</TabsTrigger>
@@ -659,6 +146,7 @@ export function AdminDashboard() {
             <TabsTrigger value="promotions" className="text-xs sm:text-sm">Promoções</TabsTrigger>
             <TabsTrigger value="bonifications" className="text-xs sm:text-sm">Bonificações</TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm">Usuários</TabsTrigger>
+            <TabsTrigger value="commissions" className="text-xs sm:text-sm">Comissões</TabsTrigger>
             <TabsTrigger value="reports" className="text-xs sm:text-sm">Relatórios</TabsTrigger>
           </TabsList>
         </div>
@@ -695,37 +183,37 @@ export function AdminDashboard() {
               </CardContent>
             </Card>
 
-          {user.email === "felipe@aethosconsultoria.com.br" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="w-5 h-5" />
-                  Metas de Performance
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                    <div>
-                      <p className="font-medium">Meta R$ 500K</p>
-                      <p className="text-sm text-muted-foreground">+1% adicional por 12 meses</p>
+            {user.email === "felipe@aethosconsultoria.com.br" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5" />
+                    Metas de Performance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                      <div>
+                        <p className="font-medium">Meta R$ 500K</p>
+                        <p className="text-sm text-muted-foreground">+1% adicional por 12 meses</p>
+                      </div>
+                      <Badge variant="secondary">23 atingiram</Badge>
                     </div>
-                    <Badge variant="secondary">23 atingiram</Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                    <div>
-                      <p className="font-medium">Meta R$ 1M</p>
-                      <p className="text-sm text-muted-foreground">+2% adicional por 12 meses</p>
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <div>
+                        <p className="font-medium">Meta R$ 1M</p>
+                        <p className="text-sm text-muted-foreground">+2% adicional por 12 meses</p>
+                      </div>
+                      <Badge variant="secondary">8 atingiram</Badge>
                     </div>
-                    <Badge variant="secondary">8 atingiram</Badge>
                   </div>
-                </div>
-                <Button variant="outline" className="w-full mt-4 bg-transparent">
-                  Configurar Metas
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+                  <Button variant="outline" className="w-full mt-4 bg-transparent">
+                    Configurar Metas
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <Card>
@@ -833,7 +321,7 @@ export function AdminDashboard() {
                                 <div>
                                   <span className="text-muted-foreground">Valor:</span>
                                   <span className="ml-1 font-medium">
-                                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(activity.relatedData.amount || 0)}
+                                    {formatCurrency(activity.relatedData.amount || 0)}
                                   </span>
                                 </div>
                                 {activity.relatedData.quotaType && (
@@ -869,7 +357,7 @@ export function AdminDashboard() {
                                 <div>
                                   <span className="text-muted-foreground">Valor:</span>
                                   <span className="ml-1 font-medium">
-                                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(activity.relatedData.amount || 0)}
+                                    {formatCurrency(activity.relatedData.amount || 0)}
                                   </span>
                                 </div>
                                 {activity.relatedData.quotaType && (
@@ -895,7 +383,7 @@ export function AdminDashboard() {
                                 <div>
                                   <span className="text-muted-foreground">Valor:</span>
                                   <span className="ml-1 font-medium">
-                                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(activity.relatedData?.amount || 0)}
+                                    {formatCurrency(activity.relatedData?.amount || 0)}
                                   </span>
                                 </div>
                                 {activity.relatedData?.quotaType && (
@@ -1087,6 +575,9 @@ export function AdminDashboard() {
           <UserManager />
         </TabsContent>
 
+        <TabsContent value="commissions">
+          <OfficeCommissionsDetail />
+        </TabsContent>
 
         <TabsContent value="reports">
           <ReportsManager />
@@ -1097,10 +588,7 @@ export function AdminDashboard() {
       {selectedInvestment && (
         <ApproveInvestmentModal
           isOpen={approveModalOpen}
-          onClose={() => {
-            setApproveModalOpen(false)
-            setSelectedInvestment(null)
-          }}
+          onClose={closeApprovalModal}
           investmentId={selectedInvestment.id}
           investmentAmount={selectedInvestment.amount}
           investorName={selectedInvestment.investorName}
@@ -1110,3 +598,5 @@ export function AdminDashboard() {
     </div>
   )
 }
+
+

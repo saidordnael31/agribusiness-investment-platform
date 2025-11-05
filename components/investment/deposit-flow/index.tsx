@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,17 +15,9 @@ import {
 import {
   ArrowLeft,
   Plus,
-  TrendingUp,
-  Shield,
-  Clock,
   Loader2,
   Copy,
-  QrCode,
-  Upload,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
-import { createClient } from "@/lib/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -34,245 +25,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-interface Investment {
-  id: string;
-  type: "senior" | "subordinada";
-  amount: number;
-  currentValue: number;
-  monthlyReturn: number;
-  createdAt: string;
-}
-
-interface QRCodeData {
-  qrCode: string;
-  paymentString: string;
-  originalData: any;
-}
+import { useDepositFlow } from "./useDepositFlow";
 
 export function DepositFlow() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [user, setUser] = useState<any>(null);
-  const [step, setStep] = useState<"selection" | "confirmation" | "success">(
-    "selection"
-  );
-  const [selectedInvestment, setSelectedInvestment] =
-    useState<Investment | null>(null);
-  const [depositAmount, setDepositAmount] = useState("");
-  const [commitmentPeriod, setCommitmentPeriod] = useState("");
-  const [liquidity, setLiquidity] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const [showQRModal, setShowQRModal] = useState(false);
-  const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null);
-  const [generatingQR, setGeneratingQR] = useState(false);
-
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [allInvestmentsReturn, setAllInvestmentsReturn] = useState(0);
-  const [allInvestmentsValue, setAllInvestmentsValue] = useState(0);
-
-  useEffect(() => {
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
-      const userData = JSON.parse(userStr);
-      setUser(userData);
-    }
-  }, []);
-
-  // Mock data - em produção viria de API
-  // const investments: Investment[] = [
-  //   {
-  //     id: "1",
-  //     type: "senior",
-  //     amount: 25000,
-  //     currentValue: 27500,
-  //     monthlyReturn: 750,
-  //     createdAt: "2024-01-15",
-  //   },
-  //   {
-  //     id: "2",
-  //     type: "subordinada",
-  //     amount: 50000,
-  //     currentValue: 55250,
-  //     monthlyReturn: 1750,
-  //     createdAt: "2024-02-01",
-  //   },
-  // ]
-
-  const fetchInvestments = async () => {
-    const supabase = createClient();
-    const { data, error } = await supabase.from("investments").select("*");
-    if (!data) return;
-    const allInvestmentsValues = data.reduce(
-      (acc, curr) => acc + curr.amount,
-      0
-    );
-    setAllInvestmentsReturn(allInvestmentsValues * 0.03);
-    setAllInvestmentsValue(allInvestmentsValues);
-    setInvestments(data);
-  };
-
-  useEffect(() => {
-    fetchInvestments();
-  }, []);
-
-  const handleDepositConfirm = async () => {
-    setIsProcessing(true);
-
-    // Simular processamento
-    // await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // setIsProcessing(false);
-    // setStep("success");
-
-    const supabase = createClient();
-
-    const { data: investmentData, error: investmentError } = await supabase.rpc(
-      "create_investment_for_user",
-      {
-        p_user_id: user?.id, // ou o id do investidor que o assessor quer criar
-        p_amount: Number(depositAmount),
-        p_status: "pending",
-        p_quota_type: "senior",
-        p_monthly_return_rate: getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity),
-        p_commitment_period: Number(commitmentPeriod),
-        p_profitability_liquidity: liquidity,
-      }
-    );
-
-    if (investmentError) {
-      console.error("Erro ao criar investimento:", investmentError);
-    }
-
-    await generateQRCode(Number(depositAmount), user?.cpf_cnpj);
-
-    toast({
-      title: "Depósito processado com sucesso!",
-      description:
-        "Seu depósito adicional foi registrado e será processado em até 1 dia útil.",
-    });
-
-    // setStep("success");
-    setIsProcessing(false);
-  };
-
-  const copyPixCode = () => {
-    if (qrCodeData?.paymentString) {
-      navigator.clipboard.writeText(qrCodeData.paymentString);
-      toast({
-        title: "Código PIX copiado!",
-        description: "O código PIX foi copiado para a área de transferência.",
-      });
-    }
-  };
-
-
-  const generateQRCode = async (value: number, cpf: string) => {
-    try {
-      setGeneratingQR(true);
-
-
-      const response = await fetch("/api/external/generate-qrcode", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          value, 
-          cpf,
-          email: user?.email,
-          userName: user?.name || user?.full_name
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Erro ao gerar QR Code PIX");
-      }
-
-
-      setQRCodeData({
-        qrCode: result.qrCode,
-        paymentString: result.paymentString,
-        originalData: result.originalData,
-      });
-      setShowQRModal(true);
-
-      toast({
-        title: "QR Code PIX gerado!",
-        description: "O QR Code para pagamento foi gerado com sucesso. Um email com o código PIX foi enviado para você.",
-      });
-    } catch (error: any) {
-      console.error("Erro ao gerar QR Code:", error);
-      toast({
-        title: "Erro ao gerar QR Code",
-        description: error.message || "Não foi possível gerar o QR Code PIX.",
-        variant: "destructive",
-      });
-    } finally {
-      setGeneratingQR(false);
-    }
-  };
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  };
-
-  const calculateNewReturn = (investment: number, additionalAmount: number) => {
-    const rate = 0.03;
-    const newTotal = investment + additionalAmount;
-    return newTotal * rate;
-  };
-
-  // Função para obter a taxa baseada no prazo e liquidez
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
-    const rates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        "Mensal": 0.018, // 1.8%
-      },
-      "6": {
-        "Mensal": 0.019, // 1.9%
-        "Semestral": 0.02, // 2%
-      },
-      "12": {
-        "Mensal": 0.021, // 2.1%
-        "Semestral": 0.022, // 2.2%
-        "Anual": 0.025, // 2.5%
-      },
-      "24": {
-        "Mensal": 0.023, // 2.3%
-        "Semestral": 0.025, // 2.5%
-        "Anual": 0.027, // 2.7%
-        "Bienal": 0.03, // 3%
-      },
-      "36": {
-        "Mensal": 0.024, // 2.4%
-        "Semestral": 0.026, // 2.6%
-        "Anual": 0.03, // 3%
-        "Bienal": 0.035, // 3.5%
-        "Trienal": 0.035, // 3.5% (igual ao bienal)
-      },
-    };
-
-    return rates[period.toString()]?.[liquidity] || 0;
-  };
-
-  // Função para obter opções de liquidez disponíveis baseadas no prazo
-  const getAvailableLiquidityOptions = (period: number): string[] => {
-    const options: { [key: string]: string[] } = {
-      "3": ["Mensal"],
-      "6": ["Mensal", "Semestral"],
-      "12": ["Mensal", "Semestral", "Anual"],
-      "24": ["Mensal", "Semestral", "Anual", "Bienal"],
-      "36": ["Mensal", "Semestral", "Anual", "Bienal", "Trienal"],
-    };
-
-    return options[period.toString()] || [];
-  };
+  const {
+    step,
+    depositAmount,
+    commitmentPeriod,
+    liquidity,
+    isProcessing,
+    showQRModal,
+    qrCodeData,
+    generatingQR,
+    setStep,
+    setDepositAmount,
+    setCommitmentPeriod,
+    setLiquidity,
+    handleDepositConfirm,
+    copyPixCode,
+    formatCurrency,
+    getRateByPeriodAndLiquidity,
+    getAvailableLiquidityOptions,
+    handleCommitmentPeriodChange,
+    handleCloseQRModal,
+    handleResetForm,
+    canContinue,
+    router,
+  } = useDepositFlow();
 
   if (step === "success") {
     return (
@@ -326,13 +105,7 @@ export function DepositFlow() {
                 Voltar ao Dashboard
               </Button>
               <Button
-                onClick={() => {
-                  setStep("selection");
-                  setSelectedInvestment(null);
-                  setDepositAmount("");
-                  setCommitmentPeriod("");
-                  setLiquidity("");
-                }}
+                onClick={handleResetForm}
                 className="flex-1 text-[#003F28] font-ibm-plex-sans font-bold text-lg bg-[#D9D9D9] hover:bg-[#D9D9D9]/80"
                 style={{ borderRadius: '11px' }}
               >
@@ -346,6 +119,11 @@ export function DepositFlow() {
   }
 
   if (step === "confirmation") {
+    const monthlyRate = getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity);
+    const monthlyReturn = Number(depositAmount) * monthlyRate;
+    const totalReturn = monthlyReturn * Number(commitmentPeriod);
+    const finalValue = Number(depositAmount) + totalReturn;
+
     return (
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center space-x-4 mb-6">
@@ -404,7 +182,7 @@ export function DepositFlow() {
                 <div className="flex justify-between">
                   <span className="text-white font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Taxa Mensal:</span>
                   <span className="text-white font-ibm-plex-sans font-normal text-[20px] leading-[28px]">
-                    {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m
+                    {(monthlyRate * 100).toFixed(1)}% a.m
                   </span>
                 </div>
               </div>
@@ -418,13 +196,13 @@ export function DepositFlow() {
                 <div className="flex justify-between">
                   <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Mensal:</span>
                   <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
-                    {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
+                    {formatCurrency(monthlyReturn)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Total ({commitmentPeriod} meses):</span>
                   <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
-                    {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
+                    {formatCurrency(totalReturn)}
                   </span>
                 </div>
               </div>
@@ -434,9 +212,7 @@ export function DepositFlow() {
               <div className="flex justify-between">
                 <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">Valor Final:</span>
                 <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">
-                  {formatCurrency(
-                    Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
-                  )}
+                  {formatCurrency(finalValue)}
                 </span>
               </div>
             </div>
@@ -457,10 +233,7 @@ export function DepositFlow() {
 
         <Dialog
           open={showQRModal}
-          onOpenChange={() => {
-            setShowQRModal(false);
-            setStep("success");
-          }}
+          onOpenChange={handleCloseQRModal}
         >
           <DialogContent className="sm:max-w-md bg-white">
             <DialogHeader>
@@ -507,10 +280,7 @@ export function DepositFlow() {
 
                 <div className="flex justify-end">
                   <Button
-                    onClick={() => {
-                      setShowQRModal(false);
-                      setStep("success");
-                    }}
+                    onClick={handleCloseQRModal}
                     className="text-white font-ibm-plex-sans font-bold text-lg"
                     style={{ 
                       backgroundColor: '#012544',
@@ -535,6 +305,11 @@ export function DepositFlow() {
     );
   }
 
+  const monthlyRate = commitmentPeriod && liquidity ? getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) : 0;
+  const monthlyReturn = depositAmount && monthlyRate ? Number(depositAmount) * monthlyRate : 0;
+  const totalReturn = monthlyReturn * Number(commitmentPeriod || 0);
+  const finalValue = depositAmount ? Number(depositAmount) + totalReturn : 0;
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center space-x-4 mb-6">
@@ -550,79 +325,6 @@ export function DepositFlow() {
       </div>
 
       <div className="grid gap-6">
-        {/* <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Plus className="w-5 h-5" />
-              <span>Selecione o Investimento</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4">
-              {investments.map((investment) => (
-                <div
-                  key={investment.id}
-                  className={`p-6 border rounded-lg cursor-pointer transition-all ${
-                    selectedInvestment?.id === investment.id
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                  onClick={() => setSelectedInvestment(investment)}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <Badge
-                        variant={
-                          investment.type === "senior" ? "secondary" : "default"
-                        }
-                      >
-                        Cota{" "}
-                        {investment.type === "senior"
-                          ? "Sênior"
-                          : "Subordinada"}
-                      </Badge>
-                      <div className="flex items-center space-x-1 text-sm text-gray-600">
-                        {investment.type === "senior" ? (
-                          <Shield className="w-4 h-4" />
-                        ) : (
-                          <TrendingUp className="w-4 h-4" />
-                        )}
-                        <span>
-                          {investment.type === "senior"
-                            ? "3% a.m."
-                            : "3,5% a.m."}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Investimento Inicial</p>
-                      <p className="font-semibold">
-                        {formatCurrency(investment.amount)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Valor Atual</p>
-                      <p className="font-semibold">
-                        {formatCurrency(investment.currentValue)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Retorno Mensal</p>
-                      <p className="font-semibold text-emerald-600">
-                        {formatCurrency(investment.monthlyReturn)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card> */}
-
-        {/* {selectedInvestment && ( */}
         <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#00A568] border-0" style={{ borderRadius: '15px' }}>
           <CardHeader>
             <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-[35px] leading-[28px]">Configuração do Depósito</CardTitle>
@@ -651,10 +353,7 @@ export function DepositFlow() {
                 <Label htmlFor="commitment-period" className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">Prazo de Investimento</Label>
                 <Select
                   value={commitmentPeriod}
-                  onValueChange={(value) => {
-                    setCommitmentPeriod(value);
-                    setLiquidity(""); // Reset liquidez quando mudar o prazo
-                  }}
+                  onValueChange={handleCommitmentPeriodChange}
                 >
                   <SelectTrigger className="bg-[#D9D9D9] border-[#D9D9D9] text-[#003F28] font-ibm-plex-sans font-normal text-lg" style={{ width: '214px' }}>
                     <SelectValue placeholder="Selecione o prazo" />
@@ -687,43 +386,16 @@ export function DepositFlow() {
                     ))}
                   </SelectContent>
                 </Select>
-                {commitmentPeriod && (
+                {commitmentPeriod && liquidity && (
                   <p className="text-sm text-[#00A568] font-ibm-plex-sans font-normal mt-1">
-                    Taxa: {(getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                    Taxa: {(monthlyRate * 100).toFixed(1)}% a.m.
                   </p>
                 )}
               </div>
             </div>
 
-
-            {/* {depositAmount && Number(depositAmount) >= 5000 && (
-              <div className="bg-emerald-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-emerald-800 mb-2">
-                  Projeção do Novo Retorno
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Retorno Mensal Adicional:</span>
-                    <span className="font-semibold text-emerald-600">
-                      +{formatCurrency(Number(depositAmount) * 0.03)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                      <span>Novo Retorno Total:</span>
-                      <span className="font-semibold text-emerald-600">
-                        {formatCurrency(
-                          calculateNewReturn(
-                            allInvestmentsReturn,
-                            Number(depositAmount)
-                          )
-                        )}
-                      </span>
-                    </div>
-                </div>
-              </div>
-            )} */}
-
-              {depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity && (
+            {canContinue && (
+              <>
                 <div className="bg-[#D9D9D9] p-4 rounded-lg">
                   <h4 className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px] mb-4">
                     Projeção do Retorno
@@ -732,35 +404,32 @@ export function DepositFlow() {
                     <div className="flex justify-between">
                       <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Mensal:</span>
                       <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
-                        {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity))}
+                        {formatCurrency(monthlyReturn)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Total ({commitmentPeriod} meses):</span>
                       <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-right">
-                        {formatCurrency(Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))}
+                        {formatCurrency(totalReturn)}
                       </span>
                     </div>
                   </div>
                 </div>
-              )}
 
-              {depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity && (
                 <div className="bg-[#D9D9D9] p-4 rounded-lg">
                   <div className="flex justify-between">
                     <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">Valor Final:</span>
                     <span className="text-[#003F28] font-urbanist font-bold text-[25px] leading-[28px]">
-                      {formatCurrency(
-                        Number(depositAmount) + (Number(depositAmount) * getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) * Number(commitmentPeriod))
-                      )}
+                      {formatCurrency(finalValue)}
                     </span>
                   </div>
                 </div>
-              )}
+              </>
+            )}
 
             <Button
               onClick={() => setStep("confirmation")}
-              disabled={!depositAmount || Number(depositAmount) < 5000 || !commitmentPeriod || !liquidity}
+              disabled={!canContinue}
               className="w-full text-white font-ibm-plex-sans font-bold text-lg"
               style={{ 
                 backgroundColor: '#012544',
@@ -771,8 +440,8 @@ export function DepositFlow() {
             </Button>
           </CardContent>
         </Card>
-        {/* )} */}
       </div>
     </div>
   );
 }
+

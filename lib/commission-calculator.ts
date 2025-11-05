@@ -1,5 +1,13 @@
 /**
  * Sistema de cálculo de comissões baseado em roles
+ * 
+ * REGRAS DE COMISSIONAMENTO:
+ * - Pagamento sempre no quinto dia útil do mês
+ * - Separação em períodos de dia 20 (corte mensal)
+ * - ASSESSORES/DISTRIBUIDORES e ESCRITÓRIOS: Sem D+60, cálculo proporcional aos dias entre entrada e dia 20
+ * - INVESTIDORES: D+60 da entrada do valor do investimento para início do período de comissionamento
+ * - Valor proporcional da comissão calculado para 30 dias corridos (apenas investidores)
+ * - Pagamento no 5º dia útil do mês seguinte ao término do período
  */
 
 export interface CommissionRates {
@@ -141,3 +149,565 @@ export function getAvailableRoles(): Array<{ key: keyof CommissionRates; name: s
     rate: `${(rate * 100).toFixed(0)}%`,
   }));
 }
+
+/**
+ * UTILITÁRIOS DE DATA PARA NOVA LÓGICA DE COMISSÕES
+ */
+
+/**
+ * Verifica se uma data é dia útil (segunda a sexta, exceto feriados nacionais)
+ * Por enquanto, considera apenas segunda a sexta como dias úteis
+ */
+export function isBusinessDay(date: Date): boolean {
+  const day = date.getDay(); // 0 = domingo, 6 = sábado
+  return day > 0 && day < 6; // Segunda (1) a Sexta (5)
+}
+
+/**
+ * Encontra o quinto dia útil do mês
+ */
+export function getFifthBusinessDayOfMonth(year: number, month: number): Date {
+  const date = new Date(year, month, 1);
+  let businessDaysCount = 0;
+  
+  while (businessDaysCount < 5) {
+    if (isBusinessDay(date)) {
+      businessDaysCount++;
+      if (businessDaysCount === 5) {
+        return date;
+      }
+    }
+    date.setDate(date.getDate() + 1);
+  }
+  
+  return date;
+}
+
+/**
+ * Calcula a data de corte (dia 20) de um mês/ano
+ */
+export function getCutoffDate(year: number, month: number): Date {
+  return new Date(year, month, 20);
+}
+
+/**
+ * Calcula a data de corte atual (dia 20 do mês atual ou anterior, dependendo do dia de hoje)
+ * Se hoje é dia 20 ou depois, o corte atual é dia 20 deste mês
+ * Se hoje é antes do dia 20, o corte atual é dia 20 do mês anterior
+ */
+export function getCurrentCutoffDate(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+  const currentDay = today.getDate();
+  
+  // Se hoje é dia 20 ou depois, o corte atual é dia 20 deste mês
+  if (currentDay >= 20) {
+    return getCutoffDate(currentYear, currentMonth);
+  } else {
+    // Se hoje é antes do dia 20, o corte atual é dia 20 do mês anterior
+    let prevMonth = currentMonth - 1;
+    let prevYear = currentYear;
+    if (prevMonth < 0) {
+      prevMonth = 11;
+      prevYear -= 1;
+    }
+    return getCutoffDate(prevYear, prevMonth);
+  }
+}
+
+/**
+ * Determina o período de corte baseado na payment_date
+ * Retorna o mês e ano do corte (dia 20) em que o investimento entra
+ * 
+ * REGRA DO CORTE NO DIA 20:
+ * - O corte no dia 20 considera investimentos que já existiam antes do dia 20
+ * - E que continuaram existindo até o dia 20
+ * 
+ * Lógica:
+ * - Se o investimento foi feito ANTES do dia 20: corte é dia 20 do mesmo mês
+ *   (Exemplo: entrada em 10/10 => já existia antes de 20/10 => corte em 20/10)
+ * - Se foi no dia 20 ou DEPOIS: corte é dia 20 do próximo mês
+ *   (Exemplo: entrada em 21/10 => não existia antes de 20/10 => corte em 20/11)
+ */
+export function getInvestmentCutoffPeriod(paymentDate: Date): { year: number; month: number; cutoffDate: Date } {
+  // Usar métodos UTC para evitar problemas de timezone
+  let cutoffMonth = paymentDate.getUTCMonth();
+  let cutoffYear = paymentDate.getUTCFullYear();
+  
+  // Se o pagamento foi no dia 20 ou depois, o corte é do próximo mês
+  // Porque o investimento não existia antes do dia 20, então não entra no corte do mês atual
+  if (paymentDate.getUTCDate() >= 20) {
+    cutoffMonth += 1;
+    if (cutoffMonth > 11) {
+      cutoffMonth = 0;
+      cutoffYear += 1;
+    }
+  }
+  // Se foi antes do dia 20, o corte é dia 20 do mesmo mês
+  // Porque o investimento já existia antes do dia 20 e continuou existindo até o dia 20
+  // Exemplo: entrada em 10/10 => já existia antes de 20/10 => corte em 20/10
+  
+  const cutoffDate = getCutoffDate(cutoffYear, cutoffMonth);
+  return { year: cutoffYear, month: cutoffMonth, cutoffDate };
+}
+
+/**
+ * Calcula o período de comissionamento baseado no corte
+ * O período considera D+60 da entrada do valor, mas é representado pelos meses
+ * O período vai do corte até o próximo corte (dia 20 ao próximo dia 20)
+ * Exemplo: Corte 20/01 -> Período [20/01, 20/02]
+ * O D+60 já está considerado no fato de que o período começa 60 dias após a entrada
+ */
+export function getCommissionPeriod(cutoffDate: Date): { startDate: Date; endDate: Date } {
+  const startDate = new Date(cutoffDate);
+  
+  // Fim do período é o próximo corte (próximo dia 20)
+  const endDate = new Date(cutoffDate);
+  endDate.setMonth(endDate.getMonth() + 1);
+  
+  return { startDate, endDate };
+}
+
+/**
+ * Calcula a data de pagamento baseado no período de comissionamento
+ * O pagamento é sempre no 5º dia útil do mês seguinte ao término do período de comissionamento
+ * Exemplo: Período [20/01, 20/02] termina em 20/02, pagamento no 5º dia útil de março
+ */
+export function getPaymentDate(commissionPeriodEnd: Date): Date {
+  // Pagamento no 5º dia útil do mês seguinte ao término do período
+  const year = commissionPeriodEnd.getFullYear();
+  const month = commissionPeriodEnd.getMonth() + 1; // Mês seguinte ao término do período
+  
+  // Ajustar para próximo ano se necessário
+  if (month > 11) {
+    return getFifthBusinessDayOfMonth(year + 1, 0);
+  }
+  
+  return getFifthBusinessDayOfMonth(year, month);
+}
+
+/**
+ * Calcula comissão proporcional para 30 dias corridos
+ */
+export function calculateProportionalCommission(
+  amount: number,
+  rate: number,
+  daysInPeriod: number = 30
+): number {
+  // Comissão mensal completa
+  const monthlyCommission = amount * rate;
+  // Proporcional para 30 dias
+  return (monthlyCommission / 30) * daysInPeriod;
+}
+
+/**
+ * Interface para comissão calculada com nova lógica
+ */
+export interface NewCommissionCalculation {
+  investmentId: string;
+  investorId: string;
+  investorName: string;
+  amount: number;
+  paymentDate: Date; // payment_date do investimento
+  cutoffPeriod: {
+    year: number;
+    month: number;
+    cutoffDate: Date;
+  };
+  commissionPeriod: {
+    startDate: Date;
+    endDate: Date;
+  };
+  paymentDueDate: Date[]; // Array com os 5º dias úteis de cada mês até o término do investimento
+  advisorCommission: number;
+  officeCommission: number;
+  investorCommission: number;
+  advisorId?: string;
+  advisorName?: string;
+  officeId?: string;
+  officeName?: string;
+  periodLabel: string; // Ex: "Novembro + Dezembro"
+  description: string; // Descrição detalhada da comissão
+  monthlyBreakdown: Array<{
+    month: string;
+    monthNumber: number;
+    year: number;
+    advisorCommission: number;
+    officeCommission: number;
+    investorCommission: number;
+  }>; // Detalhamento mensal dos rendimentos
+}
+
+/**
+ * Calcula comissões seguindo a nova lógica:
+ * - Cortes no dia 20
+ * - ASSESSORES/DISTRIBUIDORES e ESCRITÓRIOS: Sem D+60, cálculo proporcional aos dias entre entrada e dia 20
+ * - INVESTIDORES: D+60 para início do período de comissionamento + 30 dias corridos
+ */
+export function calculateNewCommissionLogic(
+  investment: {
+    id: string;
+    user_id: string;
+    amount: number;
+    payment_date: Date | string;
+    commitment_period?: number; // Período de compromisso em meses (padrão: 12)
+    investorName?: string;
+    advisorId?: string;
+    advisorName?: string;
+    officeId?: string;
+    officeName?: string;
+    isForAdvisor?: boolean; // Flag para identificar se é cálculo para assessor
+  }
+): NewCommissionCalculation {
+  // Converter payment_date para Date, tratando diferentes formatos
+  // IMPORTANTE: Usar UTC para evitar problemas de timezone
+  let paymentDate: Date;
+  if (typeof investment.payment_date === 'string') {
+    // Extrair apenas a parte da data (YYYY-MM-DD) para evitar problemas de timezone
+    const dateOnly = investment.payment_date.split('T')[0];
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    
+    // Verificar se a data é válida
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      console.error('Data de pagamento inválida:', investment.payment_date);
+      paymentDate = new Date(); // Fallback para data atual
+    } else {
+      // Criar data usando UTC para evitar problemas de timezone
+      paymentDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    }
+  } else if (investment.payment_date instanceof Date) {
+    paymentDate = investment.payment_date;
+    // Normalizar para UTC meia-noite
+    paymentDate = new Date(Date.UTC(
+      paymentDate.getUTCFullYear(),
+      paymentDate.getUTCMonth(),
+      paymentDate.getUTCDate(),
+      0, 0, 0, 0
+    ));
+  } else {
+    // Se não for string nem Date, criar nova data
+    paymentDate = new Date(investment.payment_date);
+    // Normalizar para UTC meia-noite
+    if (!isNaN(paymentDate.getTime())) {
+      paymentDate = new Date(Date.UTC(
+        paymentDate.getUTCFullYear(),
+        paymentDate.getUTCMonth(),
+        paymentDate.getUTCDate(),
+        0, 0, 0, 0
+      ));
+    }
+  }
+  
+  // Garantir que a data seja válida
+  if (isNaN(paymentDate.getTime())) {
+    console.error('Data de pagamento inválida:', investment.payment_date);
+    paymentDate = new Date(); // Fallback para data atual
+    paymentDate = new Date(Date.UTC(
+      paymentDate.getUTCFullYear(),
+      paymentDate.getUTCMonth(),
+      paymentDate.getUTCDate(),
+      0, 0, 0, 0
+    ));
+  }
+  
+  const monthNames = [
+    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
+  ];
+  
+  // Período de compromisso (padrão: 12 meses)
+  const commitmentPeriod = investment.commitment_period || 12;
+  
+  let cutoffPeriod: { year: number; month: number; cutoffDate: Date };
+  let commissionPeriod: { startDate: Date; endDate: Date };
+  let paymentDueDate: Date[];
+  let advisorCommission: number;
+  let officeCommission: number;
+  let investorCommission: number;
+  let periodLabel: string;
+  let description: string;
+  let monthlyBreakdown: Array<{
+    month: string;
+    monthNumber: number;
+    year: number;
+    advisorCommission: number;
+    officeCommission: number;
+    investorCommission: number;
+  }>;
+  
+  // Função auxiliar para calcular todas as datas de pagamento (5º dia útil de cada mês)
+  const calculatePaymentDueDates = (startCutoffDate: Date, months: number): Date[] => {
+    const dates: Date[] = [];
+    let currentYear = startCutoffDate.getFullYear();
+    let currentMonth = startCutoffDate.getMonth();
+    
+    // Primeira data: 5º dia útil do mês seguinte ao primeiro corte
+    for (let i = 0; i < months; i++) {
+      const paymentMonth = currentMonth + 1 + i;
+      let year = currentYear;
+      let month = paymentMonth;
+      
+      if (month > 11) {
+        year += Math.floor(month / 12);
+        month = month % 12;
+      }
+      
+      const fifthDay = getFifthBusinessDayOfMonth(year, month);
+      fifthDay.setHours(0, 0, 0, 0);
+      dates.push(new Date(fifthDay));
+    }
+    
+    return dates;
+  };
+  
+    // 1. Determinar período de corte
+    cutoffPeriod = getInvestmentCutoffPeriod(paymentDate);
+    
+    // VERIFICAR SE É PARA ASSESSOR/DISTRIBUIDOR (sem D+60)
+    const isForAdvisor = investment.isForAdvisor === true;
+    
+    if (isForAdvisor) {
+    // REGRA PARA ASSESSORES/DISTRIBUIDORES: Sem D+60, cálculo proporcional aos dias acumulados até o corte atual
+    
+    // Calcular a data de corte atual (dia 20 do mês atual ou anterior)
+    const currentCutoffDate = getCurrentCutoffDate();
+    currentCutoffDate.setHours(0, 0, 0, 0);
+    
+    // Usar o corte atual se for mais recente que o corte inicial do investimento
+    // Caso contrário, usar o corte inicial
+    const cutoffDate = currentCutoffDate > cutoffPeriod.cutoffDate 
+      ? currentCutoffDate 
+      : cutoffPeriod.cutoffDate;
+    
+      // Ajustar cutoffDate para meia-noite para cálculo correto (usar UTC)
+      const cutoffDateMidnight = new Date(Date.UTC(cutoffDate.getUTCFullYear(), cutoffDate.getUTCMonth(), cutoffDate.getUTCDate(), 0, 0, 0, 0));
+      // IMPORTANTE: Contar a partir do dia seguinte ao depósito
+      // Exemplo: depósito dia 13, conta do dia 14 até o dia 20 = 7 dias
+      const paymentDateNextDay = new Date(Date.UTC(paymentDate.getUTCFullYear(), paymentDate.getUTCMonth(), paymentDate.getUTCDate(), 0, 0, 0, 0));
+      paymentDateNextDay.setUTCDate(paymentDateNextDay.getUTCDate() + 1); // Dia seguinte ao depósito
+    
+    // Calcular diferença em dias acumulados desde o dia seguinte ao depósito até o corte atual
+    // Exemplo: depósito dia 13, conta do dia 14 até 20/10 = 7 dias (14, 15, 16, 17, 18, 19, 20)
+      const daysDiff = Math.max(1, Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      
+      // Taxa mensal do assessor: 3%
+      // Taxa diária: 3% / 30 = 0.1% por dia
+      const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
+      const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
+      const dailyRateInvestor = COMMISSION_RATES.investidor / 30;
+      
+    // Comissão proporcional: taxa diária * dias acumulados
+      const proportionalRateAdvisor = dailyRateAdvisor * daysDiff;
+      const proportionalRateOffice = dailyRateOffice * daysDiff;
+      
+    // Calcular comissões de assessor e escritório (proporcionais, sem D+60)
+      advisorCommission = investment.amount * proportionalRateAdvisor;
+      officeCommission = investment.amount * proportionalRateOffice;
+    
+    // INVESTIDORES: Com D+60 + 30 dias corridos (sempre, independente do contexto)
+    const commissionStartDate = new Date(paymentDate);
+    commissionStartDate.setDate(commissionStartDate.getDate() + 60);
+    
+    const commissionEndDate = new Date(commissionStartDate);
+    commissionEndDate.setDate(commissionEndDate.getDate() + 30);
+    
+    const daysInPeriod = 30;
+    investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+    
+    // Calcular todas as datas de pagamento (uma por mês até o término do investimento)
+    // Usar o corte inicial para calcular as datas de pagamento, não o corte atual
+    paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
+    
+    // Período de comissionamento: do dia da entrada até o corte atual (para cálculo)
+      commissionPeriod = {
+        startDate: new Date(paymentDate),
+        endDate: new Date(cutoffDate),
+      };
+      
+      // Calcular todas as datas de pagamento primeiro (para usar como base)
+      paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
+      
+      // Calcular comissão mensal completa para cada mês futuro
+      // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório)
+      const monthlyAdvisorCommission = investment.amount * COMMISSION_RATES.assessor;
+      const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
+      const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+      
+      // Construir monthlyBreakdown alinhado com as datas de pagamento
+      // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual
+      // 2. Meses futuros: comissão mensal completa (30 dias = 3% do valor)
+      monthlyBreakdown = [];
+      
+      // Adicionar período atual (proporcional) - primeiro mês
+      const monthName = monthNames[cutoffDate.getMonth()];
+      monthlyBreakdown.push({
+        month: monthName,
+        monthNumber: cutoffDate.getMonth() + 1,
+        year: cutoffDate.getFullYear(),
+        advisorCommission, // Comissão proporcional calculada acima
+        officeCommission, // Comissão proporcional calculada acima
+        investorCommission,
+      });
+      
+      // Adicionar períodos futuros (comissão mensal completa)
+      // Cada data de pagamento corresponde a um mês no breakdown
+      // Começar do segundo mês (índice 1) porque o primeiro já foi adicionado
+      for (let i = 1; i < paymentDueDate.length; i++) {
+        const paymentDateMonth = paymentDueDate[i];
+        const futureMonthName = monthNames[paymentDateMonth.getMonth()];
+        
+        monthlyBreakdown.push({
+          month: futureMonthName,
+          monthNumber: paymentDateMonth.getMonth() + 1,
+          year: paymentDateMonth.getFullYear(),
+          advisorCommission: monthlyAdvisorCommission, // Comissão mensal completa (3%)
+          officeCommission: monthlyOfficeCommission, // Comissão mensal completa (1%)
+          investorCommission: monthlyInvestorCommission, // Comissão mensal completa (2%)
+        });
+      }
+      
+      periodLabel = monthName;
+      
+    // Descrição simplificada focada apenas na comissão do assessor
+    const roleName = investment.advisorName || 'Assessor';
+    const roleRate = COMMISSION_RATES.assessor;
+    
+    description = `Comissão de ${roleName} calculada sobre investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
+      `Taxa de comissão: ${(roleRate * 100).toFixed(0)}% ao mês. ` +
+      `A comissão é calculada proporcionalmente aos dias desde a entrada do investimento até o próximo corte (dia 20). ` +
+      `A partir do segundo mês, a comissão será fixa de ${(roleRate * 100).toFixed(0)}% ao mês. ` +
+      `Pagamento mensal no 5º dia útil de cada mês durante ${commitmentPeriod} meses.`;
+    } else {
+    // REGRA PARA ESCRITÓRIO: Sem D+60, cálculo proporcional aos dias acumulados até o corte atual (igual assessores)
+    
+    // Calcular a data de corte atual (dia 20 do mês atual ou anterior)
+    const currentCutoffDate = getCurrentCutoffDate();
+    currentCutoffDate.setHours(0, 0, 0, 0);
+    
+    // Usar o corte atual se for mais recente que o corte inicial do investimento
+    // Caso contrário, usar o corte inicial
+    const cutoffDate = currentCutoffDate > cutoffPeriod.cutoffDate 
+      ? currentCutoffDate 
+      : cutoffPeriod.cutoffDate;
+    
+    // Ajustar cutoffDate para meia-noite para cálculo correto (usar UTC)
+    const cutoffDateMidnight = new Date(Date.UTC(cutoffDate.getUTCFullYear(), cutoffDate.getUTCMonth(), cutoffDate.getUTCDate(), 0, 0, 0, 0));
+    // IMPORTANTE: Contar a partir do dia seguinte ao depósito
+    // Exemplo: depósito dia 13, conta do dia 14 até o dia 20 = 7 dias
+    const paymentDateNextDay = new Date(Date.UTC(paymentDate.getUTCFullYear(), paymentDate.getUTCMonth(), paymentDate.getUTCDate(), 0, 0, 0, 0));
+    paymentDateNextDay.setUTCDate(paymentDateNextDay.getUTCDate() + 1); // Dia seguinte ao depósito
+    
+    // Calcular diferença em dias acumulados desde o dia seguinte ao depósito até o corte atual
+    // Exemplo: depósito dia 13, conta do dia 14 até 20/10 = 7 dias (14, 15, 16, 17, 18, 19, 20)
+    const daysDiff = Math.max(1, Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    
+    // Taxa diária
+    const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
+    const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
+    const dailyRateInvestor = COMMISSION_RATES.investidor / 30;
+    
+    // Comissão proporcional: taxa diária * dias acumulados
+    const proportionalRateAdvisor = dailyRateAdvisor * daysDiff;
+    const proportionalRateOffice = dailyRateOffice * daysDiff;
+    const proportionalRateInvestor = dailyRateInvestor * daysDiff;
+    
+    // Calcular comissões de assessor e escritório (proporcionais, sem D+60)
+    advisorCommission = investment.amount * proportionalRateAdvisor;
+    officeCommission = investment.amount * proportionalRateOffice;
+    
+    // INVESTIDORES: Com D+60 + 30 dias corridos
+      const commissionStartDate = new Date(paymentDate);
+      commissionStartDate.setDate(commissionStartDate.getDate() + 60);
+      
+      const commissionEndDate = new Date(commissionStartDate);
+      commissionEndDate.setDate(commissionEndDate.getDate() + 30);
+      
+      const daysInPeriod = 30;
+      investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+    
+    // Calcular todas as datas de pagamento primeiro (para usar como base)
+    paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
+    
+    // Calcular comissão mensal completa para cada mês futuro
+    // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório)
+    const monthlyAdvisorCommission = investment.amount * COMMISSION_RATES.assessor;
+    const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
+    const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+    
+    // Período de comissionamento: do dia da entrada até o corte atual (para cálculo)
+    commissionPeriod = {
+      startDate: new Date(paymentDate),
+      endDate: new Date(cutoffDate),
+    };
+    
+    // Construir monthlyBreakdown alinhado com as datas de pagamento
+    // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual
+    // 2. Meses futuros: comissão mensal completa (30 dias = taxa mensal)
+    monthlyBreakdown = [];
+    
+    // Adicionar período atual (proporcional) - primeiro mês
+    const monthName = monthNames[cutoffDate.getMonth()];
+    monthlyBreakdown.push({
+      month: monthName,
+      monthNumber: cutoffDate.getMonth() + 1,
+      year: cutoffDate.getFullYear(),
+      advisorCommission, // Comissão proporcional calculada acima
+      officeCommission, // Comissão proporcional calculada acima
+      investorCommission,
+    });
+    
+    // Adicionar períodos futuros (comissão mensal completa)
+    // Cada data de pagamento corresponde a um mês no breakdown
+    // Começar do segundo mês (índice 1) porque o primeiro já foi adicionado
+    for (let i = 1; i < paymentDueDate.length; i++) {
+      const paymentDateMonth = paymentDueDate[i];
+      const futureMonthName = monthNames[paymentDateMonth.getMonth()];
+      
+      monthlyBreakdown.push({
+        month: futureMonthName,
+        monthNumber: paymentDateMonth.getMonth() + 1,
+        year: paymentDateMonth.getFullYear(),
+        advisorCommission: monthlyAdvisorCommission, // Comissão mensal completa (3%)
+        officeCommission: monthlyOfficeCommission, // Comissão mensal completa (1%)
+        investorCommission: monthlyInvestorCommission, // Comissão mensal completa (2%)
+      });
+    }
+    
+    periodLabel = monthName;
+      
+    // Descrição simplificada focada apenas na comissão do escritório
+    const roleName = investment.officeName || 'Escritório';
+    const roleRate = COMMISSION_RATES.escritorio;
+    
+    description = `Comissão de ${roleName} calculada sobre investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
+      `Taxa de comissão: ${(roleRate * 100).toFixed(0)}% ao mês. ` +
+      `A comissão é calculada proporcionalmente aos dias desde a entrada do investimento até o próximo corte (dia 20). ` +
+      `A partir do segundo mês, a comissão será fixa de ${(roleRate * 100).toFixed(0)}% ao mês. ` +
+      `Pagamento mensal no 5º dia útil de cada mês durante ${commitmentPeriod} meses.`;
+  }
+  
+  return {
+    investmentId: investment.id,
+    investorId: investment.user_id,
+    investorName: investment.investorName || 'Investidor',
+    amount: investment.amount,
+    paymentDate,
+    cutoffPeriod,
+    commissionPeriod,
+    paymentDueDate,
+    advisorCommission,
+    officeCommission,
+    investorCommission,
+    advisorId: investment.advisorId,
+    advisorName: investment.advisorName,
+    officeId: investment.officeId,
+    officeName: investment.officeName,
+    periodLabel,
+    description,
+    monthlyBreakdown,
+  };
+}
+
