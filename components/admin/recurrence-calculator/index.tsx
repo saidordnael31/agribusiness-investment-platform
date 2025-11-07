@@ -1,6 +1,7 @@
 "use client"
 
 import { CardDescription } from "@/components/ui/card"
+import * as Tooltip from "@radix-ui/react-tooltip"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +22,7 @@ import {
   Loader2,
   Download,
   FileText,
+  Info,
 } from "lucide-react"
 import { useRecurrenceCalculator } from "./useRecurrenceCalculator"
 
@@ -28,13 +30,11 @@ export function RecurrenceCalculator() {
   const {
     recurrences,
     projections,
-    impacts,
     selectedRecurrence,
     isProjectionOpen,
     loading,
     filterType,
     filterValue,
-    dateFilter,
     filterOptions,
     investorRate,
     filteredRecurrences,
@@ -44,10 +44,11 @@ export function RecurrenceCalculator() {
     totalAdvisorShare,
     totalOfficeShare,
     atRiskRecurrences,
+    lastCutoffDate,
+    nextFifthBusinessDay,
+    totalToBePaid,
     setFilterType,
     setFilterValue,
-    setDateFilter,
-    handleClearDateFilter,
     setIsProjectionOpen,
     recalculateAll,
     handleViewProjection,
@@ -57,6 +58,8 @@ export function RecurrenceCalculator() {
     exportToExcel,
     exportToPDF,
     formatCurrency,
+    calculateInvestorCommission,
+    calculateInvestorRate,
   } = useRecurrenceCalculator()
 
   if (loading) {
@@ -66,6 +69,33 @@ export function RecurrenceCalculator() {
         <span className="ml-2">Carregando dados de recorrência...</span>
       </div>
     )
+  }
+
+  const formatDateLabel = (value: string | Date | null | undefined): string => {
+    if (!value) return "-"
+
+    const toFormattedString = (dateObj: Date) => {
+      const year = dateObj.getUTCFullYear()
+      const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0")
+      const day = String(dateObj.getUTCDate()).padStart(2, "0")
+      return `${day}/${month}/${year}`
+    }
+
+    if (typeof value === "string") {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        const [, year, month, day] = match
+        const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+        return toFormattedString(date)
+      }
+      const parsed = new Date(value)
+      if (isNaN(parsed.getTime())) return "-"
+      const normalized = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()))
+      return toFormattedString(normalized)
+    }
+
+    const normalized = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
+    return toFormattedString(normalized)
   }
 
   return (
@@ -83,6 +113,70 @@ export function RecurrenceCalculator() {
           Recalcular Tudo
         </Button>
       </div>
+
+      {/* Card destacado com próximo pagamento */}
+      <Card className="overflow-hidden border border-emerald-300 shadow-sm">
+        <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400 px-6 py-5 text-emerald-50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/20">
+                <DollarSign className="h-6 w-6" />
+              </span>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-100">Próximo Pagamento</p>
+                <p className="text-lg font-semibold">Monitoramento do ciclo de recorrência</p>
+              </div>
+            </div>
+            <span className="text-sm text-emerald-100/90">
+              Atualizado automaticamente com base no corte vigente
+            </span>
+          </div>
+        </div>
+        <CardContent className="p-6">
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Último corte (dia 20)</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                  {lastCutoffDate.toLocaleDateString("pt-BR", { 
+                    day: "2-digit", 
+                    month: "2-digit", 
+                  year: "numeric",
+                  })}
+                </p>
+              <p className="text-sm text-muted-foreground">
+                Investimentos até essa data entram no lote atual de pagamento.
+                </p>
+              </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Pagamento agendado</p>
+              <p className="text-3xl font-bold text-emerald-700 leading-tight">
+                  {nextFifthBusinessDay.toLocaleDateString("pt-BR", { 
+                    weekday: "long", 
+                    year: "numeric", 
+                    month: "long", 
+                  day: "numeric",
+                  })}
+                </p>
+              <p className="text-sm text-muted-foreground">
+                  {nextFifthBusinessDay.toLocaleDateString("pt-BR", { 
+                    day: "2-digit", 
+                    month: "2-digit", 
+                  year: "numeric",
+                  })}
+                </p>
+              </div>
+
+            <div className="space-y-2 md:text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Valor total do ciclo</p>
+              <p className="text-4xl font-bold text-emerald-700">{formatCurrency(totalToBePaid)}</p>
+              <p className="text-sm text-muted-foreground md:ml-auto md:max-w-[220px]">
+                Soma das comissões aprovadas para liberação no próximo quinto dia útil.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
@@ -130,12 +224,10 @@ export function RecurrenceCalculator() {
         </Card>
       </div>
 
+      <Tooltip.Provider delayDuration={150} skipDelayDuration={0}>
       <Tabs defaultValue="recurrences" className="space-y-6">
         <TabsList>
           <TabsTrigger value="recurrences">Recorrências Ativas</TabsTrigger>
-          <TabsTrigger value="totals">Totais por Categoria</TabsTrigger>
-          <TabsTrigger value="impacts">Impactos Futuros</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="recurrences" className="space-y-6">
@@ -191,27 +283,6 @@ export function RecurrenceCalculator() {
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
-
-                  <div className="flex-1">
-                    <Input
-                      type="date"
-                      placeholder="Valores até"
-                      value={dateFilter}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateFilter(e.target.value)}
-                      className="w-full"
-                    />
-                  </div>
-
-                  {dateFilter && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={handleClearDateFilter}
-                      className="whitespace-nowrap"
-                    >
-                      Limpar Data
-                    </Button>
                   )}
                 </div>
 
@@ -286,9 +357,16 @@ export function RecurrenceCalculator() {
                           <TableHead>Investidor</TableHead>
                           <TableHead>Assessor/Escritório</TableHead>
                           <TableHead>Investimento</TableHead>
-                          <TableHead>Comissão Mensal</TableHead>
-                          <TableHead>Divisão (3%/1%)</TableHead>
-                          <TableHead>Status</TableHead>
+                          <TableHead>
+                            <span className="font-medium">
+                              A pagar em {nextFifthBusinessDay.toLocaleDateString("pt-BR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </TableHead>
+                          <TableHead>Dias contabilizados</TableHead>
                           <TableHead>Ações</TableHead>
                         </>
                       )}
@@ -439,7 +517,16 @@ export function RecurrenceCalculator() {
                         ))
                       ) : null
                     ) : (
-                      filteredRecurrences.map((recurrence) => (
+                      filteredRecurrences.map((recurrence) => {
+                        const nextDetails = recurrence.nextPaymentDetails
+                        const officeAmount = nextDetails?.officeAmount ?? recurrence.officeShare
+                        const advisorAmount = nextDetails?.advisorAmount ?? recurrence.advisorShare
+                        const investorAmount = nextDetails?.investorAmount ?? calculateInvestorCommission(recurrence)
+                        const investorRateValue = nextDetails?.investorRate ?? calculateInvestorRate(recurrence)
+                        const depositDateDisplay = formatDateLabel(recurrence.paymentDate)
+                        const cutoffDateDisplay = formatDateLabel(nextDetails?.cutoffDate ?? null)
+
+                        return (
                         <TableRow key={recurrence.id}>
                           <TableCell>
                             <div>
@@ -480,28 +567,132 @@ export function RecurrenceCalculator() {
                             </p>
                           </TableCell>
                           <TableCell>
-                            <p className="font-medium">{formatCurrency(recurrence.monthlyCommission)}</p>
-                            <p className="text-sm text-muted-foreground">Pago: {formatCurrency(recurrence.totalPaid)}</p>
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <p className="text-sm">
-                                <span className="text-emerald-600">Assessor: {formatCurrency(recurrence.advisorShare)}</span>
+                            <div className="space-y-1 text-sm">
+                              <p className="font-medium text-orange-600">
+                                <span className="inline-flex items-center gap-2">
+                                  Escritório (1%): {formatCurrency(officeAmount)}
+                                  <Tooltip.Root>
+                                    <Tooltip.Trigger asChild>
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-orange-600 transition hover:bg-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-help"
+                                        aria-label="Como essa comissão é calculada"
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    </Tooltip.Trigger>
+                                    <Tooltip.Content side="top" align="start" className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-xl" sideOffset={8}>
+                                      <p className="font-semibold text-orange-300">Escritório (1%)</p>
+                                      <p className="mt-1">Fórmula:</p>
+                                      <p className="font-mono text-[11px]">valor × (0,01 / 30) × dias contabilizados</p>
+                                      <p className="mt-1">Valor do investimento: {formatCurrency(recurrence.investmentAmount)}</p>
+                                      {recurrence.nextPaymentDetails?.daysCounted != null && (
+                                        <p>Dias contabilizados: {recurrence.nextPaymentDetails.daysCounted}</p>
+                                      )}
+                                      <p className="mt-1 font-semibold">Resultado: {formatCurrency(officeAmount)}</p>
+                                      <Tooltip.Arrow className="fill-slate-900" />
+                                    </Tooltip.Content>
+                                  </Tooltip.Root>
+                                </span>
+                                {recurrence.nextPaymentDetails?.officePercentage != null && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    ({recurrence.nextPaymentDetails.officePercentage.toFixed(2)}% do investimento)
+                                  </span>
+                                )}
                               </p>
-                              <p className="text-sm">
-                                <span className="text-orange-600">Escritório: {formatCurrency(recurrence.officeShare)}</span>
+                              <p className="font-medium text-emerald-600">
+                                <span className="inline-flex items-center gap-2">
+                                  Assessor (3%): {formatCurrency(advisorAmount)}
+                                  <Tooltip.Root>
+                                    <Tooltip.Trigger asChild>
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 transition hover:bg-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-help"
+                                        aria-label="Como essa comissão é calculada"
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    </Tooltip.Trigger>
+                                    <Tooltip.Content side="top" align="start" className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-xl" sideOffset={8}>
+                                      <p className="font-semibold text-emerald-300">Assessor (3%)</p>
+                                      <p className="mt-1">Fórmula:</p>
+                                      <p className="font-mono text-[11px]">valor × (0,03 / 30) × dias contabilizados</p>
+                                      <p className="mt-1">Valor do investimento: {formatCurrency(recurrence.investmentAmount)}</p>
+                                      {recurrence.nextPaymentDetails?.daysCounted != null && (
+                                        <p>Dias contabilizados: {recurrence.nextPaymentDetails.daysCounted}</p>
+                                      )}
+                                      <p className="mt-1 font-semibold">Resultado: {formatCurrency(advisorAmount)}</p>
+                                      <Tooltip.Arrow className="fill-slate-900" />
+                                    </Tooltip.Content>
+                                  </Tooltip.Root>
+                                </span>
+                                {recurrence.nextPaymentDetails?.advisorPercentage != null && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    ({recurrence.nextPaymentDetails.advisorPercentage.toFixed(2)}% do investimento)
+                                  </span>
+                                )}
+                              </p>
+                              <p className="font-medium text-blue-600">
+                                <span className="inline-flex items-center gap-2">
+                                  Investidor ({investorRateValue.toFixed(1)}%): {formatCurrency(investorAmount)}
+                                  <Tooltip.Root>
+                                    <Tooltip.Trigger asChild>
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-600 transition hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-help"
+                                        aria-label="Como essa comissão é calculada"
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    </Tooltip.Trigger>
+                                    <Tooltip.Content side="top" align="start" className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-xl" sideOffset={8}>
+                                      <p className="font-semibold text-blue-300">Investidor ({investorRateValue.toFixed(1)}%)</p>
+                                      <p className="mt-1">Fórmula:</p>
+                                      <p className="font-mono text-[11px]">valor × ({investorRateValue.toFixed(3)} / 30) × dias contabilizados</p>
+                                      <p className="mt-1">Valor do investimento: {formatCurrency(recurrence.investmentAmount)}</p>
+                                      {recurrence.nextPaymentDetails?.daysCounted != null && (
+                                        <p>Dias contabilizados: {recurrence.nextPaymentDetails.daysCounted}</p>
+                                      )}
+                                      <p className="mt-1 font-semibold">Resultado: {formatCurrency(investorAmount)}</p>
+                                      <Tooltip.Arrow className="fill-slate-900" />
+                                    </Tooltip.Content>
+                                  </Tooltip.Root>
+                                </span>
+                                {recurrence.nextPaymentDetails?.investorPercentage != null && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    ({recurrence.nextPaymentDetails.investorPercentage.toFixed(2)}% do investimento)
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={getStatusColor(recurrence.status)}>{getStatusLabel(recurrence.status)}</Badge>
-                            {recurrence.riskFactors.length > 0 && (
-                              <div className="mt-1">
-                                <Badge variant="outline" className="text-xs">
-                                  <AlertTriangle className="w-3 h-3 mr-1" />
-                                  {recurrence.riskFactors.length} alertas
-                                </Badge>
-                              </div>
+                            {recurrence.nextPaymentDetails?.daysCounted != null ? (
+                              <Tooltip.Root delayDuration={150}>
+                                <Tooltip.Trigger asChild>
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-2 rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-700 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                                    aria-label="Detalhes dos dias contabilizados"
+                                  >
+                                    <span>{recurrence.nextPaymentDetails.daysCounted} dia(s)</span>
+                                    <Info className="h-3.5 w-3.5 text-slate-500" />
+                                  </button>
+                                </Tooltip.Trigger>
+                                <Tooltip.Content side="top" align="start" className="max-w-sm rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-xl" sideOffset={8}>
+                                  <p className="font-semibold text-white">Dias contabilizados</p>
+                                  <p className="mt-1 whitespace-pre-line">
+                                    Intervalo entre a data do depósito e a última data de fechamento (dia 20)
+                                    considerada para este pagamento proporcional.
+                                  </p>
+                                  <p className="mt-2">Depósito: {depositDateDisplay}</p>
+                                  <p>Última data de fechamento: {cutoffDateDisplay}</p>
+                                  <p className="mt-1">Total de dias: {recurrence.nextPaymentDetails.daysCounted}</p>
+                                  <Tooltip.Arrow className="fill-slate-900" />
+                                </Tooltip.Content>
+                              </Tooltip.Root>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">-</div>
                             )}
                           </TableCell>
                           <TableCell>
@@ -510,7 +701,8 @@ export function RecurrenceCalculator() {
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -518,284 +710,8 @@ export function RecurrenceCalculator() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="totals" className="space-y-6">
-          <div className="flex justify-end mb-4">
-            {Array.from(totalsByCategory.investors.values()).length > 0 || 
-             Array.from(totalsByCategory.advisors.values()).length > 0 || 
-             Array.from(totalsByCategory.offices.values()).length > 0 ? (
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => exportToExcel("totals")}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => exportToPDF("totals")}>
-                  <FileText className="w-4 h-4 mr-2" />
-                  PDF
-                </Button>
-              </div>
-            ) : null}
-          </div>
-          <div className={`grid grid-cols-1 ${filterType === "all" ? "lg:grid-cols-3" : "lg:grid-cols-1"} gap-6`}>
-            {(filterType === "all" || filterType === "investors") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Totais por Investidores</CardTitle>
-                  <CardDescription>Valores investidos e comissões por investidor</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {Array.from(totalsByCategory.investors.values()).map((investor, index) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-semibold">{investor.name}</h3>
-                          <Badge variant="outline">{formatCurrency(investor.totalAmount)}</Badge>
-                        </div>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Assessor (3%):</span>
-                            <span className="font-medium text-emerald-600">
-                              {formatCurrency(investor.advisorCommission)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Escritório (1%):</span>
-                            <span className="font-medium text-orange-600">
-                              {formatCurrency(investor.officeCommission)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Investidor (varia):</span>
-                            <span className="font-medium text-blue-600">
-                              {formatCurrency(investor.investorCommission)}
-                            </span>
-                          </div>
-                          <div className="border-t pt-1">
-                            <div className="flex justify-between font-semibold">
-                              <span>Total Comissões:</span>
-                              <span>{formatCurrency(investor.totalCommission)}</span>
-                            </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Baseado no prazo e liquidez do investimento
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {Array.from(totalsByCategory.investors.values()).length === 0 && (
-                      <p className="text-muted-foreground text-center py-4">Nenhum investidor encontrado</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {(filterType === "all" || filterType === "advisors") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Totais por Assessores</CardTitle>
-                  <CardDescription>Comissões e investimentos por assessor</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {Array.from(totalsByCategory.advisors.values()).map((advisor, index) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-semibold">{advisor.name}</h3>
-                          <Badge variant="outline">{advisor.count} investimento(s)</Badge>
-                        </div>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Total Investido:</span>
-                            <span className="font-medium">{formatCurrency(advisor.totalAmount)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Comissão Mensal (3%):</span>
-                            <span className="font-medium text-emerald-600">
-                              {formatCurrency(advisor.totalCommission)}
-                            </span>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatCurrency(advisor.totalAmount)} × 3% = {formatCurrency(advisor.totalCommission)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {Array.from(totalsByCategory.advisors.values()).length === 0 && (
-                      <p className="text-muted-foreground text-center py-4">Nenhum assessor encontrado</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {(filterType === "all" || filterType === "offices") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Totais por Escritórios</CardTitle>
-                  <CardDescription>Comissões e investimentos por escritório</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {Array.from(totalsByCategory.offices.values()).map((office, index) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-semibold">{office.name}</h3>
-                          <Badge variant="outline">{office.count} investimento(s)</Badge>
-                        </div>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Total Investido:</span>
-                            <span className="font-medium">{formatCurrency(office.totalAmount)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Comissão Mensal (1%):</span>
-                            <span className="font-medium text-orange-600">
-                              {formatCurrency(office.totalCommission)}
-                            </span>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatCurrency(office.totalAmount)} × 1% = {formatCurrency(office.totalCommission)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {Array.from(totalsByCategory.offices.values()).length === 0 && (
-                      <p className="text-muted-foreground text-center py-4">Nenhum escritório encontrado</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="impacts" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Impactos Futuros na Recorrência</CardTitle>
-              <CardDescription>Eventos que afetarão as comissões recorrentes nos próximos meses</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {impacts.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">Nenhum impacto futuro identificado.</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Impactos como resgates pendentes e campanhas expirando aparecerão aqui.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {impacts.map((impact, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-3 h-3 rounded-full ${
-                              impact.type === "withdrawal"
-                                ? "bg-red-500"
-                                : impact.type === "bonus_expiry"
-                                  ? "bg-yellow-500"
-                                  : impact.type === "campaign_end"
-                                    ? "bg-orange-500"
-                                    : "bg-blue-500"
-                            }`}
-                          ></div>
-                          <h3 className="font-semibold">{impact.description}</h3>
-                        </div>
-                        <Badge variant="outline">{new Date(impact.impactDate).toLocaleDateString("pt-BR")}</Badge>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Impacto Mensal</p>
-                          <p
-                            className={`font-medium ${impact.monthlyImpact < 0 ? "text-red-600" : "text-emerald-600"}`}
-                          >
-                            {formatCurrency(impact.monthlyImpact)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Impacto Total</p>
-                          <p className={`font-medium ${impact.totalImpact < 0 ? "text-red-600" : "text-emerald-600"}`}>
-                            {formatCurrency(impact.totalImpact)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Recorrências Afetadas</p>
-                          <p className="font-medium">{impact.affectedRecurrences}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Distribuição por Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {["active", "at_risk", "paused", "cancelled"].map((status) => {
-                    const count = filteredRecurrences.filter((r) => r.status === status).length
-                    const percentage = filteredRecurrences.length > 0 ? (count / filteredRecurrences.length) * 100 : 0
-
-                    return (
-                      <div key={status} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={getStatusColor(status)}>{getStatusLabel(status)}</Badge>
-                          <span className="text-sm">{count} recorrências</span>
-                        </div>
-                        <span className="text-sm text-muted-foreground">{percentage.toFixed(1)}%</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Projeção de 12 Meses</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Receita Atual (mensal)</span>
-                    <span className="font-medium">{formatCurrency(totalMonthlyCommissions)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Projeção 12 meses</span>
-                    <span className="font-medium">{formatCurrency(totalMonthlyCommissions * 12)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Impacto de riscos</span>
-                    <span className="font-medium text-red-600">
-                      {formatCurrency(impacts.reduce((sum, i) => sum + i.totalImpact, 0))}
-                    </span>
-                  </div>
-                  <div className="border-t pt-2">
-                    <div className="flex justify-between">
-                      <span className="font-medium">Projeção Líquida</span>
-                      <span className="font-bold text-emerald-600">
-                        {formatCurrency(
-                          totalMonthlyCommissions * 12 + impacts.reduce((sum, i) => sum + i.totalImpact, 0),
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
       </Tabs>
+      </Tooltip.Provider>
 
       <Dialog open={isProjectionOpen} onOpenChange={setIsProjectionOpen}>
         <DialogContent className="!max-w-[95vw] !w-[95vw] max-h-[95vh] sm:!max-w-[95vw]">

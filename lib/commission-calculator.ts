@@ -6,6 +6,8 @@
  * - Separação em períodos de dia 20 (corte mensal)
  * - ASSESSORES/DISTRIBUIDORES e ESCRITÓRIOS: Sem D+60, cálculo proporcional aos dias entre entrada e dia 20
  * - INVESTIDORES: D+60 da entrada do valor do investimento para início do período de comissionamento
+ *   IMPORTANTE: Investimentos de investidores só entram no corte atual se já passaram 60 dias desde a data do investimento
+ *   Se não passaram 60 dias, a comissão no corte atual é zero (mas pode entrar em cortes futuros)
  * - Valor proporcional da comissão calculado para 30 dias corridos (apenas investidores)
  * - Pagamento no 5º dia útil do mês seguinte ao término do período
  */
@@ -159,28 +161,54 @@ export function getAvailableRoles(): Array<{ key: keyof CommissionRates; name: s
  * Por enquanto, considera apenas segunda a sexta como dias úteis
  */
 export function isBusinessDay(date: Date): boolean {
-  const day = date.getDay(); // 0 = domingo, 6 = sábado
+  // IMPORTANTE: Usar getUTCDay() para garantir consistência com timezone UTC
+  const day = date.getUTCDay(); // 0 = domingo, 6 = sábado
   return day > 0 && day < 6; // Segunda (1) a Sexta (5)
 }
 
 /**
  * Encontra o quinto dia útil do mês
+ * IMPORTANTE: Sempre retorna o 5º dia útil, nunca antes
  */
 export function getFifthBusinessDayOfMonth(year: number, month: number): Date {
-  const date = new Date(year, month, 1);
+  // Usar Date.UTC para garantir consistência independente do timezone
+  const firstDay = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+  let currentDate = new Date(firstDay);
   let businessDaysCount = 0;
   
-  while (businessDaysCount < 5) {
-    if (isBusinessDay(date)) {
+  // Garantir que não ultrapassamos o último dia do mês (31)
+  const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0, 0, 0, 0, 0));
+  
+  while (businessDaysCount < 5 && currentDate <= lastDayOfMonth) {
+    if (isBusinessDay(currentDate)) {
       businessDaysCount++;
       if (businessDaysCount === 5) {
-        return date;
+        // Retornar data normalizada no fuso local para evitar regressão de dia
+        return new Date(
+          currentDate.getUTCFullYear(),
+          currentDate.getUTCMonth(),
+          currentDate.getUTCDate(),
+          0, 0, 0, 0
+        );
       }
     }
-    date.setDate(date.getDate() + 1);
+    // Avançar para o próximo dia
+    currentDate = new Date(Date.UTC(
+      currentDate.getUTCFullYear(),
+      currentDate.getUTCMonth(),
+      currentDate.getUTCDate() + 1,
+      0, 0, 0, 0
+    ));
   }
   
-  return date;
+  // Se não encontrou 5 dias úteis (não deveria acontecer), retornar o último dia encontrado
+  // Mas isso nunca deveria acontecer em um mês normal
+  return new Date(
+    currentDate.getUTCFullYear(),
+    currentDate.getUTCMonth(),
+    currentDate.getUTCDate(),
+    0, 0, 0, 0
+  );
 }
 
 /**
@@ -269,6 +297,34 @@ export function getCommissionPeriod(cutoffDate: Date): { startDate: Date; endDat
   endDate.setMonth(endDate.getMonth() + 1);
   
   return { startDate, endDate };
+}
+
+/**
+ * Verifica se um investimento de investidor pode entrar no corte atual
+ * REGRA: Investidores precisam ter passado D+60 (60 dias) desde a data do investimento
+ * para entrar no corte atual
+ * 
+ * @param paymentDate Data do investimento (payment_date)
+ * @param cutoffDate Data do corte atual (dia 20)
+ * @returns true se o investimento pode entrar no corte atual (já passaram 60 dias)
+ */
+export function canInvestorEnterCurrentCutoff(paymentDate: Date, cutoffDate: Date): boolean {
+  // Calcular data de início do período de comissionamento (D+60)
+  const commissionStartDate = new Date(paymentDate);
+  commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + 60);
+  commissionStartDate.setUTCHours(0, 0, 0, 0);
+  
+  // Normalizar cutoffDate para UTC meia-noite
+  const cutoffDateUTC = new Date(Date.UTC(
+    cutoffDate.getUTCFullYear(),
+    cutoffDate.getUTCMonth(),
+    cutoffDate.getUTCDate(),
+    0, 0, 0, 0
+  ));
+  
+  // O investimento só pode entrar no corte atual se a data de início do comissionamento
+  // (D+60) já passou ou é igual à data do corte
+  return commissionStartDate <= cutoffDateUTC;
 }
 
 /**
@@ -441,8 +497,9 @@ export function calculateNewCommissionLogic(
   // Função auxiliar para calcular todas as datas de pagamento (5º dia útil de cada mês)
   const calculatePaymentDueDates = (startCutoffDate: Date, months: number): Date[] => {
     const dates: Date[] = [];
-    let currentYear = startCutoffDate.getFullYear();
-    let currentMonth = startCutoffDate.getMonth();
+    // IMPORTANTE: Usar métodos UTC para evitar problemas de timezone
+    let currentYear = startCutoffDate.getUTCFullYear();
+    let currentMonth = startCutoffDate.getUTCMonth();
     
     // Primeira data: 5º dia útil do mês seguinte ao primeiro corte
     for (let i = 0; i < months; i++) {
@@ -455,9 +512,60 @@ export function calculateNewCommissionLogic(
         month = month % 12;
       }
       
+      // IMPORTANTE: Calcular o 5º dia útil usando UTC
       const fifthDay = getFifthBusinessDayOfMonth(year, month);
-      fifthDay.setHours(0, 0, 0, 0);
-      dates.push(new Date(fifthDay));
+      
+      // IMPORTANTE: Normalizar para UTC meia-noite para evitar problemas de timezone
+      const fifthDayUTC = new Date(Date.UTC(
+        fifthDay.getUTCFullYear(),
+        fifthDay.getUTCMonth(),
+        fifthDay.getUTCDate(),
+        0, 0, 0, 0
+      ));
+      
+      // Verificar se o dia retornado é realmente o 5º dia útil (validação)
+      const dayOfMonth = fifthDayUTC.getUTCDate();
+      const monthOfYear = fifthDayUTC.getUTCMonth();
+      const yearOfDate = fifthDayUTC.getUTCFullYear();
+      
+      // Recontar os dias úteis do mês para garantir que está correto
+      const firstDay = new Date(Date.UTC(yearOfDate, monthOfYear, 1, 0, 0, 0, 0));
+      let businessDaysCount = 0;
+      let checkDate = new Date(firstDay);
+      const lastDay = new Date(Date.UTC(yearOfDate, monthOfYear + 1, 0, 0, 0, 0, 0));
+      
+      while (checkDate <= lastDay && businessDaysCount < 5) {
+        if (isBusinessDay(checkDate)) {
+          businessDaysCount++;
+          if (businessDaysCount === 5) {
+            const correctDay = checkDate.getUTCDate();
+            // Se o dia calculado não corresponde ao 5º dia útil, corrigir
+            if (correctDay !== dayOfMonth) {
+              console.warn(`[COMISSÃO] Corrigindo data de pagamento para mês ${monthOfYear + 1}/${yearOfDate}: dia ${dayOfMonth} -> dia ${correctDay}`);
+              dates.push(new Date(Date.UTC(
+                checkDate.getUTCFullYear(),
+                checkDate.getUTCMonth(),
+                checkDate.getUTCDate(),
+                0, 0, 0, 0
+              )));
+            } else {
+              dates.push(fifthDayUTC);
+            }
+            break;
+          }
+        }
+        checkDate = new Date(Date.UTC(
+          checkDate.getUTCFullYear(),
+          checkDate.getUTCMonth(),
+          checkDate.getUTCDate() + 1,
+          0, 0, 0, 0
+        ));
+      }
+      
+      // Se não encontrou o 5º dia útil (não deveria acontecer), usar a data calculada
+      if (businessDaysCount < 5) {
+        dates.push(fifthDayUTC);
+      }
     }
     
     return dates;
@@ -491,7 +599,8 @@ export function calculateNewCommissionLogic(
     
     // Calcular diferença em dias acumulados desde o dia seguinte ao depósito até o corte atual
     // Exemplo: depósito dia 13, conta do dia 14 até 20/10 = 7 dias (14, 15, 16, 17, 18, 19, 20)
-      const daysDiff = Math.max(1, Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const rawDaysDiff = Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const daysDiff = Math.max(0, rawDaysDiff);
       
       // Taxa mensal do assessor: 3%
       // Taxa diária: 3% / 30 = 0.1% por dia
@@ -507,15 +616,34 @@ export function calculateNewCommissionLogic(
       advisorCommission = investment.amount * proportionalRateAdvisor;
       officeCommission = investment.amount * proportionalRateOffice;
     
-    // INVESTIDORES: Com D+60 + 30 dias corridos (sempre, independente do contexto)
+    // INVESTIDORES: Com D+60 + 30 dias corridos
+    // IMPORTANTE: Verificar se o investimento pode entrar no corte atual (D+60)
     const commissionStartDate = new Date(paymentDate);
-    commissionStartDate.setDate(commissionStartDate.getDate() + 60);
+    commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + 60);
+    commissionStartDate.setUTCHours(0, 0, 0, 0);
     
-    const commissionEndDate = new Date(commissionStartDate);
-    commissionEndDate.setDate(commissionEndDate.getDate() + 30);
+    // Verificar se o investimento pode entrar no corte atual
+    const canEnterCutoff = canInvestorEnterCurrentCutoff(paymentDate, cutoffDate);
     
-    const daysInPeriod = 30;
-    investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+    if (canEnterCutoff) {
+      // Se pode entrar no corte atual, calcular comissão proporcional
+      // Calcular quantos dias do período de comissionamento já passaram desde D+60 até o corte atual
+      const cutoffDateUTC = new Date(Date.UTC(
+        cutoffDate.getUTCFullYear(),
+        cutoffDate.getUTCMonth(),
+        cutoffDate.getUTCDate(),
+        0, 0, 0, 0
+      ));
+      
+      // Calcular dias desde D+60 até o corte atual (máximo 30 dias para o primeiro período)
+      const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+      const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
+      
+      investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+    } else {
+      // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
+      investorCommission = 0;
+    }
     
     // Calcular todas as datas de pagamento (uma por mês até o término do investimento)
     // Usar o corte inicial para calcular as datas de pagamento, não o corte atual
@@ -602,7 +730,8 @@ export function calculateNewCommissionLogic(
     
     // Calcular diferença em dias acumulados desde o dia seguinte ao depósito até o corte atual
     // Exemplo: depósito dia 13, conta do dia 14 até 20/10 = 7 dias (14, 15, 16, 17, 18, 19, 20)
-    const daysDiff = Math.max(1, Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const rawDaysDiff = Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const daysDiff = Math.max(0, rawDaysDiff);
     
     // Taxa diária
     const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
@@ -619,14 +748,33 @@ export function calculateNewCommissionLogic(
     officeCommission = investment.amount * proportionalRateOffice;
     
     // INVESTIDORES: Com D+60 + 30 dias corridos
-      const commissionStartDate = new Date(paymentDate);
-      commissionStartDate.setDate(commissionStartDate.getDate() + 60);
+    // IMPORTANTE: Verificar se o investimento pode entrar no corte atual (D+60)
+    const commissionStartDate = new Date(paymentDate);
+    commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + 60);
+    commissionStartDate.setUTCHours(0, 0, 0, 0);
+    
+    // Verificar se o investimento pode entrar no corte atual
+    const canEnterCutoff = canInvestorEnterCurrentCutoff(paymentDate, cutoffDate);
+    
+    if (canEnterCutoff) {
+      // Se pode entrar no corte atual, calcular comissão proporcional
+      // Calcular quantos dias do período de comissionamento já passaram desde D+60 até o corte atual
+      const cutoffDateUTC = new Date(Date.UTC(
+        cutoffDate.getUTCFullYear(),
+        cutoffDate.getUTCMonth(),
+        cutoffDate.getUTCDate(),
+        0, 0, 0, 0
+      ));
       
-      const commissionEndDate = new Date(commissionStartDate);
-      commissionEndDate.setDate(commissionEndDate.getDate() + 30);
+      // Calcular dias desde D+60 até o corte atual (máximo 30 dias para o primeiro período)
+      const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+      const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
       
-      const daysInPeriod = 30;
       investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+    } else {
+      // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
+      investorCommission = 0;
+    }
     
     // Calcular todas as datas de pagamento primeiro (para usar como base)
     paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);

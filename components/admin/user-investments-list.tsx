@@ -36,6 +36,7 @@ interface Investment {
   status: string
   created_at: string
   updated_at: string
+  payment_date?: string | null
 }
 
 interface PixReceipt {
@@ -131,14 +132,29 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
     }).format(value)
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("pt-BR", {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+  // Função auxiliar para formatar data corretamente, evitando problemas de timezone
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "N/A"
+    
+    // Se for string no formato YYYY-MM-DD, extrair diretamente sem conversão de timezone
+    if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const [datePart] = dateString.split('T')
+      const [year, month, day] = datePart.split('-').map(Number)
+      
+      // Formatar diretamente sem passar por Date para evitar problemas de timezone
+      return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+    }
+    
+    // Fallback: tentar parsear como Date e usar UTC
+    const date = new Date(dateString)
+    if (!isNaN(date.getTime())) {
+      const year = date.getUTCFullYear()
+      const month = date.getUTCMonth() + 1
+      const day = date.getUTCDate()
+      return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+    }
+    
+    return "N/A"
   }
 
   const formatPercentage = (value: number) => {
@@ -439,9 +455,12 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                     )}
 
                     <div>
-                      <p className="text-muted-foreground">Data de Criação</p>
+                      <p className="text-muted-foreground">Data</p>
                       <p className="font-medium">
-                        {formatDate(investment.created_at)}
+                        {investment.payment_date 
+                          ? formatDate(investment.payment_date)
+                          : <span className="text-muted-foreground">Não depositado</span>
+                        }
                       </p>
                     </div>
                   </div>
@@ -566,7 +585,12 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                   </div>
                   <div>
                     <p className="text-muted-foreground">Data:</p>
-                    <p className="font-medium">{formatDate(selectedInvestment.created_at)}</p>
+                    <p className="font-medium">
+                      {selectedInvestment.payment_date 
+                        ? formatDate(selectedInvestment.payment_date)
+                        : <span className="text-muted-foreground">Não depositado</span>
+                      }
+                    </p>
                   </div>
                 </div>
               </div>

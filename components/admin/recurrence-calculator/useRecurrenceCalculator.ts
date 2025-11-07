@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
-import { calculateNewCommissionLogic } from "@/lib/commission-calculator"
+import { calculateNewCommissionLogic, getInvestmentCutoffPeriod, getFifthBusinessDayOfMonth, isBusinessDay, getCurrentCutoffDate, canInvestorEnterCurrentCutoff, COMMISSION_RATES } from "@/lib/commission-calculator"
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 
@@ -24,6 +24,19 @@ export interface RecurrenceCalculation {
   advisorShare: number
   officeShare: number
   paymentDate: string
+  nextPaymentDate?: string | null
+  nextPaymentDetails?: {
+    advisorAmount: number
+    officeAmount: number
+    investorAmount: number
+    investorRate: number
+    totalAmount: number
+    daysCounted?: number
+    officePercentage?: number
+    advisorPercentage?: number
+    investorPercentage?: number
+    cutoffDate?: string
+  }
   projectedEndDate?: string
   status: "active" | "paused" | "cancelled" | "at_risk"
   totalPaid: number
@@ -84,6 +97,18 @@ const formatPaymentDate = (paymentDate: string | null | undefined): string => {
   return "N/A"
 }
 
+const formatDateKey = (date: Date): string => {
+  const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+  const year = normalizedDate.getFullYear()
+  const month = String(normalizedDate.getMonth() + 1).padStart(2, '0')
+  const day = String(normalizedDate.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const normalizeUtcDateToLocal = (date: Date): Date => {
+  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0)
+}
+
 export function useRecurrenceCalculator() {
   const { toast } = useToast()
   const supabase = createClient()
@@ -96,7 +121,6 @@ export function useRecurrenceCalculator() {
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<"all" | "investors" | "advisors" | "offices">("all")
   const [filterValue, setFilterValue] = useState<string>("")
-  const [dateFilter, setDateFilter] = useState<string>("")
   const [filterOptions, setFilterOptions] = useState<{
     investors: { id: string; name: string }[]
     advisors: { id: string; name: string }[]
@@ -141,6 +165,9 @@ export function useRecurrenceCalculator() {
         }
       })
 
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
       const processedRecurrences: RecurrenceCalculation[] = (investments || [])
         .filter((investment: any) => {
           // Validar que payment_date existe e é uma data válida
@@ -176,6 +203,8 @@ export function useRecurrenceCalculator() {
         
         const commitmentPeriod = investment.commitment_period || 12
         const profitabilityLiquidity = investment.profitability_liquidity || "Mensal"
+        const cutoffInfoForDeposit = getInvestmentCutoffPeriod(depositDate)
+        const cutoffDateForDeposit = cutoffInfoForDeposit.cutoffDate
         
         // Calcular comissão usando a nova lógica
         let commissionCalc
@@ -200,14 +229,63 @@ export function useRecurrenceCalculator() {
         }
         
         // Se não conseguir calcular com a nova lógica, usar fallback
+        let nextPaymentDateKey: string | null = null
+        let nextPaymentIndex: number | null = null
+        let paymentSchedule: Array<{ key: string; date: Date }> = []
+
+        if (commissionCalc && Array.isArray(commissionCalc.paymentDueDate)) {
+          paymentSchedule = commissionCalc.paymentDueDate
+            .map(dateValue => {
+              const parsedDate = new Date(dateValue)
+              if (isNaN(parsedDate.getTime())) return null
+              const normalized = normalizeUtcDateToLocal(parsedDate)
+              return {
+                key: formatDateKey(normalized),
+                date: normalized,
+              }
+            })
+            .filter((value): value is { key: string; date: Date } => Boolean(value))
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+          const upcomingPayment = paymentSchedule.find(entry => entry.date.getTime() >= today.getTime())
+          if (upcomingPayment) {
+            nextPaymentDateKey = upcomingPayment.key
+            nextPaymentIndex = paymentSchedule.findIndex(entry => entry.key === upcomingPayment.key)
+          }
+        }
+
+        const calculateProratedShare = (amount: number, ratePercent: number, days: number) => {
+          if (days <= 0) return 0
+          const dailyRate = (ratePercent / 100) / 30
+          return amount * dailyRate * days
+        }
+
         if (!commissionCalc) {
           const advisorRate = 3.0
           const officeRate = 1.0
           const totalCommissionRate = advisorRate + officeRate
           
-          const monthlyCommission = (investment.amount * totalCommissionRate) / 100
-          const advisorShare = (investment.amount * advisorRate) / 100
-          const officeShare = (investment.amount * officeRate) / 100
+          const baseAdvisorMonthly = (investment.amount * advisorRate) / 100
+          const baseOfficeMonthly = (investment.amount * officeRate) / 100
+          const monthlyCommission = baseAdvisorMonthly + baseOfficeMonthly
+
+          const cutoffPeriod = getInvestmentCutoffPeriod(depositDate)
+          const cutoffDate = cutoffPeriod.cutoffDate
+          const depositUTC = new Date(Date.UTC(
+            depositDate.getFullYear(),
+            depositDate.getMonth(),
+            depositDate.getDate(),
+            0, 0, 0, 0
+          ))
+          const cutoffUTC = new Date(Date.UTC(
+            cutoffDate.getFullYear(),
+            cutoffDate.getMonth(),
+            cutoffDate.getDate(),
+            0, 0, 0, 0
+          ))
+          const diffDays = Math.max(0, Math.floor((cutoffUTC.getTime() - depositUTC.getTime()) / (1000 * 60 * 60 * 24)))
+          const proratedAdvisor = calculateProratedShare(investment.amount, advisorRate, diffDays)
+          const proratedOffice = calculateProratedShare(investment.amount, officeRate, diffDays)
           
           const now = new Date()
           now.setHours(0, 0, 0, 0)
@@ -221,6 +299,31 @@ export function useRecurrenceCalculator() {
           const totalPaid = monthlyCommission * monthsPassed
           const remainingMonths = Math.max(0, commitmentPeriod - monthsPassed)
           
+          if (!nextPaymentDateKey) {
+            const cutoffPeriod = getInvestmentCutoffPeriod(depositDate)
+            let paymentDueYear = cutoffPeriod.cutoffDate.getFullYear()
+            let paymentDueMonth = cutoffPeriod.cutoffDate.getMonth() + 1
+            if (paymentDueMonth > 11) {
+              paymentDueMonth = 0
+              paymentDueYear += 1
+            }
+            const fallbackNextPayment = getFifthBusinessDayOfMonth(paymentDueYear, paymentDueMonth)
+            nextPaymentDateKey = formatDateKey(fallbackNextPayment)
+          }
+
+          const nextPaymentDetails = {
+            advisorAmount: proratedAdvisor,
+            officeAmount: proratedOffice,
+            investorAmount: 0,
+            investorRate: 0,
+            totalAmount: proratedAdvisor + proratedOffice,
+            daysCounted: diffDays,
+            officePercentage: investment.amount > 0 ? (proratedOffice / investment.amount) * 100 : 0,
+            advisorPercentage: investment.amount > 0 ? (proratedAdvisor / investment.amount) * 100 : 0,
+            investorPercentage: 0,
+            cutoffDate: cutoffUTC.toISOString(),
+          }
+
           return {
             id: investment.id,
             investorName: investor?.full_name || "Investidor",
@@ -234,9 +337,11 @@ export function useRecurrenceCalculator() {
             bonusRate: officeRate,
             totalCommissionRate,
             monthlyCommission,
-            advisorShare,
-            officeShare,
+            advisorShare: baseAdvisorMonthly,
+            officeShare: baseOfficeMonthly,
             paymentDate: paymentDateValue,
+            nextPaymentDate: nextPaymentDateKey,
+            nextPaymentDetails,
             projectedEndDate: undefined,
             status: "active" as const,
             totalPaid,
@@ -300,6 +405,114 @@ export function useRecurrenceCalculator() {
 
         // Calcular projectedTotal: primeiro mês proporcional + meses seguintes mensais completos
         const projectedTotal = advisorShare + officeShare + (monthlyCommission * (commitmentPeriod - 1))
+
+        if (!nextPaymentDateKey && paymentSchedule.length > 0) {
+          nextPaymentDateKey = paymentSchedule[paymentSchedule.length - 1].key
+          nextPaymentIndex = paymentSchedule.length - 1
+        }
+
+        let nextPaymentDetails = {
+          advisorAmount: advisorShare,
+          officeAmount: officeShare,
+          investorAmount: 0,
+          investorRate: 0,
+          totalAmount: advisorShare + officeShare,
+          daysCounted: undefined as number | undefined,
+          officePercentage: undefined as number | undefined,
+          advisorPercentage: undefined as number | undefined,
+          investorPercentage: undefined as number | undefined,
+          cutoffDate: undefined as string | undefined,
+        }
+
+        if (commissionCalc && paymentSchedule.length > 0) {
+          if (nextPaymentIndex === null) {
+            nextPaymentIndex = paymentSchedule.findIndex(entry => entry.date.getTime() >= today.getTime())
+          }
+
+          if (nextPaymentIndex !== null && nextPaymentIndex >= 0) {
+            let advisorAmount = advisorShare
+            let officeAmount = officeShare
+            let investorAmount = 0
+            let daysCounted: number | undefined
+            let officePercentage: number | undefined
+            let advisorPercentage: number | undefined
+            let investorPercentage: number | undefined
+            let cutoffDateISO: string | undefined
+
+            if (commissionCalc.monthlyBreakdown && commissionCalc.monthlyBreakdown[nextPaymentIndex]) {
+              const monthData = commissionCalc.monthlyBreakdown[nextPaymentIndex]
+              investorAmount = monthData.investorCommission
+              const depositUTC = new Date(Date.UTC(
+                depositDate.getFullYear(),
+                depositDate.getMonth(),
+                depositDate.getDate(),
+                0, 0, 0, 0
+              ))
+              const cutoffUTC = new Date(Date.UTC(
+                cutoffDateForDeposit.getFullYear(),
+                cutoffDateForDeposit.getMonth(),
+                cutoffDateForDeposit.getDate(),
+                0, 0, 0, 0
+              ))
+              const diffMs = cutoffUTC.getTime() - depositUTC.getTime()
+              const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+              daysCounted = diffDays
+              advisorAmount = calculateProratedShare(commissionCalc.amount, advisorRate, diffDays)
+              officeAmount = calculateProratedShare(commissionCalc.amount, officeRate, diffDays)
+              officePercentage = commissionCalc.amount > 0 ? (officeAmount / commissionCalc.amount) * 100 : 0
+              advisorPercentage = commissionCalc.amount > 0 ? (advisorAmount / commissionCalc.amount) * 100 : 0
+              investorPercentage = commissionCalc.amount > 0 ? (investorAmount / commissionCalc.amount) * 100 : 0
+              cutoffDateISO = cutoffUTC.toISOString()
+            } else if (nextPaymentIndex > 0) {
+              investorAmount = commissionCalc.amount * COMMISSION_RATES.investidor
+              const nextDate = paymentSchedule[nextPaymentIndex]?.date
+              if (nextDate) {
+                const prevDate = paymentSchedule[nextPaymentIndex - 1]?.date
+                if (prevDate) {
+                  const diffMs = nextDate.getTime() - prevDate.getTime()
+                  const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+                  daysCounted = diffDays
+                  advisorAmount = calculateProratedShare(commissionCalc.amount, advisorRate, diffDays)
+                  officeAmount = calculateProratedShare(commissionCalc.amount, officeRate, diffDays)
+                  officePercentage = commissionCalc.amount > 0 ? (officeAmount / commissionCalc.amount) * 100 : 0
+                  advisorPercentage = commissionCalc.amount > 0 ? (advisorAmount / commissionCalc.amount) * 100 : 0
+                  investorPercentage = commissionCalc.amount > 0 ? (investorAmount / commissionCalc.amount) * 100 : 0
+                  cutoffDateISO = nextDate.toISOString()
+                } else {
+                  daysCounted = 30
+                  advisorAmount = calculateProratedShare(commissionCalc.amount, advisorRate, 30)
+                  officeAmount = calculateProratedShare(commissionCalc.amount, officeRate, 30)
+                  officePercentage = commissionCalc.amount > 0 ? (officeAmount / commissionCalc.amount) * 100 : 0
+                  advisorPercentage = commissionCalc.amount > 0 ? (advisorAmount / commissionCalc.amount) * 100 : 0
+                  investorPercentage = commissionCalc.amount > 0 ? (investorAmount / commissionCalc.amount) * 100 : 0
+                  cutoffDateISO = nextDate ? nextDate.toISOString() : cutoffDateForDeposit.toISOString()
+                }
+              } else {
+                daysCounted = 30
+                advisorAmount = calculateProratedShare(commissionCalc.amount, advisorRate, 30)
+                officeAmount = calculateProratedShare(commissionCalc.amount, officeRate, 30)
+                officePercentage = commissionCalc.amount > 0 ? (officeAmount / commissionCalc.amount) * 100 : 0
+                advisorPercentage = commissionCalc.amount > 0 ? (advisorAmount / commissionCalc.amount) * 100 : 0
+                investorPercentage = commissionCalc.amount > 0 ? (investorAmount / commissionCalc.amount) * 100 : 0
+                cutoffDateISO = cutoffDateForDeposit.toISOString()
+              }
+            }
+
+            const investorRate = commissionCalc.amount > 0 ? (investorAmount / commissionCalc.amount) * 100 : 0
+            nextPaymentDetails = {
+              advisorAmount,
+              officeAmount,
+              investorAmount,
+              investorRate,
+              totalAmount: advisorAmount + officeAmount,
+              daysCounted,
+              officePercentage,
+              advisorPercentage,
+              investorPercentage,
+              cutoffDate: cutoffDateISO ?? cutoffDateForDeposit.toISOString(),
+            }
+          }
+        }
         
         return {
           id: investment.id,
@@ -317,6 +530,8 @@ export function useRecurrenceCalculator() {
           advisorShare, // Comissão do primeiro mês (proporcional)
           officeShare, // Comissão do primeiro mês (proporcional)
           paymentDate: paymentDateValue, // Preservar payment_date exatamente como vem do banco
+          nextPaymentDate: nextPaymentDateKey,
+          nextPaymentDetails,
           projectedEndDate: undefined,
           status: "active" as const,
           totalPaid,
@@ -371,32 +586,76 @@ export function useRecurrenceCalculator() {
     fetchRecurrenceData()
   }, [])
 
-  const getFilteredRecurrences = () => {
-    let filtered = recurrences
-
-    if (dateFilter) {
-      const filterDate = new Date(dateFilter)
-      filterDate.setHours(23, 59, 59, 999)
-      filtered = filtered.filter(recurrence => {
-        if (!recurrence.paymentDate) return false
-        
-        // Parse da data preservando o formato do banco (YYYY-MM-DD) para comparação correta
-        let dateToCompare: Date
-        if (typeof recurrence.paymentDate === 'string' && recurrence.paymentDate.match(/^\d{4}-\d{2}-\d{2}/)) {
-          const [datePart] = recurrence.paymentDate.split('T')
-          const [year, month, day] = datePart.split('-').map(Number)
-          dateToCompare = new Date(year, month - 1, day)
-        } else {
-          dateToCompare = new Date(recurrence.paymentDate)
-        }
-        dateToCompare.setHours(0, 0, 0, 0)
-        
-        const filterDateNormalized = new Date(filterDate)
-        filterDateNormalized.setHours(0, 0, 0, 0)
-        return dateToCompare <= filterDateNormalized
-      })
+  // Função para calcular o próximo quinto dia útil baseado no último corte
+  // O corte é sempre dia 20, e o pagamento é no 5º dia útil do mês seguinte ao corte
+  const getNextFifthBusinessDay = (): Date => {
+    // Calcular o último corte (dia 20 do mês atual ou anterior)
+    const lastCutoff = getCurrentCutoffDate()
+    lastCutoff.setUTCHours(0, 0, 0, 0)
+    
+    // O próximo quinto dia útil é do mês seguinte ao último corte
+    const cutoffYear = lastCutoff.getUTCFullYear()
+    const cutoffMonth = lastCutoff.getUTCMonth()
+    
+    // Mês seguinte ao corte
+    let nextMonth = cutoffMonth + 1
+    let nextYear = cutoffYear
+    if (nextMonth > 11) {
+      nextMonth = 0
+      nextYear += 1
     }
     
+    // Calcular o 5º dia útil do mês seguinte ao corte
+    return getFifthBusinessDayOfMonth(nextYear, nextMonth)
+  }
+  
+  // Função para obter o último corte (dia 20)
+  const getLastCutoffDate = (): Date => {
+    return getCurrentCutoffDate()
+  }
+
+  const getFilteredRecurrences = () => {
+    // Primeiro, filtrar por último corte (dia 20) - só investimentos depositados até o último corte
+    const lastCutoff = getLastCutoffDate()
+    // Normalizar para UTC meia-noite do dia 20
+    const lastCutoffUTC = new Date(Date.UTC(
+      lastCutoff.getUTCFullYear(),
+      lastCutoff.getUTCMonth(),
+      lastCutoff.getUTCDate(),
+      23, 59, 59, 999
+    ))
+    
+    let filtered = recurrences.filter(recurrence => {
+      if (!recurrence.paymentDate) return false
+      
+      // Parse da data preservando o formato do banco (YYYY-MM-DD) para comparação correta
+      let paymentDate: Date
+      if (typeof recurrence.paymentDate === 'string' && recurrence.paymentDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+        const [datePart] = recurrence.paymentDate.split('T')
+        const [year, month, day] = datePart.split('-').map(Number)
+        paymentDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+      } else {
+        paymentDate = new Date(recurrence.paymentDate)
+        paymentDate = new Date(Date.UTC(
+          paymentDate.getUTCFullYear(),
+          paymentDate.getUTCMonth(),
+          paymentDate.getUTCDate(),
+          0, 0, 0, 0
+        ))
+      }
+      
+      // Só incluir investimentos depositados até o último corte (dia 20)
+      return paymentDate <= lastCutoffUTC
+    })
+
+    const upcomingFifthBusinessDayKey = formatDateKey(getNextFifthBusinessDay())
+
+    filtered = filtered.filter(recurrence => {
+      if (!recurrence.nextPaymentDate) return false
+      return recurrence.nextPaymentDate === upcomingFifthBusinessDayKey
+    })
+    
+    // Depois aplicar filtros adicionais (investidor, assessor, escritório)
     if (filterType === "all") {
       return filtered
     }
@@ -426,6 +685,37 @@ export function useRecurrenceCalculator() {
   const filteredRecurrences = getFilteredRecurrences()
 
   const calculateInvestorCommission = (recurrence: RecurrenceCalculation) => {
+    // Verificar se o investimento completou 60 dias desde o depósito até o último corte
+    if (!recurrence.paymentDate) return 0
+    
+    // Parse da data de pagamento
+    let paymentDate: Date
+    if (typeof recurrence.paymentDate === 'string' && recurrence.paymentDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const [datePart] = recurrence.paymentDate.split('T')
+      const [year, month, day] = datePart.split('-').map(Number)
+      paymentDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+    } else {
+      paymentDate = new Date(recurrence.paymentDate)
+      paymentDate = new Date(Date.UTC(
+        paymentDate.getUTCFullYear(),
+        paymentDate.getUTCMonth(),
+        paymentDate.getUTCDate(),
+        0, 0, 0, 0
+      ))
+    }
+    
+    // Obter último corte
+    const lastCutoff = getLastCutoffDate()
+    
+    // Verificar se completou 60 dias até o último corte
+    const canEnterCutoff = canInvestorEnterCurrentCutoff(paymentDate, lastCutoff)
+    
+    // Se não completou 60 dias, comissão do investidor é zero
+    if (!canEnterCutoff) {
+      return 0
+    }
+    
+    // Se completou 60 dias, calcular comissão normalmente
     const commitmentPeriod = recurrence.remainingMonths || 12
     const days = commitmentPeriod * 30
     
@@ -472,6 +762,16 @@ export function useRecurrenceCalculator() {
     const shouldCalculateOffices = filterType === "all" || filterType === "offices"
 
     filteredRecurrences.forEach(recurrence => {
+      if (recurrence.status !== "active") {
+        return
+      }
+
+      const nextDetails = recurrence.nextPaymentDetails
+      const advisorAmount = nextDetails?.advisorAmount ?? recurrence.advisorShare
+      const officeAmount = nextDetails?.officeAmount ?? recurrence.officeShare
+      const investorAmount = nextDetails?.investorAmount ?? calculateInvestorCommission(recurrence)
+      const totalCommissionForNextPayment = advisorAmount + officeAmount + investorAmount
+
       if (shouldCalculateInvestors) {
         const investorKey = recurrence.investorName
         if (!totals.investors.has(investorKey)) {
@@ -487,12 +787,10 @@ export function useRecurrenceCalculator() {
         }
         const investorTotal = totals.investors.get(investorKey)!
         investorTotal.totalAmount += recurrence.investmentAmount
-        investorTotal.advisorCommission += recurrence.advisorShare
-        investorTotal.officeCommission += recurrence.officeShare
-        
-        const investorCommission = calculateInvestorCommission(recurrence)
-        investorTotal.investorCommission += investorCommission
-        investorTotal.totalCommission += recurrence.monthlyCommission
+        investorTotal.advisorCommission += advisorAmount
+        investorTotal.officeCommission += officeAmount
+        investorTotal.investorCommission += investorAmount
+        investorTotal.totalCommission += totalCommissionForNextPayment
       }
 
       if (shouldCalculateAdvisors && recurrence.advisorId) {
@@ -508,7 +806,7 @@ export function useRecurrenceCalculator() {
         }
         const advisorTotal = totals.advisors.get(advisorKey)!
         advisorTotal.totalAmount += recurrence.investmentAmount
-        advisorTotal.totalCommission += recurrence.advisorShare
+        advisorTotal.totalCommission += advisorAmount
         advisorTotal.count += 1
       }
 
@@ -525,7 +823,7 @@ export function useRecurrenceCalculator() {
         }
         const officeTotal = totals.offices.get(officeKey)!
         officeTotal.totalAmount += recurrence.investmentAmount
-        officeTotal.totalCommission += recurrence.officeShare
+        officeTotal.totalCommission += officeAmount
         officeTotal.count += 1
       }
     })
@@ -538,9 +836,13 @@ export function useRecurrenceCalculator() {
   const totalActiveRecurrences = filteredRecurrences.filter((r) => r.status === "active").length
   const totalMonthlyCommissions = filteredRecurrences
     .filter((r) => r.status === "active")
-    .reduce((sum, r) => sum + r.monthlyCommission, 0)
-  const totalAdvisorShare = filteredRecurrences.filter((r) => r.status === "active").reduce((sum, r) => sum + r.advisorShare, 0)
-  const totalOfficeShare = filteredRecurrences.filter((r) => r.status === "active").reduce((sum, r) => sum + r.officeShare, 0)
+    .reduce((sum, r) => sum + (r.nextPaymentDetails?.totalAmount ?? (r.advisorShare + r.officeShare)), 0)
+  const totalAdvisorShare = filteredRecurrences
+    .filter((r) => r.status === "active")
+    .reduce((sum, r) => sum + (r.nextPaymentDetails?.advisorAmount ?? r.advisorShare), 0)
+  const totalOfficeShare = filteredRecurrences
+    .filter((r) => r.status === "active")
+    .reduce((sum, r) => sum + (r.nextPaymentDetails?.officeAmount ?? r.officeShare), 0)
   const atRiskRecurrences = filteredRecurrences.filter((r) => r.status === "at_risk").length
 
   const calculateInvestorRate = (recurrence: RecurrenceCalculation) => {
@@ -670,31 +972,59 @@ export function useRecurrenceCalculator() {
         officeCommission = (recurrence.investmentAmount * recurrence.bonusRate) / 100
       }
       
-      // Calcular comissão do investidor (mantém a lógica original)
+      // Calcular comissão do investidor (verificar D+60 para o primeiro mês)
       let monthlyGain = 0
       let investorCommission = 0
       
-      if (liquidity === "mensal") {
-        const monthlySimpleRate = calculatedInvestorRate / 100
-        monthlyGain = recurrence.investmentAmount * monthlySimpleRate
-        totalInvestmentValue = recurrence.investmentAmount
+      // Verificar se o investimento completou 60 dias até o último corte (para o primeiro mês)
+      let canInvestorReceiveCommission = true
+      if (month === 1 && recurrence.paymentDate) {
+        let paymentDate: Date
+        if (typeof recurrence.paymentDate === 'string' && recurrence.paymentDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+          const [datePart] = recurrence.paymentDate.split('T')
+          const [year, month, day] = datePart.split('-').map(Number)
+          paymentDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+        } else {
+          paymentDate = new Date(recurrence.paymentDate)
+          paymentDate = new Date(Date.UTC(
+            paymentDate.getUTCFullYear(),
+            paymentDate.getUTCMonth(),
+            paymentDate.getUTCDate(),
+            0, 0, 0, 0
+          ))
+        }
         
-        investorCommission = monthlyGain
+        const lastCutoff = getLastCutoffDate()
+        canInvestorReceiveCommission = canInvestorEnterCurrentCutoff(paymentDate, lastCutoff)
+      }
+      
+      // Se não completou 60 dias no primeiro mês, comissão do investidor é zero
+      if (!canInvestorReceiveCommission && month === 1) {
+        investorCommission = 0
       } else {
-        const compoundRate = 1 + (calculatedInvestorRate / 100)
-        
-        const previousMonthValue = totalInvestmentValue
-        
-        const rawValue = previousMonthValue * compoundRate
-        totalInvestmentValue = Math.round(rawValue * 100) / 100
-        
-        monthlyGain = Math.round((totalInvestmentValue - previousMonthValue) * 100) / 100
-        
-        investorCommission = monthlyGain
-        
-        accumulatedCommission += monthlyGain
-        
-        accumulatedCommission = accumulatedCommission * compoundRate
+        // Calcular comissão normalmente
+        if (liquidity === "mensal") {
+          const monthlySimpleRate = calculatedInvestorRate / 100
+          monthlyGain = recurrence.investmentAmount * monthlySimpleRate
+          totalInvestmentValue = recurrence.investmentAmount
+          
+          investorCommission = monthlyGain
+        } else {
+          const compoundRate = 1 + (calculatedInvestorRate / 100)
+          
+          const previousMonthValue = totalInvestmentValue
+          
+          const rawValue = previousMonthValue * compoundRate
+          totalInvestmentValue = Math.round(rawValue * 100) / 100
+          
+          monthlyGain = Math.round((totalInvestmentValue - previousMonthValue) * 100) / 100
+          
+          investorCommission = monthlyGain
+          
+          accumulatedCommission += monthlyGain
+          
+          accumulatedCommission = accumulatedCommission * compoundRate
+        }
       }
       
       const totalCommission = advisorCommission + officeCommission + investorCommission
@@ -789,17 +1119,35 @@ export function useRecurrenceCalculator() {
   const exportToExcel = (type: string) => {
     const workbook = XLSX.utils.book_new()
     const fileName = `recorrencias-${type}-${new Date().toISOString().split('T')[0]}`
+    const lastCutoff = getLastCutoffDate()
+    const nextPaymentDate = getNextFifthBusinessDay()
+    const lastCutoffFormatted = lastCutoff.toLocaleDateString("pt-BR", { 
+      day: "2-digit", 
+      month: "2-digit", 
+      year: "numeric" 
+    })
+    const nextPaymentDateFormatted = nextPaymentDate.toLocaleDateString("pt-BR", { 
+      weekday: "long", 
+      year: "numeric", 
+      month: "long", 
+      day: "numeric" 
+    })
 
     switch (type) {
       case "recurrences": {
         const summaryData = [
           ["Resumo de Recorrências"],
+          ["", ""],
+          ["⚠️ ATENÇÃO: PRÓXIMO PAGAMENTO ⚠️", ""],
+          ["Último corte (dia 20)", lastCutoffFormatted],
+          ["A ser pago em", nextPaymentDateFormatted],
+          ["Valor Total", formatCurrency(totalMonthlyCommissions)],
+          ["", ""],
           ["Recorrências Ativas", totalActiveRecurrences],
           ["Comissões Mensais Totais", formatCurrency(totalMonthlyCommissions)],
           ["Participação Assessores (3%)", formatCurrency(totalAdvisorShare)],
           ["Participação Escritórios (1%)", formatCurrency(totalOfficeShare)],
           ["Recorrências em Risco", atRiskRecurrences],
-          dateFilter ? ["Filtro de Data", `Valores até ${new Date(dateFilter).toLocaleDateString("pt-BR")}`] : [],
           [""],
         ]
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
@@ -812,6 +1160,9 @@ export function useRecurrenceCalculator() {
             "Assessor",
             "Escritório",
             "Valor Investido",
+            "Data de Entrada do Investimento",
+            "Data da Corte",
+            "Dias até o Corte",
             "Comissão Mensal",
             "Assessor (3%)",
             "Escritório (1%)",
@@ -822,22 +1173,68 @@ export function useRecurrenceCalculator() {
             "Liquidez",
             "Data do Depósito"
           ],
-          ...filteredRecurrences.map(r => [
-            r.investorName,
-            r.investorEmail,
-            r.advisorName,
-            r.officeName,
-            formatCurrency(r.investmentAmount),
-            formatCurrency(r.monthlyCommission),
-            formatCurrency(r.advisorShare),
-            formatCurrency(r.officeShare),
-            formatCurrency(r.totalPaid),
-            formatCurrency(r.projectedTotal),
-            r.remainingMonths,
-            `${r.commitmentPeriod} meses`,
-            r.profitabilityLiquidity || "Mensal",
-            formatPaymentDate(r.paymentDate)
-          ])
+          ...filteredRecurrences.map(r => {
+            // Calcular data de corte e dias até o corte
+            let cutoffDateStr = "N/A"
+            let daysUntilCutoff = "N/A"
+            
+            if (r.paymentDate) {
+              try {
+                // Parse da data de pagamento
+                let paymentDate: Date
+                if (typeof r.paymentDate === 'string' && r.paymentDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  const [datePart] = r.paymentDate.split('T')
+                  const [year, month, day] = datePart.split('-').map(Number)
+                  paymentDate = new Date(year, month - 1, day)
+                } else {
+                  paymentDate = new Date(r.paymentDate)
+                }
+                paymentDate.setHours(0, 0, 0, 0)
+                
+                // Calcular período de corte
+                const cutoffPeriod = getInvestmentCutoffPeriod(paymentDate)
+                cutoffDateStr = formatPaymentDate(cutoffPeriod.cutoffDate.toISOString())
+                
+                // Calcular dias até o corte (do dia seguinte ao depósito até o corte, inclusive)
+                // Exemplo: depósito dia 13, corte dia 20 = 7 dias (14, 15, 16, 17, 18, 19, 20)
+                const cutoffDate = new Date(cutoffPeriod.cutoffDate)
+                cutoffDate.setHours(0, 0, 0, 0)
+                
+                // Dia seguinte ao depósito
+                const nextDayAfterDeposit = new Date(paymentDate)
+                nextDayAfterDeposit.setDate(nextDayAfterDeposit.getDate() + 1)
+                nextDayAfterDeposit.setHours(0, 0, 0, 0)
+                
+                // Calcular diferença em dias (do dia seguinte ao depósito até o corte, inclusive)
+                const diffTime = cutoffDate.getTime() - nextDayAfterDeposit.getTime()
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 para incluir o dia do corte
+                
+                daysUntilCutoff = `${diffDays} dia(s)`
+              } catch (error) {
+                console.error("Erro ao calcular data de corte:", error)
+              }
+            }
+            
+            return [
+              r.investorName,
+              r.investorEmail,
+              r.advisorName,
+              r.officeName,
+              formatCurrency(r.investmentAmount),
+              formatPaymentDate(r.paymentDate),
+              cutoffDateStr,
+              daysUntilCutoff,
+              formatCurrency(r.monthlyCommission),
+              formatCurrency(r.advisorShare),
+              formatCurrency(r.officeShare),
+              formatCurrency(r.totalPaid),
+              formatCurrency(r.projectedTotal),
+              r.remainingMonths,
+              `${r.commitmentPeriod} meses`,
+              r.profitabilityLiquidity || "Mensal",
+              formatPaymentDate(r.paymentDate)
+            ]
+          })
         ]
         const ws2 = XLSX.utils.aoa_to_sheet(recurrencesData)
         XLSX.utils.book_append_sheet(workbook, ws2, "Todos os Investimentos")
@@ -904,7 +1301,8 @@ export function useRecurrenceCalculator() {
           }
         })
 
-        const recurrInvestorsData = [
+        // Aba resumo de investidores
+        const recurrInvestorsSummaryData = [
           ["Investidor", "Total Investido", "Comissão Assessor (3%)", "Comissão Escritório (1%)", "Comissão Investidor", "Total Comissões", "Nº Investimentos"],
           ...Array.from(allInvestorsTotals.values()).map(inv => [
             inv.name,
@@ -916,8 +1314,93 @@ export function useRecurrenceCalculator() {
             inv.count
           ])
         ]
-        const wsRecurrInvestors = XLSX.utils.aoa_to_sheet(recurrInvestorsData)
-        XLSX.utils.book_append_sheet(workbook, wsRecurrInvestors, "Investidores")
+        const wsRecurrInvestorsSummary = XLSX.utils.aoa_to_sheet(recurrInvestorsSummaryData)
+        XLSX.utils.book_append_sheet(workbook, wsRecurrInvestorsSummary, "Resumo Investidores")
+
+        // Aba detalhada de investidores
+        const recurrInvestorsDetailData = [
+          [
+            "Investidor",
+            "Email",
+            "Assessor",
+            "Escritório",
+            "Valor Investido",
+            "Data de Entrada do Investimento",
+            "Data da Corte",
+            "Dias até o Corte",
+            "Comissão Mensal",
+            "Assessor (3%)",
+            "Escritório (1%)",
+            "Total Pago",
+            "Projeção Total",
+            "Meses Restantes",
+            "Período",
+            "Liquidez"
+          ],
+          ...filteredRecurrences.map(r => {
+            // Calcular data de corte e dias até o corte
+            let cutoffDateStr = "N/A"
+            let daysUntilCutoff = "N/A"
+            
+            if (r.paymentDate) {
+              try {
+                // Parse da data de pagamento
+                let paymentDate: Date
+                if (typeof r.paymentDate === 'string' && r.paymentDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  const [datePart] = r.paymentDate.split('T')
+                  const [year, month, day] = datePart.split('-').map(Number)
+                  paymentDate = new Date(year, month - 1, day)
+                } else {
+                  paymentDate = new Date(r.paymentDate)
+                }
+                paymentDate.setHours(0, 0, 0, 0)
+                
+                // Calcular período de corte
+                const cutoffPeriod = getInvestmentCutoffPeriod(paymentDate)
+                cutoffDateStr = formatPaymentDate(cutoffPeriod.cutoffDate.toISOString())
+                
+                // Calcular dias até o corte (do dia seguinte ao depósito até o corte, inclusive)
+                // Exemplo: depósito dia 13, corte dia 20 = 7 dias (14, 15, 16, 17, 18, 19, 20)
+                const cutoffDate = new Date(cutoffPeriod.cutoffDate)
+                cutoffDate.setHours(0, 0, 0, 0)
+                
+                // Dia seguinte ao depósito
+                const nextDayAfterDeposit = new Date(paymentDate)
+                nextDayAfterDeposit.setDate(nextDayAfterDeposit.getDate() + 1)
+                nextDayAfterDeposit.setHours(0, 0, 0, 0)
+                
+                // Calcular diferença em dias (do dia seguinte ao depósito até o corte, inclusive)
+                const diffTime = cutoffDate.getTime() - nextDayAfterDeposit.getTime()
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 para incluir o dia do corte
+                
+                daysUntilCutoff = `${diffDays} dia(s)`
+              } catch (error) {
+                console.error("Erro ao calcular data de corte:", error)
+              }
+            }
+            
+            return [
+              r.investorName,
+              r.investorEmail,
+              r.advisorName,
+              r.officeName,
+              formatCurrency(r.investmentAmount),
+              formatPaymentDate(r.paymentDate),
+              cutoffDateStr,
+              daysUntilCutoff,
+              formatCurrency(r.monthlyCommission),
+              formatCurrency(r.advisorShare),
+              formatCurrency(r.officeShare),
+              formatCurrency(r.totalPaid),
+              formatCurrency(r.projectedTotal),
+              r.remainingMonths,
+              `${r.commitmentPeriod} meses`,
+              r.profitabilityLiquidity || "Mensal"
+            ]
+          })
+        ]
+        const wsRecurrInvestorsDetail = XLSX.utils.aoa_to_sheet(recurrInvestorsDetailData)
+        XLSX.utils.book_append_sheet(workbook, wsRecurrInvestorsDetail, "Investidores")
 
         const recurrAdvisorsData = [
           ["Assessor", "Total Investido", "Comissão Mensal (3%)", "Nº Investidores", "Nº Investimentos"],
@@ -950,8 +1433,13 @@ export function useRecurrenceCalculator() {
       case "totals": {
         const totalsSummaryData = [
           ["Resumo de Totais"],
+          ["", ""],
+          ["⚠️ ATENÇÃO: PRÓXIMO PAGAMENTO ⚠️", ""],
+          ["Último corte (dia 20)", lastCutoffFormatted],
+          ["A ser pago em", nextPaymentDateFormatted],
+          ["Valor Total", formatCurrency(totalMonthlyCommissions)],
+          ["", ""],
           ["Total de Investimentos", filteredRecurrences.length],
-          dateFilter ? ["Filtro de Data", `Valores até ${new Date(dateFilter).toLocaleDateString("pt-BR")}`] : [],
           [""],
         ]
         const wsTotalsSummary = XLSX.utils.aoa_to_sheet(totalsSummaryData)
@@ -1012,6 +1500,12 @@ export function useRecurrenceCalculator() {
 
         const projectionSummary = [
           ["Projeção de Recorrência"],
+          ["", ""],
+          ["⚠️ ATENÇÃO: PRÓXIMO PAGAMENTO ⚠️", ""],
+          ["Último corte (dia 20)", lastCutoffFormatted],
+          ["A ser pago em", nextPaymentDateFormatted],
+          ["Valor Total", formatCurrency(totalMonthlyCommissions)],
+          ["", ""],
           ["Investidor", selectedRecurrence.investorName],
           ["Valor Investido", formatCurrency(selectedRecurrence.investmentAmount)],
           ["Período", `${selectedRecurrence.commitmentPeriod} meses`],
@@ -1069,6 +1563,19 @@ export function useRecurrenceCalculator() {
     const topMargin = 15
     const bottomMargin = 20
     const usableWidth = pageWidth - leftMargin - rightMargin
+    const lastCutoff = getLastCutoffDate()
+    const nextPaymentDate = getNextFifthBusinessDay()
+    const lastCutoffFormatted = lastCutoff.toLocaleDateString("pt-BR", { 
+      day: "2-digit", 
+      month: "2-digit", 
+      year: "numeric" 
+    })
+    const nextPaymentDateFormatted = nextPaymentDate.toLocaleDateString("pt-BR", { 
+      weekday: "long", 
+      year: "numeric", 
+      month: "long", 
+      day: "numeric" 
+    })
 
     const checkNewPage = (additionalHeight: number = 10) => {
       if (yPosition + additionalHeight > pageHeight - bottomMargin) {
@@ -1185,6 +1692,26 @@ export function useRecurrenceCalculator() {
 
     switch (type) {
       case "recurrences": {
+        // Destaque para próximo pagamento
+        doc.setFontSize(14)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(0, 128, 0) // Verde
+        doc.text("⚠️ ATENÇÃO: PRÓXIMO PAGAMENTO ⚠️", leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(11)
+        doc.text(`Último corte (dia 20): ${lastCutoffFormatted}`, leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(12)
+        doc.text(`A ser pago em: ${nextPaymentDateFormatted}`, leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(14)
+        doc.text(`Valor Total: ${formatCurrency(totalMonthlyCommissions)}`, leftMargin, yPosition)
+        yPosition += 12
+        
+        doc.setTextColor(0, 0, 0) // Preto
         doc.setFontSize(12)
         doc.setFont("helvetica", "bold")
         doc.text("Resumo", leftMargin, yPosition)
@@ -1201,10 +1728,6 @@ export function useRecurrenceCalculator() {
         doc.text(`Escritórios (1%): ${formatCurrency(totalOfficeShare)}`, leftMargin, yPosition)
         yPosition += 6
         doc.text(`Em Risco: ${atRiskRecurrences}`, leftMargin, yPosition)
-        if (dateFilter) {
-          yPosition += 6
-          doc.text(`Filtro de Data: Valores até ${new Date(dateFilter).toLocaleDateString("pt-BR")}`, leftMargin, yPosition)
-        }
         yPosition += 15
 
         checkNewPage(50)
@@ -1444,12 +1967,28 @@ export function useRecurrenceCalculator() {
       }
 
       case "totals": {
+        // Destaque para próximo pagamento
+        doc.setFontSize(14)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(0, 128, 0) // Verde
+        doc.text("⚠️ ATENÇÃO: PRÓXIMO PAGAMENTO ⚠️", leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(11)
+        doc.text(`Último corte (dia 20): ${lastCutoffFormatted}`, leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(12)
+        doc.text(`A ser pago em: ${nextPaymentDateFormatted}`, leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(14)
+        doc.text(`Valor Total: ${formatCurrency(totalMonthlyCommissions)}`, leftMargin, yPosition)
+        yPosition += 12
+        
+        doc.setTextColor(0, 0, 0) // Preto
         doc.setFontSize(10)
         doc.setFont("helvetica", "normal")
-        if (dateFilter) {
-          doc.text(`Filtro de Data: Valores até ${new Date(dateFilter).toLocaleDateString("pt-BR")}`, leftMargin, yPosition)
-          yPosition += 8
-        }
         doc.text(`Total de Investimentos: ${filteredRecurrences.length}`, leftMargin, yPosition)
         yPosition += 12
 
@@ -1521,6 +2060,26 @@ export function useRecurrenceCalculator() {
           return
         }
 
+        // Destaque para próximo pagamento
+        doc.setFontSize(14)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(0, 128, 0) // Verde
+        doc.text("⚠️ ATENÇÃO: PRÓXIMO PAGAMENTO ⚠️", leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(11)
+        doc.text(`Último corte (dia 20): ${lastCutoffFormatted}`, leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(12)
+        doc.text(`A ser pago em: ${nextPaymentDateFormatted}`, leftMargin, yPosition)
+        yPosition += 8
+        
+        doc.setFontSize(14)
+        doc.text(`Valor Total: ${formatCurrency(totalMonthlyCommissions)}`, leftMargin, yPosition)
+        yPosition += 12
+        
+        doc.setTextColor(0, 0, 0) // Preto
         doc.setFontSize(12)
         doc.setFont("helvetica", "bold")
         doc.text("Projeção de Recorrência", leftMargin, yPosition)
@@ -1578,9 +2137,10 @@ export function useRecurrenceCalculator() {
     setFilterValue("")
   }
 
-  const handleClearDateFilter = () => {
-    setDateFilter("")
-  }
+  // Calcular último corte, próximo quinto dia útil e valor total a ser pago
+  const lastCutoffDate = getLastCutoffDate()
+  const nextFifthBusinessDay = getNextFifthBusinessDay()
+  const totalToBePaid = totalMonthlyCommissions
 
   return {
     // Estados
@@ -1592,7 +2152,6 @@ export function useRecurrenceCalculator() {
     loading,
     filterType,
     filterValue,
-    dateFilter,
     filterOptions,
     investorRate,
     
@@ -1604,12 +2163,13 @@ export function useRecurrenceCalculator() {
     totalAdvisorShare,
     totalOfficeShare,
     atRiskRecurrences,
+    lastCutoffDate,
+    nextFifthBusinessDay,
+    totalToBePaid,
     
     // Funções
     setFilterType: handleFilterTypeChange,
     setFilterValue,
-    setDateFilter,
-    handleClearDateFilter,
     setSelectedRecurrence,
     setIsProjectionOpen,
     fetchRecurrenceData,

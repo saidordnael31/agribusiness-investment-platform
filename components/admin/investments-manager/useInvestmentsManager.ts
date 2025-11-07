@@ -13,6 +13,7 @@ export interface Investment {
   status: 'pending' | 'active' | 'withdrawn'
   created_at: string
   updated_at: string
+  payment_date?: string | null
   profiles?: {
     full_name: string
     email: string
@@ -56,6 +57,44 @@ interface ExportOptions {
 }
 
 const ITEMS_PER_PAGE = 10
+
+// Função auxiliar para formatar data corretamente, evitando problemas de timezone
+const formatDateSafe = (dateString: string | null | undefined): string => {
+  if (!dateString) return "N/A"
+  
+  // Se for string no formato YYYY-MM-DD, extrair diretamente sem conversão de timezone
+  if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+    const [datePart] = dateString.split('T')
+    const [year, month, day] = datePart.split('-').map(Number)
+    // Formatar diretamente sem passar por Date para evitar problemas de timezone
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+  }
+  
+  // Fallback: tentar parsear como Date e usar UTC
+  const date = new Date(dateString)
+  if (!isNaN(date.getTime())) {
+    const year = date.getUTCFullYear()
+    const month = date.getUTCMonth() + 1
+    const day = date.getUTCDate()
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+  }
+  
+  return "N/A"
+}
+
+// Função auxiliar para formatar hora corretamente, evitando problemas de timezone
+const formatTimeSafe = (dateString: string | null | undefined): string => {
+  if (!dateString) return "N/A"
+  
+  const date = new Date(dateString)
+  if (!isNaN(date.getTime())) {
+    const hours = date.getUTCHours()
+    const minutes = date.getUTCMinutes()
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  }
+  
+  return "N/A"
+}
 
 export function useInvestmentsManager() {
   const { toast } = useToast()
@@ -266,9 +305,11 @@ export function useInvestmentsManager() {
           'Status': investment.status,
           'Taxa Mensal (%)': (investment.monthly_return_rate * 100).toFixed(2),
           'Período (meses)': investment.commitment_period,
-          'Data de Criação': new Date(investment.created_at).toLocaleDateString("pt-BR"),
-          'Hora de Criação': new Date(investment.created_at).toLocaleTimeString("pt-BR"),
-          'Última Atualização': new Date(investment.updated_at).toLocaleDateString("pt-BR")
+          'Data': investment.payment_date ? formatDateSafe(investment.payment_date) : 'Não depositado',
+          'Hora': investment.payment_date ? formatTimeSafe(investment.payment_date) : 'N/A',
+          'Data de Criação': formatDateSafe(investment.created_at),
+          'Hora de Criação': formatTimeSafe(investment.created_at),
+          'Última Atualização': formatDateSafe(investment.updated_at)
         }
 
         if (exportOptions.includePersonalData) {

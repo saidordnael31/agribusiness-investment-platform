@@ -19,6 +19,30 @@ import {
 } from "lucide-react"
 import { useInvestmentsManager } from "./useInvestmentsManager"
 
+// Função auxiliar para formatar data corretamente, evitando problemas de timezone
+const formatDateSafe = (dateString: string | null | undefined): string => {
+  if (!dateString) return "N/A"
+  
+  // Se for string no formato YYYY-MM-DD, extrair diretamente sem conversão de timezone
+  if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+    const [datePart] = dateString.split('T')
+    const [year, month, day] = datePart.split('-').map(Number)
+    // Formatar diretamente sem passar por Date para evitar problemas de timezone
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+  }
+  
+  // Fallback: tentar parsear como Date e usar UTC
+  const date = new Date(dateString)
+  if (!isNaN(date.getTime())) {
+    const year = date.getUTCFullYear()
+    const month = date.getUTCMonth() + 1
+    const day = date.getUTCDate()
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+  }
+  
+  return "N/A"
+}
+
 export function InvestmentsManager() {
   const {
     investments,
@@ -261,10 +285,10 @@ export function InvestmentsManager() {
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            {new Date(investment.created_at).toLocaleDateString("pt-BR")}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(investment.created_at).toLocaleTimeString("pt-BR")}
+                            {investment.payment_date 
+                              ? formatDateSafe(investment.payment_date)
+                              : <span className="text-muted-foreground">Não depositado</span>
+                            }
                           </div>
                         </TableCell>
                       </TableRow>
