@@ -30,6 +30,9 @@ interface UserProfileData {
   updated_at: string
   total_invested?: number
   total_captured?: number
+  bank_name?: string | null
+  bank_branch?: string | null
+  bank_account?: string | null
 }
 
 interface UserProfileViewProps {
@@ -109,6 +112,22 @@ export function UserProfileView({ userId, onEdit, onClose }: UserProfileViewProp
       style: "currency",
       currency: "BRL",
     }).format(value)
+  }
+
+  const formatCpf = (digits: string) => {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+  }
+
+  const formatCnpj = (digits: string) => {
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+  }
+
+  const formatCpfCnpj = (value?: string | null) => {
+    if (!value) return 'Não informado'
+    const digits = value.replace(/\D/g, '')
+    if (digits.length === 11) return formatCpf(digits)
+    if (digits.length === 14) return formatCnpj(digits)
+    return value
   }
 
   const formatDate = (dateString: string) => {
@@ -216,7 +235,7 @@ export function UserProfileView({ userId, onEdit, onClose }: UserProfileViewProp
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-muted-foreground">CPF / CNPJ</label>
-                <p className="text-lg font-mono">{profileData.cnpj || 'Não informado'}</p>
+                <p className="text-lg font-mono">{formatCpfCnpj(profileData.cnpj)}</p>
               </div>
 
               <div>
@@ -288,6 +307,34 @@ export function UserProfileView({ userId, onEdit, onClose }: UserProfileViewProp
                 <label className="text-sm font-medium text-muted-foreground">Cargo / Função</label>
                 <p className="text-lg">{profileData.role || 'Não informado'}</p>
               </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Informações Bancárias */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5" />
+            Informações Bancárias
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Banco</label>
+              <p className="text-lg">{profileData.bank_name || 'Não informado'}</p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Agência</label>
+              <p className="text-lg font-mono">{profileData.bank_branch || 'Não informado'}</p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Conta</label>
+              <p className="text-lg font-mono break-all">{profileData.bank_account || 'Não informado'}</p>
             </div>
           </div>
         </CardContent>

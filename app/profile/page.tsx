@@ -16,6 +16,9 @@ interface ProfileData {
   marital_status: string | null
   nationality: string | null
   pix_usdt_key: string | null
+  bank_name: string | null
+  bank_branch: string | null
+  bank_account: string | null
   user_type: string
   role: string | null
   created_at: string

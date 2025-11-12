@@ -168,21 +168,26 @@ export async function POST(request: NextRequest) {
         })
       }
     } else {
-      // Rejeitar: deletar o registro da tabela
-      const { data, error } = await supabase
-      .from("investments")
-      .delete()
-      .eq('id', investmentId);
-    
-    if (error) {
-      console.error("Erro ao deletar investimento:", error.message);
-    } else {
-      console.log("Investimento deletado:", data);
-    }
-    
+      // Rejeitar: remover o registro da tabela usando service role para contornar RLS
+      const { createClient: createSupabaseClient } = await import("@supabase/supabase-js")
+      const supabaseAdmin = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
+      )
+
+      const { error } = await supabaseAdmin
+        .from("investments")
+        .delete()
+        .eq("id", investmentId)
 
       if (error) {
-        console.error("Database error:", error)
+        console.error("Database error (delete):", error)
         return NextResponse.json({ success: false, error: error.message }, { status: 400 })
       }
 

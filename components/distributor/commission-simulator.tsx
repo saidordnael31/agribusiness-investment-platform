@@ -93,65 +93,25 @@ export function CommissionSimulator() {
 
         {results && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-card rounded-lg border">
-                <p className="text-sm text-muted-foreground">Comissão Mensal</p>
-                <p className="text-2xl font-bold text-primary">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(results.monthlyCommission)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {user?.role === "investidor" ? "2%" : 
-                   user?.role === "escritorio" ? "1%" : "3%"} ao mês sobre valor investido
-                </p>
+            <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+              <p className="text-sm text-muted-foreground">
+                {user?.role === "assessor"
+                  ? "Comissão Mensal (Assessor)"
+                  : user?.role === "escritorio"
+                  ? "Comissão Mensal (Escritório)"
+                  : user?.role === "investidor"
+                  ? "Comissão Mensal (Investidor)"
+                  : "Comissão Mensal"}
+              </p>
+              <div className="mt-1 text-2xl font-bold text-primary">
+                {new Intl.NumberFormat("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                }).format(results.monthlyCommission)}
               </div>
-
-              <div className="p-4 bg-card rounded-lg border">
-                <p className="text-sm text-muted-foreground">Comissão Anual</p>
-                <p className="text-2xl font-bold text-secondary">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(results.annualCommission)}
-                </p>
-                <p className="text-xs text-muted-foreground">Base sem bônus</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <p className="text-sm text-muted-foreground">
-                  {user?.role === "assessor" ? "Sua Comissão (Assessor)" : 
-                   user?.role === "escritorio" ? "Sua Comissão (Escritório)" : 
-                   "Sua Comissão (Investidor)"}
-                </p>
-                <p className="text-xl font-bold text-primary">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(results.advisorShare || results.officeShare)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {user?.role === "investidor" ? "2% ao mês" : 
-                   user?.role === "escritorio" ? "1% ao mês" : "3% ao mês"}
-                </p>
-              </div>
-
-              <div className="p-4 bg-secondary/5 rounded-lg border border-secondary/20">
-                <p className="text-sm text-muted-foreground">Valor Mensal</p>
-                <p className="text-xl font-bold text-secondary">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(results.monthlyCommission)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {user?.role === "investidor" ? "2%" : 
-                   user?.role === "escritorio" ? "1%" : "3%"} ao mês
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Equivalente a {user?.role === "investidor" ? "2% a.m." : user?.role === "escritorio" ? "1% a.m." : "3% a.m."}
+              </p>
             </div>
 
             {results.performanceBonus > 0 && (
@@ -174,7 +134,9 @@ export function CommissionSimulator() {
             )}
 
             <div className="p-4 bg-muted rounded-lg border-2 border-primary">
-              <p className="text-sm text-muted-foreground">Total Anual</p>
+              <p className="text-sm text-muted-foreground">
+                Total Anual {results.performanceBonus > 0 ? "(com bônus)" : ""}
+              </p>
               <p className="text-3xl font-bold text-primary">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",

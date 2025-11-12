@@ -72,16 +72,6 @@ export default function HomePage() {
             </Badge>
           </div>
 
-          <Button 
-            size="lg" 
-            className="bg-[#00BC6E] text-[#003F28] hover:bg-[#00BC6E]/90 font-inter font-semibold text-lg px-8 py-4"
-            asChild
-          >
-            <a href={calendlyUrl} target="_blank" rel="noopener noreferrer">
-              <Calendar className="w-5 h-5 mr-2" />
-              Agendar Reunião
-            </a>
-          </Button>
         </div>
       </section>
 

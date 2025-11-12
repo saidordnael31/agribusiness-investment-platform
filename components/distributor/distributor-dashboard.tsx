@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -42,6 +43,8 @@ import {
   Eye,
   Check,
   X,
+  MapPin,
+  RefreshCw,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
@@ -58,6 +61,38 @@ import {
 } from "@/components/ui/dialog";
 import { InvestmentSimulator } from "../investor/investment-simulator";
 import { PDFViewer } from "../contracts/pdf-viewer";
+
+const REGISTRATION_STEPS = ["Gerais", "Endereço", "Dados Bancários"];
+
+const createEmptyInvestorForm = () => ({
+  fullName: "",
+  email: "",
+  phone: "",
+  cpf: "",
+  rg: "",
+  nationality: "",
+  maritalStatus: "",
+  profession: "",
+  street: "",
+  number: "",
+  complement: "",
+  neighborhood: "",
+  city: "",
+  state: "",
+  zipCode: "",
+  pixKey: "",
+  bankCode: "",
+  bankName: "",
+  agency: "",
+  accountNumber: "",
+  password: "",
+  confirmPassword: "",
+  investmentValue: "",
+  rescueTerm: "",
+  commitmentPeriod: "",
+  liquidity: "",
+  profitability: "",
+});
 
 interface UserData {
   id: string;
@@ -84,6 +119,12 @@ interface Investor {
   profession?: string;
   pixKey?: string;
   user_type?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankAccount?: string;
+  advisorId?: string | null;
+  advisorName?: string | null;
+  advisorEmail?: string | null;
 }
 
 interface Advisor {
@@ -104,6 +145,9 @@ interface Advisor {
   profession?: string;
   pixKey?: string;
   user_type?: string;
+  bankName?: string;
+  bankBranch?: string;
+  bankAccount?: string;
 }
 
 interface QRCodeData {
@@ -122,6 +166,18 @@ interface Contract {
   status: string;
   created_at: string;
   uploaded_by: string;
+  investor_id?: string;
+  uploaded_by_profile?: {
+    full_name: string;
+    email: string;
+  };
+}
+
+interface InvestorContractOverview {
+  investorId: string;
+  investorName: string;
+  investorEmail?: string;
+  contract: Contract;
 }
 
 interface Investment {
@@ -148,32 +204,40 @@ export function DistributorDashboard() {
 
   const [showInvestorModal, setShowInvestorModal] = useState(false);
   const [userType, setUserType] = useState<"investor" | "advisor">("investor");
-  const [investorForm, setInvestorForm] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    cpf: "",
-    rg: "",
-    nationality: "",
-    maritalStatus: "",
-    profession: "",
-    // Campos de endereço separados
-    street: "",
-    number: "",
-    neighborhood: "",
-    city: "",
-    state: "",
-    zipCode: "",
-    pixKey: "",
-    password: "",
-    confirmPassword: "",
-    // Campos de investimento
-    investmentValue: "",
-    rescueTerm: "",
-    commitmentPeriod: "",
-    liquidity: "",
-    profitability: "",
-  });
+  const [investorForm, setInvestorForm] = useState(createEmptyInvestorForm());
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
+  const [isBankListOpen, setIsBankListOpen] = useState(false);
+  const [bankSearchTerm, setBankSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("simulator");
+
+  const resetInvestorForm = () => {
+    setInvestorForm(createEmptyInvestorForm());
+    setCurrentStep(0);
+    setUserType(user?.role === "escritorio" ? "advisor" : "investor");
+    setBankSearchTerm("");
+    setIsBankListOpen(false);
+  };
+
+  const formatCPF = (value: string) =>
+    value.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+
+  const formatCNPJ = (value: string) =>
+    value.replace(/\D/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+
+  const formatCpfCnpj = (value?: string | null) => {
+    if (!value) return "";
+    const digits = value.replace(/\D/g, "");
+    if (digits.length === 11) {
+      return formatCPF(digits);
+    }
+    if (digits.length === 14) {
+      return formatCNPJ(digits);
+    }
+    return value;
+  };
 
   const [submittingInvestor, setSubmittingInvestor] = useState(false);
 
@@ -200,14 +264,24 @@ export function DistributorDashboard() {
     state: "",
     zipCode: "",
     pixKey: "",
+    bankName: "",
+    bankBranch: "",
+    bankAccount: "",
   });
   const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [editBankSearchTerm, setEditBankSearchTerm] = useState("");
+  const [isEditBankListOpen, setIsEditBankListOpen] = useState(false);
 
   // Estados para contratos e investimentos
   const [userContracts, setUserContracts] = useState<Contract[]>([]);
   const [userInvestments, setUserInvestments] = useState<Investment[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(false);
   const [loadingInvestments, setLoadingInvestments] = useState(false);
+  const [contractsOverview, setContractsOverview] = useState<InvestorContractOverview[]>([]);
+  const [loadingContractsOverview, setLoadingContractsOverview] = useState(false);
+  const [contractsOverviewLoaded, setContractsOverviewLoaded] = useState(false);
+  const [contractsOverviewError, setContractsOverviewError] = useState<string | null>(null);
+  const [contractsSearchTerm, setContractsSearchTerm] = useState("");
   
   // Estados para visualização de contratos
   const [contractViewerOpen, setContractViewerOpen] = useState(false);
@@ -235,6 +309,15 @@ export function DistributorDashboard() {
     receiptUrl: string;
     fileName: string;
   } | null>(null);
+  const [officeAdvisors, setOfficeAdvisors] = useState<Advisor[]>([]);
+const [showNewInvestmentModal, setShowNewInvestmentModal] = useState(false);
+const [newInvestmentForm, setNewInvestmentForm] = useState({
+  amount: "",
+  commitmentPeriod: "",
+  liquidity: "",
+});
+const [createInvestmentLoading, setCreateInvestmentLoading] = useState(false);
+const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
   const [distributorData, setDistributorData] = useState({
     totalCaptured: 0,
@@ -256,8 +339,723 @@ export function DistributorDashboard() {
       position: 0,
       totalDistributors: 0,
       poolShare: 0,
+      topAdvisorName: "",
+      topAdvisorTotal: 0,
     },
   });
+
+  const getVisibleSteps = () =>
+    userType === "investor" ? REGISTRATION_STEPS : REGISTRATION_STEPS.slice(0, 3);
+
+  useEffect(() => {
+    setCurrentStep((prev) => Math.min(prev, getVisibleSteps().length - 1));
+  }, [userType]);
+
+  useEffect(() => {
+    if (user?.role === "escritorio") {
+      setUserType("advisor");
+    } else if (user?.role === "assessor") {
+      setUserType("investor");
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const loadBanks = async () => {
+      try {
+        setIsLoadingBanks(true);
+        const response = await fetch("https://brasilapi.com.br/api/banks/v1");
+        if (!response.ok) {
+          throw new Error("Não foi possível carregar a lista de bancos.");
+        }
+        const data = await response.json();
+        const mappedBanks = Array.isArray(data)
+          ? data
+              .filter((bank: any) => bank?.code && bank?.name)
+              .map((bank: any) => ({
+                code: String(bank.code),
+                name: String(bank.name),
+              }))
+              .sort((a: any, b: any) => a.name.localeCompare(b.name))
+          : [];
+        setBanks(mappedBanks);
+      } catch (error: any) {
+        console.error("Erro ao carregar bancos:", error);
+        toast({
+          title: "Erro ao carregar bancos",
+          description: error.message || "Tente novamente mais tarde.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingBanks(false);
+      }
+    };
+
+    loadBanks();
+  }, [toast]);
+
+  useEffect(() => {
+    if (!investorForm.bankCode) return;
+    const selected = banks.find((bank) => bank.code === investorForm.bankCode);
+    if (selected) {
+      setBankSearchTerm(`${selected.code} - ${selected.name}`);
+    }
+  }, [investorForm.bankCode, banks]);
+
+  useEffect(() => {
+    if (!showEditModal) {
+      return;
+    }
+
+    if (!editForm.bankName) {
+      setEditBankSearchTerm("");
+      return;
+    }
+
+    const matchedBank = banks.find((bank) => bank.name === editForm.bankName);
+    if (matchedBank) {
+      const displayName = `${matchedBank.code} - ${matchedBank.name}`;
+      setEditBankSearchTerm((prev) =>
+        prev === displayName ? prev : displayName
+      );
+    } else {
+      setEditBankSearchTerm((prev) =>
+        prev === editForm.bankName ? prev : editForm.bankName
+      );
+    }
+  }, [showEditModal, editForm.bankName, banks]);
+
+  const showMissingFieldsToast = (fields: string[]) => {
+    toast({
+      title: "Campos obrigatórios",
+      description: `Preencha os campos: ${fields.join(", ")}.`,
+      variant: "destructive",
+    });
+  };
+
+  const sanitizeCep = (value: string) => value.replace(/\D/g, "").slice(0, 8);
+
+  const formatCep = (value: string) => {
+    const digits = sanitizeCep(value);
+    if (digits.length > 5) {
+      return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+    }
+    return digits;
+  };
+
+  const handleZipChange = (value: string) => {
+    const formatted = formatCep(value);
+    setInvestorForm((prev) => ({
+      ...prev,
+      zipCode: formatted,
+    }));
+  };
+
+  const fetchAddressByCep = async () => {
+    const cepDigits = sanitizeCep(investorForm.zipCode);
+
+    if (cepDigits.length !== 8) {
+      toast({
+        title: "CEP inválido",
+        description: "Informe um CEP com 8 dígitos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsFetchingCep(true);
+      setInvestorForm((prev) => ({
+        ...prev,
+        street: "",
+        number: "",
+        complement: "",
+        neighborhood: "",
+        city: "",
+        state: "",
+      }));
+
+      const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      if (!response.ok) {
+        throw new Error("Não foi possível consultar o CEP.");
+      }
+
+      const data = await response.json();
+      if (data?.erro) {
+        throw new Error("CEP não encontrado.");
+      }
+
+      setInvestorForm((prev) => ({
+        ...prev,
+        street: data.logradouro || "",
+        number: "",
+        complement: data.complemento || "",
+        neighborhood: data.bairro || "",
+        city: data.localidade || "",
+        state: data.uf || "",
+      }));
+
+      toast({
+        title: "Endereço atualizado",
+        description: "Os campos de endereço foram preenchidos com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao buscar CEP",
+        description: error.message || "Tente novamente mais tarde.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingCep(false);
+    }
+  };
+
+  const handleSelectBank = (bankCode: string) => {
+    const bank = banks.find((item) => item.code === bankCode);
+    setInvestorForm((prev) => ({
+      ...prev,
+      bankCode,
+      bankName: bank?.name || "",
+    }));
+    setBankSearchTerm(
+      bank ? `${bank.code} - ${bank.name}` : ""
+    );
+    setIsBankListOpen(false);
+  };
+
+  const handleSelectEditBank = (bankCode: string) => {
+    const bank = banks.find((item) => item.code === bankCode);
+    const displayName = bank ? `${bank.code} - ${bank.name}` : "";
+    setEditForm((prev) => ({
+      ...prev,
+      bankName: bank?.name || "",
+    }));
+    setEditBankSearchTerm(displayName);
+    setIsEditBankListOpen(false);
+  };
+
+  const validateStep = (stepIndex: number) => {
+    const missing: string[] = [];
+
+    switch (stepIndex) {
+      case 0: {
+        if (!investorForm.fullName) missing.push("Nome completo");
+        if (!investorForm.email) missing.push("Email");
+        if (!investorForm.cpf) missing.push("CPF");
+        if (!investorForm.rg) missing.push("RG");
+        if (!investorForm.nationality) missing.push("Nacionalidade");
+        if (!investorForm.maritalStatus) missing.push("Estado civil");
+        if (!investorForm.profession) missing.push("Profissão");
+        if (!investorForm.password) missing.push("Senha");
+        if (!investorForm.confirmPassword) missing.push("Confirmar senha");
+
+        if (
+          investorForm.password &&
+          investorForm.confirmPassword &&
+          investorForm.password !== investorForm.confirmPassword
+        ) {
+          toast({
+            title: "Senhas não coincidem",
+            description: "A senha e confirmação de senha devem ser iguais.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        break;
+      }
+      case 1: {
+        if (!investorForm.street) missing.push("Rua");
+        if (!investorForm.number) missing.push("Número");
+        if (!investorForm.neighborhood) missing.push("Bairro");
+        if (!investorForm.city) missing.push("Cidade");
+        if (!investorForm.state) missing.push("Estado");
+        if (!investorForm.zipCode) {
+          missing.push("CEP");
+        } else if (sanitizeCep(investorForm.zipCode).length !== 8) {
+          toast({
+            title: "CEP inválido",
+            description: "Informe um CEP com 8 dígitos.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        break;
+      }
+      case 2: {
+        const hasPix = Boolean(investorForm.pixKey?.trim());
+        const hasBankData =
+          Boolean(investorForm.bankCode) ||
+          Boolean(investorForm.agency) ||
+          Boolean(investorForm.accountNumber);
+
+        if (!hasPix && !hasBankData) {
+          missing.push("Chave PIX ou dados bancários");
+        }
+
+        if (hasBankData) {
+          const bankMissing: string[] = [];
+          if (!investorForm.bankCode) bankMissing.push("Banco");
+          if (!investorForm.agency) bankMissing.push("Agência");
+          if (!investorForm.accountNumber) bankMissing.push("Conta");
+
+          if (bankMissing.length > 0) {
+            missing.push(...bankMissing);
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    if (missing.length > 0) {
+      showMissingFieldsToast(missing);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (!validateStep(currentStep)) return;
+
+    setCurrentStep((prev) => {
+      const stepsLength = getVisibleSteps().length;
+      return Math.min(prev + 1, stepsLength - 1);
+    });
+  };
+
+  const handlePreviousStep = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 0:
+        return (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <Label htmlFor="fullName">Nome Completo *</Label>
+              <Input
+                id="fullName"
+                value={investorForm.fullName}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    fullName: e.target.value,
+                  }))
+                }
+                placeholder="Nome completo do investidor"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="email">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                value={investorForm.email}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    email: e.target.value,
+                  }))
+                }
+                placeholder="email@exemplo.com"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                value={investorForm.phone}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    phone: e.target.value,
+                  }))
+                }
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="cpf">CPF *</Label>
+              <Input
+                id="cpf"
+                value={investorForm.cpf}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    cpf: e.target.value,
+                  }))
+                }
+                placeholder="000.000.000-00"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="rg">RG *</Label>
+              <Input
+                id="rg"
+                value={investorForm.rg}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    rg: e.target.value,
+                  }))
+                }
+                placeholder="00.000.000-0"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="nationality">Nacionalidade *</Label>
+              <Input
+                id="nationality"
+                value={investorForm.nationality}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    nationality: e.target.value,
+                  }))
+                }
+                placeholder="Brasileira"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="maritalStatus">Estado Civil *</Label>
+              <select
+                id="maritalStatus"
+                value={investorForm.maritalStatus}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    maritalStatus: e.target.value,
+                  }))
+                }
+                className="w-full rounded-md border p-2"
+                required
+              >
+                <option value="">Selecione o estado civil</option>
+                <option value="solteiro">Solteiro(a)</option>
+                <option value="casado">Casado(a)</option>
+                <option value="divorciado">Divorciado(a)</option>
+                <option value="viuvo">Viúvo(a)</option>
+                <option value="uniao_estavel">União Estável</option>
+              </select>
+            </div>
+
+            <div>
+              <Label htmlFor="profession">Profissão *</Label>
+              <Input
+                id="profession"
+                value={investorForm.profession}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    profession: e.target.value,
+                  }))
+                }
+                placeholder="Ex: Engenheiro, Médico, Advogado..."
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="password">Senha *</Label>
+              <Input
+                id="password"
+                type="password"
+                value={investorForm.password}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    password: e.target.value,
+                  }))
+                }
+                placeholder="Senha do investidor"
+                required
+                minLength={6}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={investorForm.confirmPassword}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    confirmPassword: e.target.value,
+                  }))
+                }
+                placeholder="Confirme a senha"
+                required
+                minLength={6}
+              />
+            </div>
+          </div>
+        );
+      case 1:
+        return (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="md:col-span-2">
+              <Label htmlFor="street">Rua *</Label>
+              <Input
+                id="street"
+                value={investorForm.street}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    street: e.target.value,
+                  }))
+                }
+                placeholder="Nome da rua"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="number">Número *</Label>
+              <Input
+                id="number"
+                value={investorForm.number}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    number: e.target.value,
+                  }))
+                }
+                placeholder="123"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="complement">Complemento</Label>
+              <Input
+                id="complement"
+                value={investorForm.complement}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    complement: e.target.value,
+                  }))
+                }
+                placeholder="Apartamento, sala, bloco..."
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="neighborhood">Bairro *</Label>
+              <Input
+                id="neighborhood"
+                value={investorForm.neighborhood}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    neighborhood: e.target.value,
+                  }))
+                }
+                placeholder="Nome do bairro"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="city">Cidade *</Label>
+              <Input
+                id="city"
+                value={investorForm.city}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    city: e.target.value,
+                  }))
+                }
+                placeholder="Nome da cidade"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="state">Estado *</Label>
+              <Input
+                id="state"
+                value={investorForm.state}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    state: e.target.value,
+                  }))
+                }
+                placeholder="SP"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="zipCode">CEP *</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="zipCode"
+                  value={investorForm.zipCode}
+                  onChange={(e) => handleZipChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      fetchAddressByCep();
+                    }
+                  }}
+                  placeholder="00000-000"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={fetchAddressByCep}
+                  disabled={isFetchingCep}
+                  className="whitespace-nowrap"
+                >
+                  {isFetchingCep ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="mr-2 h-4 w-4" />
+                      Buscar CEP
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      case 2: {
+        const filteredBanks = banks.filter((bank) =>
+          `${bank.code} ${bank.name}`.toLowerCase().includes(bankSearchTerm.toLowerCase())
+        );
+
+        return (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="pixKey">Chave PIX ou Endereço USDT</Label>
+              <Input
+                id="pixKey"
+                value={investorForm.pixKey}
+                onChange={(e) =>
+                  setInvestorForm((prev) => ({
+                    ...prev,
+                    pixKey: e.target.value,
+                  }))
+                }
+                placeholder="Chave PIX (CPF, email, telefone) ou endereço USDT"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Banco</Label>
+              <div className="relative">
+                <Input
+                  value={bankSearchTerm}
+                  onChange={(e) => {
+                    setBankSearchTerm(e.target.value);
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      bankCode: "",
+                      bankName: "",
+                    }));
+                    setIsBankListOpen(true);
+                  }}
+                  onFocus={() => setIsBankListOpen(true)}
+                  onBlur={() => {
+                    setTimeout(() => setIsBankListOpen(false), 150);
+                  }}
+                  placeholder={
+                    isLoadingBanks ? "Carregando bancos..." : "Digite nome ou código do banco"
+                  }
+                  disabled={isLoadingBanks}
+                />
+                {isBankListOpen && (
+                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-background shadow-md">
+                    {isLoadingBanks ? (
+                      <div className="p-3 text-sm text-muted-foreground">Carregando bancos...</div>
+                    ) : filteredBanks.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">Nenhum banco encontrado.</div>
+                    ) : (
+                      filteredBanks.map((bank) => (
+                        <button
+                          key={bank.code}
+                          type="button"
+                          className={`flex w-full items-center justify-start gap-2 px-3 py-2 text-left text-sm hover:bg-accent ${
+                            investorForm.bankCode === bank.code ? "bg-accent/60" : ""
+                          }`}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectBank(bank.code);
+                          }}
+                        >
+                          <span className="font-medium">{bank.code}</span>
+                          <span className="text-muted-foreground">{bank.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Lista oficial (BACEN/Febraban). Digite parte do nome ou código para filtrar o banco.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div>
+                <Label htmlFor="agency">Agência</Label>
+                <Input
+                  id="agency"
+                  value={investorForm.agency}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      agency: e.target.value,
+                    }))
+                  }
+                  placeholder="Ex: 0001"
+                />
+              </div>
+              <div>
+                <Label htmlFor="accountNumber">Conta</Label>
+                <Input
+                  id="accountNumber"
+                  value={investorForm.accountNumber}
+                  onChange={(e) =>
+                    setInvestorForm((prev) => ({
+                      ...prev,
+                      accountNumber: e.target.value,
+                    }))
+                  }
+                  placeholder="Ex: 123456-7"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   useEffect(() => {
     if (myInvestors.length === 0 || !user) return;
@@ -267,8 +1065,8 @@ export function DistributorDashboard() {
       0
     );
 
-    const advisorShare = totalCaptured * 0.02; // Exemplo
     const officeShare = totalCaptured * 0.01;
+    const advisorShare = officeShare * 3;
 
     const baseCommissionRate =
       user.role === "escritorio"
@@ -282,8 +1080,8 @@ export function DistributorDashboard() {
     setDistributorData((prev) => ({
       ...prev,
       totalCaptured,
-      monthlyCommission: monthlyCommission, // Exemplo de comissão
-      annualCommission: annualCommission, // Exemplo
+      monthlyCommission: monthlyCommission,
+      annualCommission: annualCommission,
       clientsCount: myInvestors.length,
       advisorShare,
       officeShare,
@@ -297,12 +1095,43 @@ export function DistributorDashboard() {
         additionalRate: totalCaptured >= 7000000 ? 5 : 0,
       },
       ranking: {
-        position: 2, // exemplo estático ou cálculo real
-        totalDistributors: 10,
+        ...prev.ranking,
         poolShare: totalCaptured * 0.02,
       },
     }));
   }, [myInvestors]);
+
+  const visibleSteps = getVisibleSteps();
+  const isLastStep = currentStep === visibleSteps.length - 1;
+  const showContractsTab = user?.role === "assessor" || user?.role === "escritorio";
+  const tabsGridCols =
+    user?.role === "escritorio" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
+  const overviewGridCols =
+    user?.role === "escritorio" ? "lg:grid-cols-5" : "lg:grid-cols-4";
+  const filteredContractsOverview = useMemo(() => {
+    if (!contractsSearchTerm.trim()) {
+      return contractsOverview;
+    }
+
+    const term = contractsSearchTerm.toLowerCase();
+
+    return contractsOverview.filter(({ investorName, investorEmail, contract }) => {
+      const matchesInvestorName = investorName?.toLowerCase().includes(term);
+      const matchesInvestorEmail = investorEmail?.toLowerCase().includes(term);
+      const matchesContractName = contract.contract_name?.toLowerCase().includes(term);
+      const matchesFileName = contract.file_name?.toLowerCase().includes(term);
+      const matchesStatus = contract.status?.toLowerCase().includes(term);
+
+      return (
+        matchesInvestorName ||
+        matchesInvestorEmail ||
+        matchesContractName ||
+        matchesFileName ||
+        matchesStatus
+      );
+    });
+  }, [contractsOverview, contractsSearchTerm]);
+  const totalContracts = contractsOverview.length;
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -345,6 +1174,12 @@ export function DistributorDashboard() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (user?.role === "assessor" && userOfficeId) {
+      void fetchOfficeAdvisors(userOfficeId);
+    }
+  }, [user?.role, userOfficeId]);
+
   const fetchMyInvestors = async (distributorId: string) => {
     let profilesWithInvestments: any[] = [];
     try {
@@ -369,7 +1204,37 @@ export function DistributorDashboard() {
 
       const { data: profiles, error: profilesError } = await query;
 
+      const advisorInfoMap: Record<string, { name: string; email: string | null }> = {};
+
       if (!profilesError && profiles.length > 0) {
+        if (user?.role === "escritorio") {
+          const parentIds = Array.from(
+            new Set(
+              profiles
+                .map((p) => p.parent_id)
+                .filter((parentId): parentId is string => Boolean(parentId))
+            )
+          );
+
+          if (parentIds.length > 0) {
+            const { data: advisorsInfo, error: advisorsInfoError } = await supabase
+              .from("profiles")
+              .select("id, full_name, email")
+              .in("id", parentIds);
+
+            if (advisorsInfoError) {
+              console.error("Erro ao buscar dados dos assessores responsáveis:", advisorsInfoError);
+            } else {
+              advisorsInfo?.forEach((advisor: any) => {
+                advisorInfoMap[advisor.id] = {
+                  name: advisor.full_name || advisor.email?.split("@")[0] || "Assessor",
+                  email: advisor.email || null,
+                };
+              });
+            }
+          }
+        }
+
         const profileIds = profiles.map((p) => p.id);
 
         const { data: investments, error: investmentsError } = await supabase
@@ -400,14 +1265,21 @@ export function DistributorDashboard() {
             0
           ) || 0;
 
+        const cpfFromProfile =
+          profile.cnpj ||
+          (profile.notes?.includes("CPF:")
+            ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim()
+            : "");
+        const cpfDigits = cpfFromProfile ? String(cpfFromProfile).replace(/\D/g, "") : "";
+        const parentId = profile.parent_id ?? null;
+        const advisorInfo = parentId ? advisorInfoMap[parentId] : undefined;
+
         return {
           id: profile.id,
           name: profile.full_name || profile.email.split("@")[0],
           email: profile.email,
           phone: profile.phone,
-          cpf: profile.notes?.includes("CPF:")
-            ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim()
-            : "",
+          cpf: cpfDigits,
           totalInvested,
           status: profile.is_active ? "active" : "inactive",
           joinedAt: profile.created_at,
@@ -419,6 +1291,12 @@ export function DistributorDashboard() {
           profession: profile.profession,
           pixKey: profile.pix_usdt_key,
           user_type: profile.user_type,
+          bankName: profile.bank_name,
+          bankBranch: profile.bank_branch,
+          bankAccount: profile.bank_account,
+          advisorId: parentId,
+          advisorName: advisorInfo?.name ?? null,
+          advisorEmail: advisorInfo?.email ?? null,
         };
       });
 
@@ -465,50 +1343,66 @@ export function DistributorDashboard() {
 
       const profileIds = profiles.map((p) => p.id);
 
-      // Buscar investimentos dos assessores
-      const { data: investments, error: investmentsError } = await supabase
-        .from("investments")
-        .select("*")
-        .eq("status", "active")
-        .in("user_id", profileIds);
-
-      // Buscar investidores de cada assessor
-      const { data: advisorInvestors, error: advisorInvestorsError } =
-        await supabase
-          .from("profiles")
-          .select("id, parent_id")
-          .eq("user_type", "investor")
-          .in("parent_id", profileIds);
+      const { data: advisorInvestors, error: advisorInvestorsError } = await supabase
+        .from("profiles")
+        .select("id, parent_id")
+        .eq("user_type", "investor")
+        .in("parent_id", profileIds);
 
       if (advisorInvestorsError) {
-        console.error(
-          "Erro ao buscar investidores dos assessores:",
-          advisorInvestorsError
-        );
+        console.error("Erro ao buscar investidores dos assessores:", advisorInvestorsError);
       }
 
-      // Transformar os dados dos assessores
+      const investorIds = advisorInvestors?.map((inv) => inv.id) ?? [];
+
+      let investorInvestments: { user_id: string; amount: number }[] = [];
+      if (investorIds.length > 0) {
+        const { data: investmentsData, error: investmentsError } = await supabase
+          .from("investments")
+          .select("user_id, amount")
+          .eq("status", "active")
+          .in("user_id", investorIds);
+
+        if (investmentsError) {
+          console.error("Erro ao buscar investimentos dos investidores:", investmentsError);
+        } else {
+          investorInvestments = investmentsData || [];
+        }
+      }
+
+      const investmentsByInvestor = investorInvestments.reduce<Record<string, number>>(
+        (acc, investment) => {
+          acc[investment.user_id] = (acc[investment.user_id] || 0) + (investment.amount || 0);
+          return acc;
+        },
+        {}
+      );
+
       const transformedAdvisors: Advisor[] = profiles.map((profile) => {
-        const advisorInvestments =
-          investments?.filter((inv) => inv.user_id === profile.id) || [];
+        const advisorInvestorIds =
+          advisorInvestors?.filter((inv) => inv.parent_id === profile.id).map((inv) => inv.id) ||
+          [];
 
-        const advisorInvestorsCount =
-          advisorInvestors?.filter((inv) => inv.parent_id === profile.id)
-            .length || 0;
+        const advisorInvestorsCount = advisorInvestorIds.length;
 
-        const totalCaptured = advisorInvestments.reduce(
-          (sum: number, inv: any) => sum + (inv.amount || 0),
+        const totalCaptured = advisorInvestorIds.reduce(
+          (sum, investorId) => sum + (investmentsByInvestor[investorId] || 0),
           0
         );
+
+        const cpfFromProfile =
+          profile.cnpj ||
+          (profile.notes?.includes("CPF:")
+            ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim()
+            : "");
+        const cpfDigits = cpfFromProfile ? String(cpfFromProfile).replace(/\D/g, "") : "";
 
         return {
           id: profile.id,
           name: profile.full_name || profile.email.split("@")[0],
           email: profile.email,
           phone: profile.phone,
-          cpf: profile.notes?.includes("CPF:")
-            ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim()
-            : "",
+          cpf: cpfDigits,
           totalCaptured,
           status: profile.is_active ? "active" : "inactive",
           joinedAt: profile.created_at,
@@ -521,10 +1415,16 @@ export function DistributorDashboard() {
           profession: profile.profession,
           pixKey: profile.pix_usdt_key,
           user_type: profile.user_type,
+          bankName: profile.bank_name,
+          bankBranch: profile.bank_branch,
+          bankAccount: profile.bank_account,
         };
       });
 
       setMyAdvisors(transformedAdvisors);
+      if (user?.role === "escritorio") {
+        setOfficeAdvisors(transformedAdvisors);
+      }
     } catch (error) {
       console.error("Erro ao buscar assessores:", error);
     } finally {
@@ -549,38 +1449,50 @@ export function DistributorDashboard() {
       !investorForm.neighborhood ||
       !investorForm.city ||
       !investorForm.state ||
-      !investorForm.zipCode ||
-      !investorForm.pixKey
+      !investorForm.zipCode
     ) {
       toast({
         title: "Campos obrigatórios",
         description:
-          "Preencha todos os campos obrigatórios incluindo RG, nacionalidade, estado civil, profissão, endereço completo e chave PIX/USDT.",
+        "Preencha todos os campos obrigatórios incluindo RG, nacionalidade, estado civil, profissão e endereço completo.",
         variant: "destructive",
       });
       return;
     }
 
-    // Validações específicas para investidor
-    if (userType === "investor") {
-      if (!investorForm.investmentValue || !investorForm.rescueTerm || !investorForm.commitmentPeriod || !investorForm.liquidity) {
-        toast({
-          title: "Dados do investimento obrigatórios",
-          description: "O valor, prazo de resgate, prazo de investimento e liquidez são obrigatórios para investidores.",
-          variant: "destructive",
-        });
-        return;
-      }
+    const cepDigits = sanitizeCep(investorForm.zipCode);
+    if (cepDigits.length !== 8) {
+      toast({
+        title: "CEP inválido",
+        description: "Informe um CEP com 8 dígitos.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      const investmentValue = Number.parseFloat(
-        investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
-      );
-      if (investmentValue < 5000) {
-        toast({
-          title: "Valor mínimo não atingido",
-          description: "O valor mínimo de investimento é R$ 5.000,00.",
-          variant: "destructive",
-        });
+    const hasPix = Boolean(investorForm.pixKey?.trim());
+    const hasBankData =
+      Boolean(investorForm.bankCode) ||
+      Boolean(investorForm.agency) ||
+      Boolean(investorForm.accountNumber);
+
+    if (!hasPix && !hasBankData) {
+      toast({
+        title: "Dados bancários obrigatórios",
+        description: "Informe uma chave PIX ou preencha banco, agência e conta.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (hasBankData) {
+      const bankMissing: string[] = [];
+      if (!investorForm.bankCode) bankMissing.push("Banco");
+      if (!investorForm.agency) bankMissing.push("Agência");
+      if (!investorForm.accountNumber) bankMissing.push("Conta");
+
+      if (bankMissing.length > 0) {
+        showMissingFieldsToast(bankMissing);
         return;
       }
     }
@@ -659,6 +1571,15 @@ export function DistributorDashboard() {
       // );
 
       const supabase = createClient();
+      const pixNote = investorForm.pixKey
+        ? ` | PIX: ${investorForm.pixKey}`
+        : "";
+      const bankNote = investorForm.bankCode
+        ? ` | Banco: ${investorForm.bankCode}${
+            investorForm.bankName ? ` - ${investorForm.bankName}` : ""
+          } Agência: ${investorForm.agency || "-"} Conta: ${investorForm.accountNumber || "-"}`
+        : "";
+      const metadataNotes = `CPF: ${investorForm.cpf}${pixNote}${bankNote}`;
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: investorForm.email,
@@ -673,7 +1594,13 @@ export function DistributorDashboard() {
             phone: investorForm.phone,
             parent_id: user?.id || null,
             cpf_cnpj: investorForm.cpf,
-            notes: `CPF: ${investorForm.cpf}`,
+            notes: metadataNotes,
+            pix_usdt_key: investorForm.pixKey || null,
+            bank_code: investorForm.bankCode || null,
+            bank_name: investorForm.bankName || null,
+            bank_branch: investorForm.agency || null,
+            bank_account: investorForm.accountNumber || null,
+            address_complement: investorForm.complement || null,
           },
         },
       });
@@ -714,16 +1641,22 @@ export function DistributorDashboard() {
             office_id: userOfficeId, // Usar o office_id do usuário logado
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
-            notes: `Usuário criádo via dashboard do assessor ${user?.name}`,
+            notes: `Usuário criado via dashboard do assessor ${user?.name}${pixNote}${bankNote}`,
             hierarchy_level: userType === "investor" ? "advisor" : "advisor",
-            rescue_type: userType === "investor" ? investorForm.rescueTerm : null,
+            rescue_type:
+              userType === "investor" && investorForm.rescueTerm
+                ? investorForm.rescueTerm
+                : null,
             is_active: true,
             rg: investorForm.rg,
             nationality: investorForm.nationality,
             marital_status: investorForm.maritalStatus,
             profession: investorForm.profession,
             address: buildFullAddress(),
-            pix_usdt_key: investorForm.pixKey,
+            pix_usdt_key: investorForm.pixKey || null,
+            bank_name: investorForm.bankName || null,
+            bank_branch: investorForm.agency || null,
+            bank_account: investorForm.accountNumber || null,
           },
         ])
         .select()
@@ -737,47 +1670,12 @@ export function DistributorDashboard() {
         console.log("Perfil criado:", profileData);
       }
 
-      // Criar investimento apenas para investidores
-      if (userType === "investor") {
-        const investmentValue = Number.parseFloat(
-          investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
-        );
-
-        console.log("[v0] Criando investimento na tabela investments...");
-        const { data: investmentData, error: investmentError } =
-          await supabase.rpc("create_investment_for_user", {
-            p_user_id: authData.user.id, // ou o id do investidor que o assessor quer criar
-            p_amount: Number(investmentValue),
-            p_status: "pending",
-            p_quota_type: "senior",
-            p_monthly_return_rate: getRateByPeriodAndLiquidity(
-              Number(investorForm.commitmentPeriod), 
-              investorForm.liquidity
-            ),
-            p_commitment_period: Number(investorForm.commitmentPeriod),
-            p_profitability_liquidity: investorForm.liquidity,
-          });
-
-        if (investmentError) {
-          console.error("Erro ao criar investimento:", investmentError);
-        } else {
-          console.log("Investimento criado:", investmentData);
-        }
-      }
-
       toast({
         title: userType === "investor" ? "Investidor cadastrado!" : "Assessor cadastrado!",
-        description: `${investorForm.fullName} foi cadastrado com sucesso.${userType === "investor" ? " Gerando QR Code PIX..." : ""}`,
+        description: `${investorForm.fullName} foi cadastrado com sucesso.`,
       });
-
-      // Gerar QR Code apenas para investidores
-      if (userType === "investor") {
-        const investmentValue = Number.parseFloat(
-          investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")
-        );
-        await generateQRCode(investmentValue, investorForm.cpf);
-      }
       
+      resetInvestorForm();
       setShowInvestorModal(false);
 
       if (user?.id) {
@@ -801,9 +1699,26 @@ export function DistributorDashboard() {
     }
   };
 
-  const generateQRCode = async (value: number, cpf: string) => {
+  interface QRRecipientInfo {
+    cpf?: string | null;
+    email?: string | null;
+    fullName?: string | null;
+  }
+
+  const generateQRCode = async (
+    value: number,
+    recipient?: QRRecipientInfo
+  ) => {
     try {
       setGeneratingQR(true);
+
+      const cpf = recipient?.cpf || investorForm.cpf;
+      const email = recipient?.email || investorForm.email;
+      const fullName = recipient?.fullName || investorForm.fullName;
+
+      if (!cpf) {
+        throw new Error("CPF do investidor não informado para gerar o QR Code.");
+      }
 
       const response = await fetch("/api/external/generate-qrcode", {
         method: "POST",
@@ -813,38 +1728,12 @@ export function DistributorDashboard() {
         body: JSON.stringify({
           value,
           cpf,
-          email: investorForm.email,
-          userName: investorForm.fullName,
+          email,
+          userName: fullName,
         }),
       });
 
       const result = await response.json();
-
-      setUserType("investor");
-      setInvestorForm({
-        fullName: "",
-        email: "",
-        phone: "",
-        cpf: "",
-        rg: "",
-        nationality: "",
-        maritalStatus: "",
-        profession: "",
-        street: "",
-        number: "",
-        neighborhood: "",
-        city: "",
-        state: "",
-        zipCode: "",
-        pixKey: "",
-        password: "",
-        confirmPassword: "",
-        investmentValue: "",
-        rescueTerm: "",
-        commitmentPeriod: "",
-        liquidity: "",
-        profitability: "",
-      });
 
       if (!result.success) {
         throw new Error(result.error || "Erro ao gerar QR Code PIX");
@@ -971,6 +1860,116 @@ export function DistributorDashboard() {
     }
   };
 
+  const loadContractsOverview = useCallback(async () => {
+    if (!showContractsTab) {
+      return;
+    }
+
+    if (!myInvestors.length) {
+      setContractsOverview([]);
+      setContractsOverviewError(null);
+      setContractsOverviewLoaded(true);
+      return;
+    }
+
+    setLoadingContractsOverview(true);
+    setContractsOverviewError(null);
+
+    try {
+      const results = await Promise.allSettled(
+        myInvestors.map(async (investor) => {
+          const response = await fetch(`/api/contracts?investorId=${investor.id}`);
+          const result = await response.json();
+
+          if (!result.success) {
+            throw new Error(result.error || "Erro ao buscar contratos do investidor");
+          }
+
+          return {
+            investor,
+            contracts: Array.isArray(result.data) ? (result.data as Contract[]) : [],
+          };
+        })
+      );
+
+      const aggregated: InvestorContractOverview[] = [];
+      const failedInvestors: string[] = [];
+
+      results.forEach((res, index) => {
+        const investor = myInvestors[index];
+
+        if (res.status === "fulfilled") {
+          const contracts = res.value?.contracts ?? [];
+
+          contracts.forEach((contract) => {
+            aggregated.push({
+              investorId: investor.id,
+              investorName: investor.name,
+              investorEmail: investor.email,
+              contract,
+            });
+          });
+        } else {
+          failedInvestors.push(investor.name);
+        }
+      });
+
+      aggregated.sort(
+        (a, b) =>
+          new Date(b.contract.created_at).getTime() -
+          new Date(a.contract.created_at).getTime()
+      );
+
+      setContractsOverview(aggregated);
+
+      if (failedInvestors.length > 0) {
+        const errorMessage = `Não foi possível carregar contratos de: ${failedInvestors.join(", ")}.`;
+        setContractsOverviewError(errorMessage);
+        toast({
+          title: "Erro ao carregar contratos",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao carregar contratos do painel:", error);
+      const message = "Não foi possível carregar os contratos.";
+      setContractsOverview([]);
+      setContractsOverviewError(message);
+      toast({
+        title: "Erro ao carregar contratos",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingContractsOverview(false);
+      setContractsOverviewLoaded(true);
+    }
+  }, [
+    myInvestors,
+    toast,
+    showContractsTab,
+  ]);
+
+  useEffect(() => {
+    setContractsOverviewLoaded(false);
+  }, [myInvestors]);
+
+  useEffect(() => {
+    if (
+      activeTab === "contracts" &&
+      !contractsOverviewLoaded &&
+      !loadingContractsOverview
+    ) {
+      void loadContractsOverview();
+    }
+  }, [
+    activeTab,
+    contractsOverviewLoaded,
+    loadingContractsOverview,
+    loadContractsOverview,
+  ]);
+
   // Função para abrir modal de edição
   const handleEditUser = (user: Investor | Advisor) => {
     setEditingUser(user);
@@ -989,11 +1988,13 @@ export function DistributorDashboard() {
       zipCode = addressParts[5] || '';
     }
 
+    const formattedCpf = formatCpfCnpj(user.cpf);
+
     const formData = {
       fullName: user.name,
       email: user.email,
       phone: user.phone || "",
-      cpf: user.cpf || "",
+      cpf: formattedCpf,
       rg: user.rg || "",
       nationality: user.nationality || "",
       maritalStatus: user.maritalStatus || "",
@@ -1005,9 +2006,14 @@ export function DistributorDashboard() {
       state,
       zipCode,
       pixKey: user.pixKey || "",
+      bankName: user.bankName || "",
+      bankBranch: user.bankBranch || "",
+      bankAccount: user.bankAccount || "",
     };
 
     setEditForm(formData);
+    setEditBankSearchTerm(formData.bankName || "");
+    setIsEditBankListOpen(false);
     setShowEditModal(true);
 
     // Buscar contratos e investimentos apenas para investidores
@@ -1059,22 +2065,36 @@ export function DistributorDashboard() {
         throw new Error("Usuário não autenticado");
       }
 
-      const fullAddress = `${editForm.street}, ${editForm.number}, ${editForm.neighborhood}, ${editForm.city}, ${editForm.state}, ${editForm.zipCode}`.trim();
+    const fullAddress = `${editForm.street}, ${editForm.number}, ${editForm.neighborhood}, ${editForm.city}, ${editForm.state}, ${editForm.zipCode}`.trim();
+    const cpfDigits = editForm.cpf ? editForm.cpf.replace(/\D/g, "") : "";
+    const pixNote = editForm.pixKey ? ` | PIX: ${editForm.pixKey}` : "";
+    const bankLabel = editBankSearchTerm || editForm.bankName;
+    const bankNote = bankLabel
+      ? ` | Banco: ${bankLabel}${
+          editForm.bankBranch ? ` Agência: ${editForm.bankBranch}` : ""
+        } Conta: ${editForm.bankAccount || "-"}`
+      : "";
+    const notesString = `CPF: ${
+      editForm.cpf || cpfDigits || "-"
+    }${pixNote}${bankNote}`;
 
-      const updateData = {
-        full_name: editForm.fullName,
-        email: editForm.email,
-        phone: editForm.phone || null,
-        cnpj: editForm.cpf || null,
-        notes: `CPF: ${editForm.cpf}`,
-        rg: editForm.rg,
-        nationality: editForm.nationality,
-        marital_status: editForm.maritalStatus,
-        profession: editForm.profession,
-        address: fullAddress,
-        pix_usdt_key: editForm.pixKey,
-        updated_at: new Date().toISOString(),
-      };
+    const updateData = {
+      full_name: editForm.fullName,
+      email: editForm.email,
+      phone: editForm.phone || null,
+      cnpj: cpfDigits || null,
+      notes: notesString,
+      rg: editForm.rg,
+      nationality: editForm.nationality,
+      marital_status: editForm.maritalStatus,
+      profession: editForm.profession,
+      address: fullAddress,
+      pix_usdt_key: editForm.pixKey || null,
+      bank_name: editForm.bankName || null,
+      bank_branch: editForm.bankBranch || null,
+      bank_account: editForm.bankAccount || null,
+      updated_at: new Date().toISOString(),
+    };
 
       // Verificar se o perfil existe e se o usuário tem permissão
       const { data: profileCheck, error: checkError } = await supabase
@@ -1095,6 +2115,7 @@ export function DistributorDashboard() {
 
       let updateSuccess = false;
       let updateError = null;
+      let usedRpc = false;
 
       // Tentar primeiro com função RPC
       try {
@@ -1122,6 +2143,7 @@ export function DistributorDashboard() {
         }
 
         updateSuccess = true;
+        usedRpc = true;
       } catch (rpcError) {
         // Fallback: tentar atualização direta
         const { data, error } = await supabase
@@ -1139,6 +2161,23 @@ export function DistributorDashboard() {
         }
       }
 
+      if (updateSuccess && usedRpc) {
+        const { error: supplementalError } = await supabase
+          .from("profiles")
+          .update({
+            bank_name: updateData.bank_name,
+            bank_branch: updateData.bank_branch,
+            bank_account: updateData.bank_account,
+            cnpj: updateData.cnpj,
+            notes: updateData.notes,
+          })
+          .eq("id", editingUser.id);
+
+        if (supplementalError) {
+          throw new Error(`Erro ao atualizar dados bancários: ${supplementalError.message}`);
+        }
+      }
+
       if (!updateSuccess) {
         throw updateError || new Error("Não foi possível atualizar o perfil");
       }
@@ -1150,6 +2189,8 @@ export function DistributorDashboard() {
 
       setShowEditModal(false);
       setEditingUser(null);
+      setEditBankSearchTerm("");
+      setIsEditBankListOpen(false);
 
       // Recarregar dados
       if (user?.id) {
@@ -1170,6 +2211,123 @@ export function DistributorDashboard() {
     }
   };
 
+
+  const resetNewInvestmentForm = () => {
+    setNewInvestmentForm({
+      amount: "",
+      commitmentPeriod: "",
+      liquidity: "",
+    });
+    setGeneratePixAfterCreate(true);
+  };
+
+  const openNewInvestmentModal = () => {
+    if (!editingUser || !("id" in editingUser) || editingUser.user_type !== "investor") {
+      toast({
+        title: "Selecione um investidor",
+        description: "Abra a tela de edição de um investidor para adicionar um investimento.",
+        variant: "destructive",
+      });
+      return;
+    }
+    resetNewInvestmentForm();
+    setShowNewInvestmentModal(true);
+  };
+
+  const handleCreateInvestmentForInvestor = async () => {
+    if (!editingUser || editingUser.user_type !== "investor") {
+      toast({
+        title: "Investidor não selecionado",
+        description: "Selecione um investidor para criar o investimento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const sanitizedAmount = newInvestmentForm.amount
+      .replace(/[^\d,]/g, "")
+      .replace(",", ".");
+    const amountNumber = Number.parseFloat(sanitizedAmount);
+
+    if (!amountNumber || Number.isNaN(amountNumber)) {
+      toast({
+        title: "Valor inválido",
+        description: "Informe um valor de investimento válido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (amountNumber < 5000) {
+      toast({
+        title: "Valor mínimo não atingido",
+        description: "O valor mínimo de investimento é R$ 5.000,00.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!newInvestmentForm.commitmentPeriod || !newInvestmentForm.liquidity) {
+      toast({
+        title: "Informações incompletas",
+        description: "Selecione o prazo de investimento e a liquidez.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setCreateInvestmentLoading(true);
+
+      const supabase = createClient();
+
+      const { error } = await supabase.rpc("create_investment_for_user", {
+        p_user_id: editingUser.id,
+        p_amount: amountNumber,
+        p_status: "pending",
+        p_quota_type: "senior",
+        p_monthly_return_rate: getRateByPeriodAndLiquidity(
+          Number(newInvestmentForm.commitmentPeriod),
+          newInvestmentForm.liquidity
+        ),
+        p_commitment_period: Number(newInvestmentForm.commitmentPeriod),
+        p_profitability_liquidity: newInvestmentForm.liquidity,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({
+        title: "Investimento criado!",
+        description: "O investimento foi registrado com sucesso e está pendente de aprovação.",
+      });
+
+      if (generatePixAfterCreate) {
+        const cpf =
+          editingUser.cpf ||
+          (editForm.cpf ? editForm.cpf.replace(/\D/g, "") : "");
+
+        await generateQRCode(amountNumber, {
+          cpf,
+          email: editingUser.email || editForm.email,
+          fullName: editingUser.name || editForm.fullName,
+        });
+      }
+
+      setShowNewInvestmentModal(false);
+      await fetchUserInvestments(editingUser.id);
+    } catch (error: any) {
+      console.error("Erro ao criar investimento:", error);
+      toast({
+        title: "Erro ao criar investimento",
+        description: error.message || "Não foi possível criar o investimento.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreateInvestmentLoading(false);
+    }
+  };
 
   // Função para baixar contrato
   const downloadContract = (contract: Contract) => {
@@ -1211,27 +2369,29 @@ export function DistributorDashboard() {
   const handleRejectInvestment = async (investmentId: string) => {
     try {
       setRejectingInvestment(investmentId);
-      const supabase = createClient();
 
-      const { error } = await supabase
-        .from("investments")
-        .update({ 
-          status: "rejected",
-          rejected_at: new Date().toISOString(),
-          rejected_by: user?.id
-        })
-        .eq("id", investmentId);
+      const response = await fetch("/api/investments/action", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          investmentId,
+          action: "reject",
+        }),
+      });
 
-      if (error) {
-        throw new Error(`Erro ao rejeitar investimento: ${error.message}`);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Não foi possível rejeitar o investimento.");
       }
 
       toast({
         title: "Investimento rejeitado!",
-        description: "O investimento foi rejeitado.",
+        description: result.message || "O investimento foi rejeitado e removido.",
       });
 
-      // Recarregar investimentos
       if (editingUser) {
         await fetchUserInvestments(editingUser.id);
       }
@@ -1355,6 +2515,9 @@ export function DistributorDashboard() {
 
   const formatCurrencyInput = (value: string) => {
     const numericValue = value.replace(/[^\d]/g, "");
+    if (!numericValue) {
+      return "";
+    }
     const formattedValue = (Number.parseInt(numericValue) / 100).toLocaleString(
       "pt-BR",
       {
@@ -1365,11 +2528,15 @@ export function DistributorDashboard() {
     return formattedValue;
   };
 
-  const filteredInvestors = myInvestors.filter(
-    (investor) =>
-      investor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      investor.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const normalizedSearchTerm = searchTerm.toLowerCase();
+  const filteredInvestors = myInvestors.filter((investor) => {
+    const matchesName = investor.name.toLowerCase().includes(normalizedSearchTerm);
+    const matchesEmail = investor.email.toLowerCase().includes(normalizedSearchTerm);
+    const matchesAdvisor =
+      investor.advisorName?.toLowerCase().includes(normalizedSearchTerm) ?? false;
+
+    return matchesName || matchesEmail || matchesAdvisor;
+  });
 
   const filteredAdvisors = myAdvisors.filter(
     (advisor) =>
@@ -1383,6 +2550,181 @@ export function DistributorDashboard() {
       currency: "BRL",
     }).format(value);
   };
+
+  const fetchOfficeAdvisors = async (officeId: string) => {
+    try {
+      const supabase = createClient();
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_type", "distributor")
+        .eq("office_id", officeId)
+        .order("created_at", { ascending: false });
+
+      if (profilesError) {
+        console.error("Erro ao buscar assessores do escritório:", profilesError);
+        return;
+      }
+
+      if (!profiles || profiles.length === 0) {
+        setOfficeAdvisors([]);
+        return;
+      }
+
+      const profileIds = profiles.map((p) => p.id);
+
+      const { data: advisorInvestors } = await supabase
+        .from("profiles")
+        .select("id, parent_id")
+        .eq("user_type", "investor")
+        .in("parent_id", profileIds);
+
+      const investorIds = advisorInvestors?.map((inv) => inv.id) ?? [];
+
+      let investorInvestments: { user_id: string; amount: number }[] = [];
+      if (investorIds.length > 0) {
+        const { data: investmentsData, error: investmentsError } = await supabase
+          .from("investments")
+          .select("user_id, amount")
+          .eq("status", "active")
+          .in("user_id", investorIds);
+
+        if (investmentsError) {
+          console.error("Erro ao buscar investimentos dos investidores do escritório:", investmentsError);
+        } else {
+          investorInvestments = investmentsData || [];
+        }
+      }
+
+      const investmentsByInvestor = investorInvestments.reduce<Record<string, number>>(
+        (acc, investment) => {
+          acc[investment.user_id] = (acc[investment.user_id] || 0) + (investment.amount || 0);
+          return acc;
+        },
+        {}
+      );
+
+      const transformed: Advisor[] = profiles.map((profile) => {
+        const advisorInvestorIds =
+          advisorInvestors?.filter((inv) => inv.parent_id === profile.id).map((inv) => inv.id) ||
+          [];
+
+        const advisorInvestorsCount = advisorInvestorIds.length;
+
+        const totalCaptured = advisorInvestorIds.reduce(
+          (sum, investorId) => sum + (investmentsByInvestor[investorId] || 0),
+          0
+        );
+
+        const cpfFromProfile =
+          profile.cnpj ||
+          (profile.notes?.includes("CPF:")
+            ? profile.notes.split("CPF:")[1]?.split("|")[0]?.trim()
+            : "");
+        const cpfDigits = cpfFromProfile ? String(cpfFromProfile).replace(/\D/g, "") : "";
+
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email.split("@")[0],
+          email: profile.email,
+          phone: profile.phone,
+          cpf: cpfDigits,
+          totalCaptured,
+          status: profile.is_active ? "active" : "inactive",
+          joinedAt: profile.created_at,
+          lastActivity: profile.updated_at || profile.created_at,
+          investorsCount: advisorInvestorsCount,
+          address: profile.address,
+          rg: profile.rg,
+          nationality: profile.nationality,
+          maritalStatus: profile.marital_status,
+          profession: profile.profession,
+          pixKey: profile.pix_usdt_key,
+          user_type: profile.user_type,
+          bankName: profile.bank_name,
+          bankBranch: profile.bank_branch,
+          bankAccount: profile.bank_account,
+        };
+      });
+
+      setOfficeAdvisors(transformed);
+    } catch (error) {
+      console.error("Erro ao carregar assessores do escritório:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    const advisorsForRanking =
+      user.role === "escritorio"
+        ? myAdvisors
+        : user.role === "assessor"
+        ? officeAdvisors
+        : [];
+
+    if (user.role === "assessor") {
+      if (advisorsForRanking.length === 0) {
+        setDistributorData((prev) => ({
+          ...prev,
+          ranking: {
+            ...prev.ranking,
+            position: 0,
+            totalDistributors: 0,
+            topAdvisorName: "",
+            topAdvisorTotal: 0,
+          },
+        }));
+        return;
+      }
+
+      const sorted = [...advisorsForRanking].sort(
+        (a, b) => (b.totalCaptured || 0) - (a.totalCaptured || 0)
+      );
+      const positionIndex = sorted.findIndex((advisor) => advisor.id === user.id);
+
+      setDistributorData((prev) => ({
+        ...prev,
+        ranking: {
+          ...prev.ranking,
+          position: positionIndex >= 0 ? positionIndex + 1 : 0,
+          totalDistributors: sorted.length,
+          topAdvisorName: sorted[0]?.name ?? "",
+          topAdvisorTotal: sorted[0]?.totalCaptured ?? 0,
+        },
+      }));
+    } else if (user.role === "escritorio") {
+      if (myAdvisors.length === 0) {
+        setDistributorData((prev) => ({
+          ...prev,
+          ranking: {
+            ...prev.ranking,
+            position: 0,
+            totalDistributors: 0,
+            topAdvisorName: "",
+            topAdvisorTotal: 0,
+          },
+        }));
+        return;
+      }
+
+      const sorted = [...myAdvisors].sort(
+        (a, b) => (b.totalCaptured || 0) - (a.totalCaptured || 0)
+      );
+
+      setDistributorData((prev) => ({
+        ...prev,
+        ranking: {
+          ...prev.ranking,
+          position: 1,
+          totalDistributors: sorted.length,
+          topAdvisorName: sorted[0]?.name ?? "",
+          topAdvisorTotal: sorted[0]?.totalCaptured ?? 0,
+        },
+      }));
+    }
+  }, [user, myAdvisors, officeAdvisors]);
 
   // Funções auxiliares para investimento
   const getAvailableLiquidityOptions = (period: number) => {
@@ -1408,7 +2750,7 @@ export function DistributorDashboard() {
       6: { "Mensal": 0.019, "Semestral": 0.02 }, // 1.9% | 2%
       12: { "Mensal": 0.021, "Semestral": 0.022, "Anual": 0.025 }, // 2.1% | 2.2% | 2.5%
       24: { "Mensal": 0.023, "Semestral": 0.025, "Anual": 0.027, "Bienal": 0.03 }, // 2.3% | 2.5% | 2.7% | 3%
-      36: { "Mensal": 0.024, "Semestral": 0.026, "Anual": 0.03, "Bienal": 0.035, "Trienal": 0.035 } // 2.4% | 2.6% | 3% | 3.5% | 3.5%
+      36: { "Mensal": 0.024, "Semestral": 0.026, "Anual": 0.03, "Bienal": 0.032, "Trienal": 0.035 } // 2.4% | 2.6% | 3% | 3.2% | 3.5%
     };
     
     return baseRates[period]?.[liquidity] || 0.03;
@@ -1416,8 +2758,12 @@ export function DistributorDashboard() {
 
   // Função para construir endereço completo
   const buildFullAddress = () => {
-    const { street, number, neighborhood, city, state, zipCode } = investorForm;
-    return `${street}, ${number}, ${neighborhood}, ${city}, ${state}, ${zipCode}`.trim();
+    const { street, number, complement, neighborhood, city, state, zipCode } = investorForm;
+    const parts = [street, number, complement, neighborhood, city, state, zipCode]
+      .map((part) => (part || "").trim())
+      .filter((part) => part.length > 0);
+
+    return parts.join(", ");
   };
 
   if (!user) return null;
@@ -1447,7 +2793,7 @@ export function DistributorDashboard() {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${overviewGridCols} gap-4 md:gap-6 mb-6 md:mb-8`}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -1496,22 +2842,24 @@ export function DistributorDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Meus Assessores
-              </CardTitle>
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-accent">
-                {myAdvisors.length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Assessores cadastrados por você
-              </p>
-            </CardContent>
-          </Card>
+          {user?.role === "escritorio" && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Meus Assessores
+                </CardTitle>
+                <UserCheck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl md:text-2xl font-bold text-accent">
+                  {myAdvisors.length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Assessores cadastrados por você
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1519,16 +2867,42 @@ export function DistributorDashboard() {
               <Award className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl md:text-2xl font-bold">
-                {distributorData.ranking.position > 0
-                  ? `#${distributorData.ranking.position}`
-                  : "-"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {distributorData.ranking.totalDistributors > 0
-                  ? `de ${distributorData.ranking.totalDistributors} distribuidores`
-                  : "Aguardando dados"}
-              </p>
+              {user?.role === "assessor" ? (
+                <>
+                  <div className="text-xl md:text-2xl font-bold">
+                    {distributorData.ranking.position > 0
+                      ? `#${distributorData.ranking.position}`
+                      : "-"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {distributorData.ranking.totalDistributors > 0
+                      ? `de ${distributorData.ranking.totalDistributors} assessores do escritório`
+                      : "Aguardando dados"}
+                  </p>
+                  {distributorData.ranking.topAdvisorName && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Top 1: {distributorData.ranking.topAdvisorName} (
+                      {formatCurrency(distributorData.ranking.topAdvisorTotal)})
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="text-lg md:text-2xl font-bold leading-tight">
+                    {distributorData.ranking.topAdvisorName || "-"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {distributorData.ranking.totalDistributors > 0
+                      ? `Total de ${distributorData.ranking.totalDistributors} assessores`
+                      : "Aguardando dados"}
+                  </p>
+                  {distributorData.ranking.topAdvisorName && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Captação líder: {formatCurrency(distributorData.ranking.topAdvisorTotal)}
+                    </p>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1545,7 +2919,7 @@ export function DistributorDashboard() {
             <CardContent className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
                 <div>
-                  <h4 className="font-semibold text-primary">Assessor (75%)</h4>
+                  <h4 className="font-semibold text-primary">Assessor (3%)</h4>
                   <p className="text-sm text-muted-foreground">
                     Sua parte da comissão (Até 3 milhões)
                   </p>
@@ -1560,7 +2934,7 @@ export function DistributorDashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
                 <div>
                   <h4 className="font-semibold text-secondary">
-                    Escritório (25%)
+                    Escritório (1%)
                   </h4>
                   <p className="text-sm text-muted-foreground">
                     Parte do escritório (Até 3 milhões)
@@ -1761,12 +3135,8 @@ export function DistributorDashboard() {
         </Card>
 
         {/* Tabs Section */}
-        <Tabs defaultValue="simulator" className="space-y-6">
-          <TabsList
-            className={`grid w-full grid-cols-${
-              user.role === "escritorio" ? 5 : 4
-            }`}
-          >
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className={`grid w-full ${tabsGridCols}`}>
             <TabsTrigger value="simulator" className="text-sm">
               Simulador
             </TabsTrigger>
@@ -1776,13 +3146,18 @@ export function DistributorDashboard() {
             <TabsTrigger value="investors" className="text-sm">
               Meus Investidores
             </TabsTrigger>
-            {user.role === "escritorio" && (
+            {showContractsTab && (
+              <TabsTrigger value="contracts" className="text-sm">
+                Contratos
+              </TabsTrigger>
+            )}
+            {user?.role === "escritorio" && (
               <TabsTrigger value="advisors" className="text-sm">
                 Meus Assessores
               </TabsTrigger>
             )}
             <TabsTrigger value="register" className="text-sm">
-              {user.role === "escritorio" ? "Cadastrar Usuário" : "Cadastrar Investidor"}
+              {user?.role === "escritorio" ? "Cadastrar Usuário" : "Cadastrar Investidor"}
             </TabsTrigger>
           </TabsList>
 
@@ -1848,9 +3223,10 @@ export function DistributorDashboard() {
                       <TableRow>
                         <TableHead>Nome</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>Telefone</TableHead>
+                        {user?.role === "escritorio" && (
+                          <TableHead>Assessor Responsável</TableHead>
+                        )}
                         <TableHead>Total Investido</TableHead>
-                        <TableHead>Status</TableHead>
                         <TableHead>Data de Cadastro</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -1862,22 +3238,24 @@ export function DistributorDashboard() {
                             {investor.name}
                           </TableCell>
                           <TableCell>{investor.email}</TableCell>
-                          <TableCell>{investor.phone || "-"}</TableCell>
+                          {user?.role === "escritorio" && (
+                            <TableCell>
+                              {investor.advisorName ? (
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{investor.advisorName}</span>
+                                  {investor.advisorEmail && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {investor.advisorEmail}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">--</span>
+                              )}
+                            </TableCell>
+                          )}
                           <TableCell>
                             {formatCurrency(investor.totalInvested)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                investor.status === "active"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {investor.status === "active"
-                                ? "Ativo"
-                                : "Inativo"}
-                            </Badge>
                           </TableCell>
                           <TableCell>
                             {new Date(investor.joinedAt).toLocaleDateString(
@@ -1903,7 +3281,182 @@ export function DistributorDashboard() {
             </Card>
           </TabsContent>
 
-          {user.role === "escritorio" && (
+          {showContractsTab && (
+            <TabsContent value="contracts">
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle>Contratos dos Meus Investidores</CardTitle>
+                      <CardDescription>
+                        Visualize e gerencie os contratos vinculados aos investidores da sua carteira.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {totalContracts} {totalContracts === 1 ? "contrato" : "contratos"}
+                      </Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void loadContractsOverview()}
+                        disabled={loadingContractsOverview}
+                        className="flex items-center gap-2"
+                      >
+                        {loadingContractsOverview ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Carregando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4" />
+                            Atualizar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar por investidor, email ou contrato..."
+                        value={contractsSearchTerm}
+                        onChange={(event) => setContractsSearchTerm(event.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+
+                  {contractsOverviewError && (
+                    <p className="mb-4 text-sm text-destructive">{contractsOverviewError}</p>
+                  )}
+
+                  {loadingContractsOverview ? (
+                    <div className="py-10 text-center">
+                      <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin" />
+                      <p className="text-muted-foreground">Carregando contratos...</p>
+                    </div>
+                  ) : totalContracts === 0 ? (
+                    <div className="py-12 text-center">
+                      <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                      <p className="text-muted-foreground">
+                        Nenhum contrato encontrado para os seus investidores.
+                      </p>
+                    </div>
+                  ) : filteredContractsOverview.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <Search className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                      <p className="text-muted-foreground">
+                        Nenhum contrato corresponde à busca atual.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Investidor</TableHead>
+                            <TableHead>Contrato</TableHead>
+                            <TableHead>Arquivo</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead className="text-right">Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredContractsOverview.map(
+                            ({ investorId, investorName, investorEmail, contract }) => {
+                              const statusLabel =
+                                contract.status === "active"
+                                  ? "Ativo"
+                                  : contract.status === "pending"
+                                  ? "Pendente"
+                                  : contract.status ?? "Desconhecido";
+
+                              let statusVariant: "default" | "secondary" | "outline" = "outline";
+
+                              if (contract.status === "active") {
+                                statusVariant = "default";
+                              } else if (contract.status === "pending") {
+                                statusVariant = "secondary";
+                              }
+
+                              return (
+                                <TableRow key={`${investorId}-${contract.id}`}>
+                                  <TableCell>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{investorName}</span>
+                                      {investorEmail && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {investorEmail}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="max-w-xs">
+                                    <p className="font-medium">{contract.contract_name}</p>
+                                    {contract.uploaded_by_profile?.full_name && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Enviado por {contract.uploaded_by_profile.full_name}
+                                      </p>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm">{contract.file_name}</p>
+                                    {contract.file_size ? (
+                                      <p className="text-xs text-muted-foreground">
+                                        {(contract.file_size / (1024 * 1024)).toFixed(2)} MB
+                                      </p>
+                                    ) : null}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={statusVariant}>
+                                      {statusLabel}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {contract.created_at
+                                      ? new Date(contract.created_at).toLocaleDateString("pt-BR")
+                                      : "--"}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => downloadContract(contract)}
+                                        title="Baixar contrato"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void viewContract(contract)}
+                                        title="Visualizar contrato"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            }
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {user?.role === "escritorio" && (
             <TabsContent value="advisors">
               <Card>
                 <CardHeader>
@@ -2011,11 +3564,11 @@ export function DistributorDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <UserPlus className="w-5 h-5" />
-                  {user.role === "escritorio" ? "Cadastrar Novo Usuário" : "Cadastrar Novo Investidor"}
+                  {user.role === "escritorio" ? "Cadastrar Assessor" : "Cadastrar Novo Investidor"}
                 </CardTitle>
                 <CardDescription>
                   {user.role === "escritorio" 
-                    ? "Cadastre um novo usuário na plataforma. Escolha entre investidor ou assessor."
+                    ? "Cadastre um novo assessor para o seu escritório."
                     : "Cadastre um novo investidor na plataforma. Ele será automaticamente associado a você como assessor."
                   }
                 </CardDescription>
@@ -2023,12 +3576,18 @@ export function DistributorDashboard() {
               <CardContent>
                 <form
                   onSubmit={handleCreateInvestor}
-                  className="space-y-4 max-w-full"
+                  className="max-w-full space-y-6"
                 >
                   {/* Switch para escolher tipo de usuário (apenas para escritório) */}
-                  {user.role === "escritorio" && (
-                    <div className="mb-6 p-4 border rounded-lg bg-muted/50">
-                      <Label className="text-base font-semibold mb-3 block">
+                  {user.role === "escritorio" ? null : user.role === "assessor" ? (
+                    <div className="rounded-lg border bg-muted/50 p-4">
+                      <Label className="mb-0 block text-base font-semibold">
+                        Investidor
+                      </Label>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border bg-muted/50 p-4">
+                      <Label className="mb-3 block text-base font-semibold">
                         Tipo de Usuário
                       </Label>
                       <div className="flex gap-4">
@@ -2038,7 +3597,10 @@ export function DistributorDashboard() {
                             name="userType"
                             value="investor"
                             checked={userType === "investor"}
-                            onChange={(e) => setUserType(e.target.value as "investor" | "advisor")}
+                            onChange={(e) => {
+                              setUserType(e.target.value as "investor" | "advisor");
+                              setCurrentStep(0);
+                            }}
                             className="w-4 h-4"
                           />
                           <span>Investidor</span>
@@ -2049,7 +3611,10 @@ export function DistributorDashboard() {
                             name="userType"
                             value="advisor"
                             checked={userType === "advisor"}
-                            onChange={(e) => setUserType(e.target.value as "investor" | "advisor")}
+                            onChange={(e) => {
+                              setUserType(e.target.value as "investor" | "advisor");
+                              setCurrentStep(0);
+                            }}
                             className="w-4 h-4"
                           />
                           <span>Assessor</span>
@@ -2058,514 +3623,72 @@ export function DistributorDashboard() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="fullName">Nome Completo *</Label>
-                      <Input
-                        id="fullName"
-                        value={investorForm.fullName}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            fullName: e.target.value,
-                          }))
-                        }
-                        placeholder="Nome completo do investidor"
-                        required
-                      />
+                  <div className="space-y-6">
+                    <div className="flex flex-wrap gap-3">
+                      {visibleSteps.map((step, index) => {
+                        const isActive = index === currentStep;
+                        const isCompleted = index < currentStep;
+
+                        return (
+                          <div
+                            key={step}
+                            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
+                              isActive
+                                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                                : isCompleted
+                                ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            <span className="font-semibold">{index + 1}</span>
+                            <span>{step}</span>
                     </div>
-
-                    <div>
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={investorForm.email}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            email: e.target.value,
-                          }))
-                        }
-                        placeholder="email@exemplo.com"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="phone">Telefone</Label>
-                      <Input
-                        id="phone"
-                        value={investorForm.phone}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            phone: e.target.value,
-                          }))
-                        }
-                        placeholder="(11) 99999-9999"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="cpf">CPF *</Label>
-                      <Input
-                        id="cpf"
-                        value={investorForm.cpf}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            cpf: e.target.value,
-                          }))
-                        }
-                        placeholder="000.000.000-00"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="rg">RG *</Label>
-                      <Input
-                        id="rg"
-                        value={investorForm.rg}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            rg: e.target.value,
-                          }))
-                        }
-                        placeholder="00.000.000-0"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="nationality">Nacionalidade *</Label>
-                      <Input
-                        id="nationality"
-                        value={investorForm.nationality}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            nationality: e.target.value,
-                          }))
-                        }
-                        placeholder="Brasileira"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="maritalStatus">Estado Civil *</Label>
-                      <select
-                        id="maritalStatus"
-                        value={investorForm.maritalStatus}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            maritalStatus: e.target.value,
-                          }))
-                        }
-                        className="w-full border rounded-md p-2"
-                        required
-                      >
-                        <option value="">Selecione o estado civil</option>
-                        <option value="solteiro">Solteiro(a)</option>
-                        <option value="casado">Casado(a)</option>
-                        <option value="divorciado">Divorciado(a)</option>
-                        <option value="viuvo">Viúvo(a)</option>
-                        <option value="uniao_estavel">União Estável</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="profession">Profissão *</Label>
-                      <Input
-                        id="profession"
-                        value={investorForm.profession}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            profession: e.target.value,
-                          }))
-                        }
-                        placeholder="Ex: Engenheiro, Médico, Advogado..."
-                        required
-                      />
-                    </div>
-
-                    {/* Campo específico para investidores - Prazo de Resgate */}
-                    {userType === "investor" && (
-                      <div>
-                        <Label htmlFor="rescueTerm">Prazo de Resgate *</Label>
-                        <select
-                          id="rescueTerm"
-                          value={investorForm.rescueTerm}
-                          onChange={(e) => {
-                            const term = e.target.value;
-                            setInvestorForm((prev) => ({
-                              ...prev,
-                              rescueTerm: term,
-                            }));
-                          }}
-                          className="w-full border rounded-md p-2"
-                          required
-                        >
-                          <option value="">Selecione o prazo</option>
-                          <option value="D+60">D+60</option>
-                          <option value="D+90">D+90</option>
-                          <option value="D+180">D+180</option>
-                          <option value="D+360">D+360</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Campos de endereço separados */}
-                    <div>
-                      <Label htmlFor="street">Rua *</Label>
-                      <Input
-                        id="street"
-                        value={investorForm.street}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            street: e.target.value,
-                          }))
-                        }
-                        placeholder="Nome da rua"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="number">Número *</Label>
-                      <Input
-                        id="number"
-                        value={investorForm.number}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            number: e.target.value,
-                          }))
-                        }
-                        placeholder="123"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="neighborhood">Bairro *</Label>
-                      <Input
-                        id="neighborhood"
-                        value={investorForm.neighborhood}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            neighborhood: e.target.value,
-                          }))
-                        }
-                        placeholder="Nome do bairro"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="city">Cidade *</Label>
-                      <Input
-                        id="city"
-                        value={investorForm.city}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            city: e.target.value,
-                          }))
-                        }
-                        placeholder="Nome da cidade"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="state">Estado *</Label>
-                      <Input
-                        id="state"
-                        value={investorForm.state}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            state: e.target.value,
-                          }))
-                        }
-                        placeholder="SP"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="zipCode">CEP *</Label>
-                      <Input
-                        id="zipCode"
-                        value={investorForm.zipCode}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            zipCode: e.target.value,
-                          }))
-                        }
-                        placeholder="00000-000"
-                        required
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <Label htmlFor="pixKey">
-                        Chave PIX ou Endereço USDT *
-                      </Label>
-                      <Input
-                        id="pixKey"
-                        value={investorForm.pixKey}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            pixKey: e.target.value,
-                          }))
-                        }
-                        placeholder="Chave PIX (CPF, email, telefone) ou endereço USDT"
-                        required
-                      />
-                    </div>
-
-                    {/* Campos específicos para investidores */}
-                    {userType === "investor" && (
-                      <>
-                        <div className="md:col-span-3">
-                          <div className="p-4 border rounded-lg bg-muted/50">
-                            <h3 className="text-lg font-semibold mb-4">Configuração do Investimento</h3>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div>
-                                <Label htmlFor="investmentValue">
-                                  Valor do Investimento * (mínimo R$ 5.000,00)
-                                </Label>
-                                <Input
-                                  id="investmentValue"
-                                  value={investorForm.investmentValue}
-                                  onChange={(e) => {
-                                    const formatted = formatCurrencyInput(e.target.value);
-                                    setInvestorForm((prev) => ({
-                                      ...prev,
-                                      investmentValue: formatted,
-                                    }));
-                                  }}
-                                  placeholder="R$ 5.000,00"
-                                  required
-                                />
-                              </div>
-
-                              <div>
-                                <Label htmlFor="commitmentPeriod">Prazo de Investimento *</Label>
-                                <select
-                                  id="commitmentPeriod"
-                                  value={investorForm.commitmentPeriod}
-                                  onChange={(e) => {
-                                    const period = e.target.value;
-                                    setInvestorForm((prev) => ({
-                                      ...prev,
-                                      commitmentPeriod: period,
-                                      liquidity: "", // Reset liquidez quando mudar o prazo
-                                    }));
-                                  }}
-                                  className="w-full border rounded-md p-2"
-                                  required
-                                >
-                                  <option value="">Selecione o prazo</option>
-                                  <option value="3">3 meses</option>
-                                  <option value="6">6 meses</option>
-                                  <option value="12">12 meses</option>
-                                  <option value="24">24 meses</option>
-                                  <option value="36">36 meses</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <Label htmlFor="liquidity">Liquidez da Rentabilidade *</Label>
-                                <select
-                                  id="liquidity"
-                                  value={investorForm.liquidity}
-                                  onChange={(e) => {
-                                    const liquidity = e.target.value;
-                                    const rate = getRateByPeriodAndLiquidity(
-                                      Number(investorForm.commitmentPeriod), 
-                                      liquidity
-                                    );
-                                    setInvestorForm((prev) => ({
-                                      ...prev,
-                                      liquidity,
-                                      profitability: `${(rate * 100).toFixed(1)}% a.m.`,
-                                    }));
-                                  }}
-                                  className="w-full border rounded-md p-2"
-                                  disabled={!investorForm.commitmentPeriod}
-                                  required
-                                >
-                                  <option value="">Selecione a liquidez</option>
-                                  {getAvailableLiquidityOptions(Number(investorForm.commitmentPeriod)).map((option) => (
-                                    <option key={option} value={option}>
-                                      {option}
-                                    </option>
-                                  ))}
-                                </select>
-                                {investorForm.commitmentPeriod && investorForm.liquidity && (
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    Taxa: {(getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 100).toFixed(1)}% a.m.
-                                  </p>
-                                )}
-                              </div>
+                        );
+                      })}
                             </div>
 
-                            {/* Projeção do retorno */}
-                            {investorForm.investmentValue && 
-                             Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) >= 5000 && 
-                             investorForm.commitmentPeriod && 
-                             investorForm.liquidity && (
-                              <div className="mt-4 bg-emerald-50 p-4 rounded-lg">
-                                <h4 className="font-semibold text-emerald-800 mb-2">
-                                  Projeção do Retorno
-                                </h4>
-                                <div className="space-y-2 text-sm">
-                                  <div className="flex justify-between">
-                                    <span>Retorno Mensal:</span>
-                                    <span className="font-semibold text-emerald-600">
-                                      {formatCurrency(
-                                        Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) * 
-                                        getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity)
-                                      )}
-                                    </span>
+                    {renderStepContent()}
                                   </div>
-                                  <div className="flex justify-between">
-                                    <span>Retorno Total ({investorForm.commitmentPeriod} meses):</span>
-                                    <span className="font-semibold text-emerald-600">
-                                      {formatCurrency(
-                                        Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) * 
-                                        getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 
-                                        Number(investorForm.commitmentPeriod)
-                                      )}
-                                    </span>
-                                  </div>
-                                  <div className="border-t pt-2">
-                                    <div className="flex justify-between">
-                                      <span className="font-semibold">Valor Final:</span>
-                                      <span className="font-semibold text-emerald-600">
-                                        {formatCurrency(
-                                          Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) + 
-                                          (Number.parseFloat(investorForm.investmentValue.replace(/[^\d,]/g, "").replace(",", ".")) * 
-                                           getRateByPeriodAndLiquidity(Number(investorForm.commitmentPeriod), investorForm.liquidity) * 
-                                           Number(investorForm.commitmentPeriod))
-                                        )}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
 
-                            {/* Aviso de multa */}
-                            <p className="mt-2 text-sm text-red-600">
-                              Resgates antes do prazo terão multa de{" "}
-                              <strong>20%</strong> + perda da rentabilidade.
-                            </p>
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-
-                    <div>
-                      <Label htmlFor="password">Senha *</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        value={investorForm.password}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            password: e.target.value,
-                          }))
-                        }
-                        placeholder="Senha do investidor"
-                        required
-                        minLength={6}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        value={investorForm.confirmPassword}
-                        onChange={(e) =>
-                          setInvestorForm((prev) => ({
-                            ...prev,
-                            confirmPassword: e.target.value,
-                          }))
-                        }
-                        placeholder="Confirme a senha"
-                        required
-                        minLength={6}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end space-x-2 pt-4">
+                  <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => {
-                        setUserType("investor");
-                        setInvestorForm({
-                          fullName: "",
-                          email: "",
-                          phone: "",
-                          cpf: "",
-                          rg: "",
-                          nationality: "",
-                          maritalStatus: "",
-                          profession: "",
-                          street: "",
-                          number: "",
-                          neighborhood: "",
-                          city: "",
-                          state: "",
-                          zipCode: "",
-                          pixKey: "",
-                          password: "",
-                          confirmPassword: "",
-                          investmentValue: "",
-                          rescueTerm: "",
-                          commitmentPeriod: "",
-                          liquidity: "",
-                          profitability: "",
-                        });
-                      }}
+                      onClick={resetInvestorForm}
                       disabled={submittingInvestor}
                       className="bg-transparent"
                     >
                       Limpar
                     </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handlePreviousStep}
+                        disabled={currentStep === 0}
+                      >
+                        Voltar
+                      </Button>
+                    </div>
+                    {isLastStep ? (
                     <Button type="submit" disabled={submittingInvestor}>
                       {submittingInvestor ? (
                         <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Cadastrando...
                         </>
                       ) : (
                         <>
-                          <UserPlus className="w-4 h-4 mr-2" />
+                            <UserPlus className="mr-2 h-4 w-4" />
                           {userType === "investor" ? "Cadastrar Investidor" : "Cadastrar Assessor"}
                         </>
                       )}
                     </Button>
+                    ) : (
+                      <Button type="button" onClick={handleNextStep} disabled={submittingInvestor}>
+                        Avancar
+                      </Button>
+                    )}
                   </div>
                 </form>
               </CardContent>
@@ -2633,7 +3756,17 @@ export function DistributorDashboard() {
         </Dialog>
 
         {/* Modal de Edição de Perfil */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <Dialog
+          open={showEditModal}
+          onOpenChange={(open) => {
+            setShowEditModal(open);
+            if (!open) {
+              setEditingUser(null);
+              setEditBankSearchTerm("");
+              setIsEditBankListOpen(false);
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -2658,262 +3791,408 @@ export function DistributorDashboard() {
 
               <TabsContent value="profile">
                 <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="editFullName">Nome Completo *</Label>
-                  <Input
-                    id="editFullName"
-                    value={editForm.fullName}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        fullName: e.target.value,
-                      }))
-                    }
-                    placeholder="Nome completo do usuário"
-                    required
-                  />
-                </div>
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Informações Pessoais</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="editFullName">Nome Completo *</Label>
+                        <Input
+                          id="editFullName"
+                          value={editForm.fullName}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              fullName: e.target.value,
+                            }))
+                          }
+                          placeholder="Nome completo do usuário"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editEmail">Email *</Label>
-                  <Input
-                    id="editEmail"
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        email: e.target.value,
-                      }))
-                    }
-                    placeholder="email@exemplo.com"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editEmail">Email *</Label>
+                        <Input
+                          id="editEmail"
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              email: e.target.value,
+                            }))
+                          }
+                          placeholder="email@exemplo.com"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editPhone">Telefone</Label>
-                  <Input
-                    id="editPhone"
-                    value={editForm.phone}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        phone: e.target.value,
-                      }))
-                    }
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editPhone">Telefone</Label>
+                        <Input
+                          id="editPhone"
+                          value={editForm.phone}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              phone: e.target.value,
+                            }))
+                          }
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editCpf">CPF *</Label>
-                  <Input
-                    id="editCpf"
-                    value={editForm.cpf}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        cpf: e.target.value,
-                      }))
-                    }
-                    placeholder="000.000.000-00"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editNationality">Nacionalidade *</Label>
+                        <Input
+                          id="editNationality"
+                          value={editForm.nationality}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              nationality: e.target.value,
+                            }))
+                          }
+                          placeholder="Brasileira"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editRg">RG *</Label>
-                  <Input
-                    id="editRg"
-                    value={editForm.rg}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        rg: e.target.value,
-                      }))
-                    }
-                    placeholder="00.000.000-0"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editMaritalStatus">Estado Civil *</Label>
+                        <select
+                          id="editMaritalStatus"
+                          value={editForm.maritalStatus}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              maritalStatus: e.target.value,
+                            }))
+                          }
+                          className="w-full border rounded-md p-2"
+                          required
+                        >
+                          <option value="">Selecione o estado civil</option>
+                          <option value="solteiro">Solteiro(a)</option>
+                          <option value="casado">Casado(a)</option>
+                          <option value="divorciado">Divorciado(a)</option>
+                          <option value="viuvo">Viúvo(a)</option>
+                          <option value="uniao_estavel">União Estável</option>
+                        </select>
+                      </div>
 
-                <div>
-                  <Label htmlFor="editNationality">Nacionalidade *</Label>
-                  <Input
-                    id="editNationality"
-                    value={editForm.nationality}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        nationality: e.target.value,
-                      }))
-                    }
-                    placeholder="Brasileira"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editProfession">Profissão *</Label>
+                        <Input
+                          id="editProfession"
+                          value={editForm.profession}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              profession: e.target.value,
+                            }))
+                          }
+                          placeholder="Ex: Engenheiro, Médico, Advogado..."
+                          required
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                <div>
-                  <Label htmlFor="editMaritalStatus">Estado Civil *</Label>
-                  <select
-                    id="editMaritalStatus"
-                    value={editForm.maritalStatus}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        maritalStatus: e.target.value,
-                      }))
-                    }
-                    className="w-full border rounded-md p-2"
-                    required
-                  >
-                    <option value="">Selecione o estado civil</option>
-                    <option value="solteiro">Solteiro(a)</option>
-                    <option value="casado">Casado(a)</option>
-                    <option value="divorciado">Divorciado(a)</option>
-                    <option value="viuvo">Viúvo(a)</option>
-                    <option value="uniao_estavel">União Estável</option>
-                  </select>
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Documentos e Acesso</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="editCpf">CPF *</Label>
+                        <Input
+                          id="editCpf"
+                          value={editForm.cpf}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              cpf: e.target.value,
+                            }))
+                          }
+                          onBlur={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              cpf: formatCpfCnpj(e.target.value),
+                            }))
+                          }
+                          placeholder="000.000.000-00"
+                          maxLength={18}
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editProfession">Profissão *</Label>
-                  <Input
-                    id="editProfession"
-                    value={editForm.profession}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        profession: e.target.value,
-                      }))
-                    }
-                    placeholder="Ex: Engenheiro, Médico, Advogado..."
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editRg">RG *</Label>
+                        <Input
+                          id="editRg"
+                          value={editForm.rg}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              rg: e.target.value,
+                            }))
+                          }
+                          placeholder="00.000.000-0"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                <div>
-                  <Label htmlFor="editStreet">Rua *</Label>
-                  <Input
-                    id="editStreet"
-                    value={editForm.street}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        street: e.target.value,
-                      }))
-                    }
-                    placeholder="Nome da rua"
-                    required
-                  />
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Endereço</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="md:col-span-2">
+                        <Label htmlFor="editStreet">Rua *</Label>
+                        <Input
+                          id="editStreet"
+                          value={editForm.street}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              street: e.target.value,
+                            }))
+                          }
+                          placeholder="Nome da rua"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editNumber">Número *</Label>
-                  <Input
-                    id="editNumber"
-                    value={editForm.number}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        number: e.target.value,
-                      }))
-                    }
-                    placeholder="123"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editNumber">Número *</Label>
+                        <Input
+                          id="editNumber"
+                          value={editForm.number}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              number: e.target.value,
+                            }))
+                          }
+                          placeholder="123"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editNeighborhood">Bairro *</Label>
-                  <Input
-                    id="editNeighborhood"
-                    value={editForm.neighborhood}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        neighborhood: e.target.value,
-                      }))
-                    }
-                    placeholder="Nome do bairro"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editNeighborhood">Bairro *</Label>
+                        <Input
+                          id="editNeighborhood"
+                          value={editForm.neighborhood}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              neighborhood: e.target.value,
+                            }))
+                          }
+                          placeholder="Nome do bairro"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editCity">Cidade *</Label>
-                  <Input
-                    id="editCity"
-                    value={editForm.city}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        city: e.target.value,
-                      }))
-                    }
-                    placeholder="Nome da cidade"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editCity">Cidade *</Label>
+                        <Input
+                          id="editCity"
+                          value={editForm.city}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              city: e.target.value,
+                            }))
+                          }
+                          placeholder="Nome da cidade"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editState">Estado *</Label>
-                  <Input
-                    id="editState"
-                    value={editForm.state}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        state: e.target.value,
-                      }))
-                    }
-                    placeholder="SP"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editState">Estado *</Label>
+                        <Input
+                          id="editState"
+                          value={editForm.state}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              state: e.target.value,
+                            }))
+                          }
+                          placeholder="SP"
+                          required
+                        />
+                      </div>
 
-                <div>
-                  <Label htmlFor="editZipCode">CEP *</Label>
-                  <Input
-                    id="editZipCode"
-                    value={editForm.zipCode}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        zipCode: e.target.value,
-                      }))
-                    }
-                    placeholder="00000-000"
-                    required
-                  />
-                </div>
+                      <div>
+                        <Label htmlFor="editZipCode">CEP *</Label>
+                        <Input
+                          id="editZipCode"
+                          value={editForm.zipCode}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              zipCode: e.target.value,
+                            }))
+                          }
+                          placeholder="00000-000"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                <div className="md:col-span-2">
-                  <Label htmlFor="editPixKey">
-                    Chave PIX ou Endereço USDT *
-                  </Label>
-                  <Input
-                    id="editPixKey"
-                    value={editForm.pixKey}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        pixKey: e.target.value,
-                      }))
-                    }
-                    placeholder="Chave PIX (CPF, email, telefone) ou endereço USDT"
-                    required
-                  />
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pagamento e Dados Bancários</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label htmlFor="editPixKey">
+                        Chave PIX ou Endereço USDT *
+                      </Label>
+                      <Input
+                        id="editPixKey"
+                        value={editForm.pixKey}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            pixKey: e.target.value,
+                          }))
+                        }
+                        placeholder="Chave PIX (CPF, email, telefone) ou endereço USDT"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editBankName">Banco</Label>
+                      <div className="relative">
+                        <Input
+                          id="editBankName"
+                          value={editBankSearchTerm}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setEditBankSearchTerm(value);
+                            setEditForm((prev) => ({
+                              ...prev,
+                              bankName: value,
+                            }));
+                            setIsEditBankListOpen(true);
+                          }}
+                          onFocus={() => setIsEditBankListOpen(true)}
+                          onBlur={() => {
+                            setTimeout(() => setIsEditBankListOpen(false), 150);
+                          }}
+                          placeholder={
+                            isLoadingBanks ? "Carregando bancos..." : "Digite nome ou código do banco"
+                          }
+                          disabled={isLoadingBanks}
+                        />
+                        {isEditBankListOpen && (
+                          <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-background shadow-md">
+                            {isLoadingBanks ? (
+                              <div className="p-3 text-sm text-muted-foreground">
+                                Carregando bancos...
+                              </div>
+                            ) : (() => {
+                                const filteredBanks = banks.filter((bank) =>
+                                  `${bank.code} ${bank.name}`
+                                    .toLowerCase()
+                                    .includes(editBankSearchTerm.toLowerCase())
+                                );
+                                if (filteredBanks.length === 0) {
+                                  return (
+                                    <div className="p-3 text-sm text-muted-foreground">
+                                      Nenhum banco encontrado.
+                                    </div>
+                                  );
+                                }
+                                return filteredBanks.map((bank) => (
+                                  <button
+                                    key={bank.code}
+                                    type="button"
+                                    className={`flex w-full items-center justify-start gap-2 px-3 py-2 text-left text-sm hover:bg-accent ${
+                                      editBankSearchTerm === `${bank.code} - ${bank.name}`
+                                        ? "bg-accent/60"
+                                        : ""
+                                    }`}
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      handleSelectEditBank(bank.code);
+                                    }}
+                                  >
+                                    <span className="font-medium">{bank.code}</span>
+                                    <span className="text-muted-foreground">{bank.name}</span>
+                                  </button>
+                                ));
+                              })()}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Digite parte do nome ou código para localizar o banco.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="editBankBranch">Agência</Label>
+                        <Input
+                          id="editBankBranch"
+                          value={editForm.bankBranch}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              bankBranch: e.target.value,
+                            }))
+                          }
+                          placeholder="0001"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="editBankAccount">Conta</Label>
+                        <Input
+                          id="editBankAccount"
+                          value={editForm.bankAccount}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              bankAccount: e.target.value,
+                            }))
+                          }
+                          placeholder="000000-0"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setShowEditModal(false)}
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setEditBankSearchTerm("");
+                        setIsEditBankListOpen(false);
+                      }}
                       disabled={submittingEdit}
                     >
                       Cancelar
@@ -3001,7 +4280,24 @@ export function DistributorDashboard() {
               {editingUser && ('totalInvested' in editingUser || editingUser.user_type === 'investor') && (
                 <TabsContent value="investments">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Investimentos do Investidor</h3>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <h3 className="text-lg font-semibold">Investimentos do Investidor</h3>
+                      {editingUser?.user_type === 'investor' && (
+                        <Button
+                          size="sm"
+                          onClick={openNewInvestmentModal}
+                          className="w-full md:w-auto"
+                        >
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Adicionar investimento
+                        </Button>
+                      )}
+                    </div>
+                    {editingUser?.user_type === 'investor' && (
+                      <p className="text-sm text-muted-foreground">
+                        Cadastre novos aportes para este investidor a qualquer momento.
+                      </p>
+                    )}
                     
                     {/* Resumo dos investimentos */}
                     {userInvestments.length > 0 && (
@@ -3253,6 +4549,219 @@ export function DistributorDashboard() {
                 </TabsContent>
               )}
             </Tabs>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={showNewInvestmentModal}
+          onOpenChange={(open) => {
+            setShowNewInvestmentModal(open);
+            if (!open) {
+              resetNewInvestmentForm();
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Novo investimento
+              </DialogTitle>
+              <DialogDescription>
+                Configure um novo aporte para o investidor selecionado. Você poderá aprovar o investimento após o pagamento.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-1">
+                  <Label htmlFor="newInvestmentAmount">Valor do investimento</Label>
+                  <Input
+                    id="newInvestmentAmount"
+                    value={newInvestmentForm.amount}
+                    onChange={(event) =>
+                      setNewInvestmentForm((prev) => ({
+                        ...prev,
+                        amount: formatCurrencyInput(event.target.value),
+                      }))
+                    }
+                    placeholder="R$ 5.000,00"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Mínimo de R$ 5.000,00
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="newInvestmentPeriod">Prazo de investimento</Label>
+                  <select
+                    id="newInvestmentPeriod"
+                    value={newInvestmentForm.commitmentPeriod}
+                    onChange={(event) =>
+                      setNewInvestmentForm((prev) => ({
+                        ...prev,
+                        commitmentPeriod: event.target.value,
+                        liquidity: "",
+                      }))
+                    }
+                    className="w-full rounded-md border p-2"
+                  >
+                    <option value="">Selecione o prazo</option>
+                    <option value="3">3 meses</option>
+                    <option value="6">6 meses</option>
+                    <option value="12">12 meses</option>
+                    <option value="24">24 meses</option>
+                    <option value="36">36 meses</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="newInvestmentLiquidity">Liquidez da rentabilidade</Label>
+                  <select
+                    id="newInvestmentLiquidity"
+                    value={newInvestmentForm.liquidity}
+                    onChange={(event) =>
+                      setNewInvestmentForm((prev) => ({
+                        ...prev,
+                        liquidity: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border p-2"
+                    disabled={!newInvestmentForm.commitmentPeriod}
+                  >
+                    <option value="">Selecione a liquidez</option>
+                    {getAvailableLiquidityOptions(
+                      Number(newInvestmentForm.commitmentPeriod)
+                    ).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  {newInvestmentForm.commitmentPeriod &&
+                    newInvestmentForm.liquidity && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Taxa estimada:{" "}
+                        {(getRateByPeriodAndLiquidity(
+                          Number(newInvestmentForm.commitmentPeriod),
+                          newInvestmentForm.liquidity
+                        ) * 100).toFixed(2)}
+                        % a.m.
+                      </p>
+                    )}
+                </div>
+              </div>
+
+              {newInvestmentForm.amount &&
+                newInvestmentForm.commitmentPeriod &&
+                newInvestmentForm.liquidity &&
+                Number.parseFloat(
+                  newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
+                ) >= 5000 && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                    <h4 className="mb-2 font-semibold text-emerald-800">
+                      Projeção do retorno
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Retorno mensal</p>
+                        <p className="text-lg font-semibold text-emerald-700">
+                          {formatCurrency(
+                            Number.parseFloat(
+                              newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
+                            ) *
+                              getRateByPeriodAndLiquidity(
+                                Number(newInvestmentForm.commitmentPeriod),
+                                newInvestmentForm.liquidity
+                              )
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">
+                          Retorno total ({newInvestmentForm.commitmentPeriod} meses)
+                        </p>
+                        <p className="text-lg font-semibold text-emerald-700">
+                          {formatCurrency(
+                            Number.parseFloat(
+                              newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
+                            ) *
+                              getRateByPeriodAndLiquidity(
+                                Number(newInvestmentForm.commitmentPeriod),
+                                newInvestmentForm.liquidity
+                              ) *
+                              Number(newInvestmentForm.commitmentPeriod)
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Valor final estimado</p>
+                        <p className="text-lg font-semibold text-emerald-700">
+                          {formatCurrency(
+                            Number.parseFloat(
+                              newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
+                            ) +
+                              Number.parseFloat(
+                                newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
+                              ) *
+                                getRateByPeriodAndLiquidity(
+                                  Number(newInvestmentForm.commitmentPeriod),
+                                  newInvestmentForm.liquidity
+                                ) *
+                                Number(newInvestmentForm.commitmentPeriod)
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-red-600">
+                      Resgates antes do prazo têm multa de <strong>20%</strong> e perda da rentabilidade.
+                    </p>
+                  </div>
+                )}
+
+              <div className="flex items-center gap-3 rounded-md border border-muted p-3">
+                <Switch
+                  id="generatePixAfterCreate"
+                  checked={generatePixAfterCreate}
+                  onCheckedChange={setGeneratePixAfterCreate}
+                />
+                <Label
+                  htmlFor="generatePixAfterCreate"
+                  className="text-sm text-muted-foreground"
+                >
+                  Gerar QR Code PIX automaticamente após criar o investimento
+                </Label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowNewInvestmentModal(false);
+                    resetNewInvestmentForm();
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleCreateInvestmentForInvestor}
+                  disabled={createInvestmentLoading}
+                >
+                  {createInvestmentLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Registrando...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Registrar investimento
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

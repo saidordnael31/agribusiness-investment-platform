@@ -36,12 +36,20 @@ export function SalesChart({ distributorId }: SalesChartProps) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSalesData();
-  }, [distributorId]);
+useEffect(() => {
+  if (!distributorId || !user) {
+    return;
+  }
+  fetchSalesData();
+}, [distributorId, user]);
 
   const fetchSalesData = async () => {
-    let investorsWithInvestments: any[] = [];
+    if (!distributorId) {
+      setSalesData([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -55,8 +63,13 @@ export function SalesChart({ distributorId }: SalesChartProps) {
         .from("profiles")
         .select("*")
         .eq("user_type", "investor")
-        .eq("parent_id", distributorId)
         .order("created_at", { ascending: false });
+
+      if (user?.role === "escritorio") {
+        query = query.eq("office_id", distributorId);
+      } else {
+        query = query.eq("parent_id", distributorId);
+      }
 
       const { data: investors, error: investorsError } = await query;
 
@@ -66,22 +79,30 @@ export function SalesChart({ distributorId }: SalesChartProps) {
         return;
       }
 
-      if (!investorsError && investors.length > 0) {
-        const profileIds = investors.map((p) => p.id);
+      const profileIds = (investors ?? []).map((p) => p.id);
 
-        const { data: investments, error: investmentsError } = await supabase
-          .from("investments")
-          .select("*")
-          .eq("status", "active")
-          .in("user_id", profileIds); // <-- aqui, não .eq()
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select("*")
+        .eq("status", "active")
+        .in("user_id", profileIds);
 
-        // Junta os dados manualmente
-        const investorsWithInvestmentsMapped = investors.map((profile) => ({
-          ...profile,
-          investments: investments?.filter((inv) => inv.user_id === profile.id),
-        }));
-        investorsWithInvestments = investorsWithInvestmentsMapped;
+      if (investmentsError) {
+        console.error("Erro ao buscar investimentos para o gráfico:", investmentsError);
+        setSalesData([]);
+        return;
       }
+
+      const currentDate = new Date();
+
+      const activeInvestments =
+        investments?.filter((investment) => {
+          if (!investment.payment_date) {
+            return false;
+          }
+          const paymentDate = new Date(investment.payment_date);
+          return paymentDate >= sixMonthsAgo && paymentDate <= currentDate;
+        }) ?? [];
 
       // Processar dados para o gráfico
       const monthlyData: {
@@ -103,8 +124,6 @@ export function SalesChart({ distributorId }: SalesChartProps) {
         "Nov",
         "Dez",
       ];
-      const currentDate = new Date();
-
       for (let i = 5; i >= 0; i--) {
         const date = new Date(
           currentDate.getFullYear(),
@@ -115,29 +134,13 @@ export function SalesChart({ distributorId }: SalesChartProps) {
         monthlyData[monthKey] = { captured: 0, commission: 0 };
       }
 
-      // Processar investidores e extrair valores das notes
-      investorsWithInvestments?.forEach((investor) => {
-        const paymentDate = investor.payment_date ? new Date(investor.payment_date) : new Date(investor.created_at);
+      // Processar investimentos ativos e agrupar por mês da payment_date
+      activeInvestments.forEach((investment) => {
+        const paymentDate = new Date(investment.payment_date);
         const monthKey = months[paymentDate.getMonth()];
 
         if (monthlyData[monthKey]) {
-          // Tentar extrair valor do investimento das notes (formato: "CPF: xxx | External ID: xxx | Investment: xxx")
-          let investmentValue = 0;
-          if (investor.investments?.length > 0) {
-            const investmentMatch = investor.investments.reduce(
-              (acc: number, curr: any) => acc + curr.amount,
-              0
-            );
-            if (investmentMatch) {
-              investmentValue = Number.parseFloat(investmentMatch);
-            }
-          }
-
-          // Se não encontrar nas notes, usar valor padrão mínimo
-          if (investmentValue === 0) {
-            investmentValue = 1000; // Valor mínimo padrão
-          }
-
+          const investmentValue = Number(investment.amount) || 0;
           monthlyData[monthKey].captured += investmentValue;
           monthlyData[monthKey].commission +=
             investmentValue * (user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03);

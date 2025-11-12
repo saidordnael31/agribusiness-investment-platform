@@ -93,6 +93,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const {
       name,
+      full_name,
       email,
       phone,
       address,
@@ -104,7 +105,10 @@ export async function PUT(request: NextRequest) {
       status,
       role,
       cnpj,
-      rg
+      rg,
+      bank_name,
+      bank_branch,
+      bank_account
     } = body
 
     // Campos que podem ser atualizados
@@ -113,6 +117,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (name !== undefined) updateData.full_name = name
+    if (full_name !== undefined) updateData.full_name = full_name
     if (email !== undefined) updateData.email = email
     if (phone !== undefined) updateData.phone = phone
     if (address !== undefined) updateData.address = address
@@ -125,6 +130,9 @@ export async function PUT(request: NextRequest) {
     if (role !== undefined) updateData.role = role
     if (cnpj !== undefined) updateData.cnpj = cnpj
     if (rg !== undefined) updateData.rg = rg
+    if (bank_name !== undefined) updateData.bank_name = bank_name
+    if (bank_branch !== undefined) updateData.bank_branch = bank_branch
+    if (bank_account !== undefined) updateData.bank_account = bank_account
 
     console.log("AQUI")
 

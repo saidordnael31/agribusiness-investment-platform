@@ -79,8 +79,8 @@ export function InvestmentSimulator({ title }: { title?: string }) {
         "mensal": 0.024, // 2.4%
         "semestral": 0.026, // 2.6%
         "anual": 0.03, // 3%
-        "bienal": 0.035, // 3.5%
-        "trienal": 0.035, // 3.5% (igual ao bienal)
+        "bienal": 0.032, // 3.2%
+        "trienal": 0.035, // 3.5%
       },
     };
 
@@ -130,11 +130,11 @@ export function InvestmentSimulator({ title }: { title?: string }) {
   return (
     <Card className="border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #003F28, #00A568)' }}>
       {/* Calculator Icon Background */}
-      <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center overflow-hidden">
+      <div className="absolute right-0 top-0 bottom-0 opacity-20 flex items-center justify-center overflow-hidden pointer-events-none z-0">
         <Calculator className="h-[90%] w-auto text-white" style={{ transform: 'translateX(20%)' }} />
       </div>
       
-      <CardHeader className="text-center pb-4">
+      <CardHeader className="text-center pb-4 relative z-10">
         <CardTitle className="text-white font-urbanist font-extrabold text-[35px] leading-[28px] mb-2">
           SIMULADOR DE INVESTIMENTOS
         </CardTitle>
@@ -143,7 +143,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
         </CardDescription>
       </CardHeader>
       
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 relative z-10">
         <div className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="amount" className="text-white font-ibm-plex-sans font-normal text-lg">

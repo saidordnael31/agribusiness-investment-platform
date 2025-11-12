@@ -188,7 +188,7 @@ export function useDepositFlow() {
         "Mensal": 0.024,
         "Semestral": 0.026,
         "Anual": 0.03,
-        "Bienal": 0.035,
+        "Bienal": 0.032,
         "Trienal": 0.035,
       },
     };
