@@ -18,6 +18,109 @@ export interface CommissionRates {
   assessor: number;    // 3%
 }
 
+export type LiquidityOption = "mensal" | "semestral" | "anual" | "bienal" | "trienal";
+
+interface InvestorRateRule {
+  months: number;
+  liquidity: LiquidityOption;
+  rate: number;
+}
+
+export const INVESTOR_RATE_RULES: InvestorRateRule[] = [
+  { months: 3, liquidity: "mensal", rate: 0.018 },
+  { months: 6, liquidity: "mensal", rate: 0.019 },
+  { months: 6, liquidity: "semestral", rate: 0.02 },
+  { months: 12, liquidity: "mensal", rate: 0.021 },
+  { months: 12, liquidity: "semestral", rate: 0.022 },
+  { months: 12, liquidity: "anual", rate: 0.025 },
+  { months: 24, liquidity: "mensal", rate: 0.023 },
+  { months: 24, liquidity: "semestral", rate: 0.025 },
+  { months: 24, liquidity: "anual", rate: 0.027 },
+  { months: 24, liquidity: "bienal", rate: 0.03 },
+  { months: 36, liquidity: "mensal", rate: 0.024 },
+  { months: 36, liquidity: "semestral", rate: 0.026 },
+  { months: 36, liquidity: "bienal", rate: 0.032 },
+  { months: 36, liquidity: "trienal", rate: 0.035 },
+];
+
+export const INVESTOR_RATE_MATRIX: Record<number, Partial<Record<LiquidityOption, number>>> =
+  INVESTOR_RATE_RULES.reduce((acc, { months, liquidity, rate }) => {
+    if (!acc[months]) {
+      acc[months] = {};
+    }
+    acc[months]![liquidity] = rate;
+    return acc;
+  }, {} as Record<number, Partial<Record<LiquidityOption, number>>>);
+
+export function getAvailableLiquidityOptions(commitmentPeriod: number): LiquidityOption[] {
+  const matrix = INVESTOR_RATE_MATRIX[commitmentPeriod];
+  if (!matrix) {
+    return [];
+  }
+  return Object.keys(matrix) as LiquidityOption[];
+}
+
+export function getInvestorMonthlyRate(commitmentPeriod: number, liquidity: LiquidityOption): number {
+  const matrix = INVESTOR_RATE_MATRIX[commitmentPeriod];
+  if (!matrix) {
+    return 0;
+  }
+  const rate = matrix[liquidity];
+  if (typeof rate === "number") {
+    return rate;
+  }
+  // Fallback: tentar usar liquidez mensal se existir
+  if (matrix.mensal) {
+    return matrix.mensal;
+  }
+  return 0;
+}
+
+export function getLiquidityCycleMonths(liquidity: LiquidityOption): number {
+  switch (liquidity) {
+    case "mensal":
+      return 1;
+    case "semestral":
+      return 6;
+    case "anual":
+      return 12;
+    case "bienal":
+      return 24;
+    case "trienal":
+      return 36;
+    default:
+      return 1;
+  }
+}
+
+export function getRedemptionWindow(commitmentPeriod: number): { months: number; days: number; label: string } {
+  const mapping: Record<number, { days: number; label: string }> = {
+    3: { days: 90, label: "3 meses" },
+    6: { days: 180, label: "6 meses" },
+    12: { days: 360, label: "12 meses" },
+    24: { days: 720, label: "24 meses" },
+    36: { days: 1080, label: "36 meses" },
+  };
+
+  const normalized =
+    mapping[commitmentPeriod] ??
+    (commitmentPeriod < 3
+      ? mapping[3]
+      : commitmentPeriod < 6
+        ? mapping[6]
+        : commitmentPeriod < 12
+          ? mapping[12]
+          : commitmentPeriod < 24
+            ? mapping[24]
+            : mapping[36]);
+
+  return {
+    months: normalized.days / 30,
+    days: normalized.days,
+    label: normalized.label,
+  };
+}
+
 export const COMMISSION_RATES: CommissionRates = {
   investidor: 0.02,    // 2%
   escritorio: 0.01,  // 1%

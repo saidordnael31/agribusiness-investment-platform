@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calculator, DollarSign, Trophy, Gift, TrendingUp, User } from "lucide-react";
+import { Calculator, DollarSign, Gift, TrendingUp, User } from "lucide-react";
 import { 
   calculateRoleCommission, 
   calculateCommissionWithBonus, 
@@ -401,29 +401,6 @@ export function AdvancedCalculator() {
                   </div>
                 </CardContent>
               </Card>
-
-              {results.performanceBonus > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Trophy className="h-4 w-4" />
-                      Bônus de Performance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="p-3 bg-accent/5 rounded-lg">
-                      <span className="text-sm text-muted-foreground">Bônus de Performance</span>
-                      <p className="font-bold text-accent">
-                        {new Intl.NumberFormat("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        }).format(results.performanceBonus)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{results.bonusDescription}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </div>
 
             {/* <Card className="border-2 border-primary">
