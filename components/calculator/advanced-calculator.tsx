@@ -21,7 +21,8 @@ import {
   calculateCommissionBreakdown,
   getAvailableRoles,
   isValidRole,
-  type CommissionCalculation 
+  type CommissionCalculation,
+  type CommissionRates
 } from "@/lib/commission-calculator";
 
 interface UserData {
@@ -72,7 +73,7 @@ export function AdvancedCalculator() {
   const [user, setUser] = useState<UserData | null>(null);
   const [capturedAmount, setCapturedAmount] = useState(100000);
   const [timeHorizon, setTimeHorizon] = useState([12]);
-  const [selectedRole, setSelectedRole] = useState<"investor" | "escritorio" | "assessor">("assessor");
+  const [selectedRole, setSelectedRole] = useState<keyof CommissionRates>("assessor");
   const [results, setResults] = useState<CommissionCalculation & { 
     performanceBonus: number; 
     bonusDescription: string;
@@ -90,10 +91,10 @@ export function AdvancedCalculator() {
       
       // Definir role baseado no tipo de usuário
       if (userData.user_type === "investor") {
-        setSelectedRole("investor");
+        setSelectedRole("investidor");
       } else if (userData.user_type === "escritorio") {
         setSelectedRole("escritorio");
-      } else if (userData.user_type === "assessor") {
+      } else if (userData.user_type === "assessor" || userData.user_type === "distributor") {
         setSelectedRole("assessor");
       }
     }
@@ -182,7 +183,7 @@ export function AdvancedCalculator() {
 
             <div className="space-y-2">
               <Label htmlFor="role">Role/Posição</Label>
-              <Select value={selectedRole} onValueChange={(value: "investor" | "escritorio" | "assessor") => setSelectedRole(value)}>
+              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as keyof CommissionRates)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -369,7 +370,7 @@ export function AdvancedCalculator() {
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
-                      }).format(results.breakdown.investorCommission)}
+                      }).format(results.breakdown.investidorCommission)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">

@@ -16,6 +16,7 @@ export interface CommissionRates {
   investidor: number;    // 2%
   escritorio: number;  // 1%
   assessor: number;    // 3%
+  distribuidor: number; // 1%
 }
 
 export type LiquidityOption = "mensal" | "semestral" | "anual" | "bienal" | "trienal";
@@ -125,6 +126,7 @@ export const COMMISSION_RATES: CommissionRates = {
   investidor: 0.02,    // 2%
   escritorio: 0.01,  // 1%
   assessor: 0.03,    // 3%
+  distribuidor: 0.01, // 1%
 };
 
 export interface CommissionCalculation {
@@ -196,6 +198,7 @@ export function getRoleDisplayName(role: keyof CommissionRates): string {
     investidor: "Investidor",
     escritorio: "Escritório",
     assessor: "Assessor",
+    distribuidor: "Distribuidor",
   };
   
   return roleNames[role];
