@@ -1517,15 +1517,42 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
     try {
       setSubmittingInvestor(true);
+      const supabase = createClient();
 
       // Verificar se o office_id está disponível
-      if (!userOfficeId) {
+      if (!userOfficeId && user?.role === "escritorio") {
         toast({
           title: "Erro de configuração",
           description: "Office ID não encontrado. Tente fazer login novamente.",
           variant: "destructive",
         });
         return;
+      }
+
+      // Buscar o distributor_id baseado no contexto do usuário
+      let distributorId: string | null = null;
+      
+      if (user?.role === "distribuidor") {
+        // Se o usuário é distribuidor, o distributor_id é ele mesmo
+        distributorId = user.id;
+      } else if (user?.role === "escritorio") {
+        // Se o usuário é escritório, buscar o distributor_id do escritório (parent_id)
+        const { data: officeProfile } = await supabase
+          .from("profiles")
+          .select("distributor_id, parent_id")
+          .eq("id", user.id)
+          .single();
+        
+        distributorId = officeProfile?.distributor_id || officeProfile?.parent_id || null;
+      } else if (user?.role === "assessor") {
+        // Se o usuário é assessor, buscar o distributor_id do assessor
+        const { data: assessorProfile } = await supabase
+          .from("profiles")
+          .select("distributor_id")
+          .eq("id", user.id)
+          .single();
+        
+        distributorId = assessorProfile?.distributor_id || null;
       }
 
       // const [firstName, ...lastNameParts] = investorForm.fullName
@@ -1570,7 +1597,6 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       //   result.data
       // );
 
-      const supabase = createClient();
       const pixNote = investorForm.pixKey
         ? ` | PIX: ${investorForm.pixKey}`
         : "";
@@ -1639,6 +1665,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             role: userType === "investor" ? "investidor" : "assessor",
             parent_id: authData.user.user_metadata.parent_id || null,
             office_id: userOfficeId, // Usar o office_id do usuário logado
+            distributor_id: distributorId, // Setar o distributor_id
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
             notes: `Usuário criado via dashboard do assessor ${user?.name}${pixNote}${bankNote}`,

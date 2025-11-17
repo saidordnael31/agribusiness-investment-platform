@@ -118,6 +118,19 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
     try {
       const password = generatePassword()
 
+      // Buscar o distributor_id do assessor
+      const { data: assessorProfile, error: assessorError } = await supabase
+        .from("profiles")
+        .select("distributor_id")
+        .eq("id", assessorId)
+        .single()
+
+      if (assessorError) {
+        console.error("Erro ao buscar assessor:", assessorError)
+      }
+
+      const distributorId = assessorProfile?.distributor_id || null
+
       // Criar usuário no Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -129,6 +142,7 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
             user_type: "investor",
             role: "investidor",
             parent_id: assessorId,
+            distributor_id: distributorId,
             cpf_cnpj: formData.cpf,
             phone: formData.phone,
             birth_date: formData.birthDate,
@@ -141,6 +155,31 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
       })
 
       if (authError) throw authError
+
+      // Criar perfil com distributor_id
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            id: authData.user.id,
+            email: authData.user.email,
+            full_name: authData.user.user_metadata.name,
+            user_type: "investor",
+            role: "investidor",
+            parent_id: assessorId,
+            distributor_id: distributorId,
+            phone: authData.user.user_metadata.phone || null,
+            cnpj: authData.user.user_metadata.cpf_cnpj || null,
+            is_active: true,
+          },
+        ])
+        .select()
+        .single()
+
+      if (profileError) {
+        console.error("Erro ao criar perfil:", profileError)
+        // Não lançar erro aqui, pois o trigger pode criar o perfil
+      }
 
       // Enviar credenciais por email
       await sendCredentialsEmail(formData.email, password, formData.name)

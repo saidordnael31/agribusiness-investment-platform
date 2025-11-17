@@ -212,6 +212,28 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
 
       console.log("[v0] Usuário registrado com sucesso no Supabase:", authData);
 
+      // Buscar distributor_id se houver parent_id
+      let distributorId: string | null = null;
+      const parentId = authData.user.user_metadata.parent_id;
+      
+      if (parentId) {
+        const { data: parentProfile } = await supabase
+          .from("profiles")
+          .select("distributor_id, role")
+          .eq("id", parentId)
+          .single();
+        
+        if (parentProfile) {
+          // Se o parent é distribuidor, usar o próprio parent_id
+          if (parentProfile.role === "distribuidor") {
+            distributorId = parentId;
+          } else {
+            // Caso contrário, usar o distributor_id do parent
+            distributorId = parentProfile.distributor_id || null;
+          }
+        }
+      }
+
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .insert([
@@ -222,6 +244,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
             user_type: authData.user.user_metadata.user_type,
             role: "investidor",
             parent_id: authData.user.user_metadata.parent_id || null,
+            distributor_id: distributorId,
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
             notes: "Cadastro de profile via login",
