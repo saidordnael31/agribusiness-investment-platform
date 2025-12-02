@@ -65,17 +65,19 @@ export function CommissionSimulator() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-[#003F28] text-xl font-bold flex items-center gap-2">
           <Calculator className="h-5 w-5" />
           Simulador de Comissões
         </CardTitle>
-        <CardDescription>Calcule suas comissões baseadas na captação de investimentos</CardDescription>
+        <CardDescription className="text-gray-600 text-sm mt-1">
+          Calcule suas comissões baseadas na captação de investimentos
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="captured">Valor Total Captado</Label>
+          <Label htmlFor="captured" className="text-white">Valor Total Captado</Label>
           <Input
             id="captured"
             type="number"
@@ -83,18 +85,23 @@ export function CommissionSimulator() {
             value={capturedAmount}
             onChange={(e) => setCapturedAmount(e.target.value)}
             min="0"
+            className="bg-[#D9D9D9]/45 border-gray-300 text-[#003F28]"
           />
-          <p className="text-xs text-muted-foreground">Digite o valor total que você pretende captar</p>
+          <p className="text-xs text-white/70">Digite o valor total que você pretende captar</p>
         </div>
 
-        <Button onClick={calculateCommissions} className="w-full">
+        <Button 
+          onClick={calculateCommissions} 
+          className="w-full bg-[#01223F] hover:bg-[#01223F]/80 text-white"
+        >
+          <Calculator className="h-4 w-4 mr-2" />
           Calcular Comissões
         </Button>
 
         {results && (
           <div className="space-y-4">
-            <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-              <p className="text-sm text-muted-foreground">
+            <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border border-gray-300">
+              <p className="text-sm text-gray-600">
                 {user?.role === "assessor"
                   ? "Comissão Mensal (Assessor)"
                   : user?.role === "escritorio"
@@ -103,27 +110,27 @@ export function CommissionSimulator() {
                   ? "Comissão Mensal (Investidor)"
                   : "Comissão Mensal"}
               </p>
-              <div className="mt-1 text-2xl font-bold text-primary">
+              <div className="mt-1 text-2xl font-bold text-[#00BC6E]">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
                 }).format(results.monthlyCommission)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-gray-600 mt-1">
                 Equivalente a {user?.role === "investidor" ? "2% a.m." : user?.role === "escritorio" ? "1% a.m." : "3% a.m."}
               </p>
             </div>
 
             {results.performanceBonus > 0 && (
-              <div className="p-4 bg-accent/5 rounded-lg border border-accent/20">
-                <p className="text-sm text-muted-foreground">Bônus de Performance</p>
-                <p className="text-xl font-bold text-accent">
+              <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border border-gray-300">
+                <p className="text-sm text-gray-600">Bônus de Performance</p>
+                <p className="text-xl font-bold text-[#00BC6E]">
                   {new Intl.NumberFormat("pt-BR", {
                     style: "currency",
                     currency: "BRL",
                   }).format(results.performanceBonus)}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-gray-600">
                   {Number.parseFloat(capturedAmount) >= 1000000
                     ? "Meta 2 atingida: +3% adicional"
                     : Number.parseFloat(capturedAmount) >= 500000
@@ -133,11 +140,11 @@ export function CommissionSimulator() {
               </div>
             )}
 
-            <div className="p-4 bg-muted rounded-lg border-2 border-primary">
-              <p className="text-sm text-muted-foreground">
+            <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border-2 border-[#003F28]">
+              <p className="text-sm text-gray-600">
                 Total Anual {results.performanceBonus > 0 ? "(com bônus)" : ""}
               </p>
-              <p className="text-3xl font-bold text-primary">
+              <p className="text-3xl font-bold text-[#003F28]">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
@@ -147,20 +154,20 @@ export function CommissionSimulator() {
           </div>
         )}
 
-        <div className="bg-muted p-4 rounded-lg">
-          <h4 className="font-semibold mb-2">Estrutura de Comissões:</h4>
-          <div className="text-sm text-muted-foreground">
+        <div className="bg-[#D9D9D9]/45 p-4 rounded-lg border border-gray-300">
+          <h4 className="font-semibold mb-2 text-[#003F28]">Estrutura de Comissões:</h4>
+          <div className="text-sm text-gray-600">
             {user?.role === "investidor" ? (
-              <p>• <span className="font-medium text-blue-600">Sua Comissão (Investidor):</span> 2% ao mês sobre valor investido</p>
+              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Investidor):</span> 2% ao mês sobre valor investido</p>
             ) : user?.role === "escritorio" ? (
-              <p>• <span className="font-medium text-green-600">Sua Comissão (Escritório):</span> 1% ao mês sobre valor investido</p>
+              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Escritório):</span> 1% ao mês sobre valor investido</p>
             ) : user?.role === "assessor" ? (
-              <p>• <span className="font-medium text-purple-600">Sua Comissão (Assessor):</span> 3% ao mês sobre valor investido</p>
+              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Assessor):</span> 3% ao mês sobre valor investido</p>
             ) : (
               <div className="space-y-1">
-                <p>• <span className="font-medium text-blue-600">Investidor:</span> 2% ao mês sobre valor investido</p>
-                <p>• <span className="font-medium text-green-600">Escritório:</span> 1% ao mês sobre valor investido</p>
-                <p>• <span className="font-medium text-purple-600">Assessor:</span> 3% ao mês sobre valor investido</p>
+                <p>• <span className="font-medium text-[#003F28]">Investidor:</span> 2% ao mês sobre valor investido</p>
+                <p>• <span className="font-medium text-[#003F28]">Escritório:</span> 1% ao mês sobre valor investido</p>
+                <p>• <span className="font-medium text-[#003F28]">Assessor:</span> 3% ao mês sobre valor investido</p>
               </div>
             )}
           </div>

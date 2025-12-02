@@ -45,6 +45,7 @@ import {
   X,
   MapPin,
   RefreshCw,
+  Mail,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
@@ -63,6 +64,9 @@ import { InvestmentSimulator } from "../investor/investment-simulator";
 import { PDFViewer } from "../contracts/pdf-viewer";
 
 const REGISTRATION_STEPS = ["Gerais", "Endereço", "Dados Bancários"];
+
+const REGISTRATION_INPUT_CLASS =
+  "h-11 rounded-xl border border-white/50 bg-white/40 text-[#064E3B] placeholder:text-slate-500 shadow-[0_1px_0_rgba(255,255,255,0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-emerald-500";
 
 const createEmptyInvestorForm = () => ({
   fullName: "",
@@ -85,8 +89,6 @@ const createEmptyInvestorForm = () => ({
   bankName: "",
   agency: "",
   accountNumber: "",
-  password: "",
-  confirmPassword: "",
   investmentValue: "",
   rescueTerm: "",
   commitmentPeriod: "",
@@ -333,6 +335,9 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     performanceBonus: {
       meta1Achieved: false,
       meta2Achieved: false,
+      meta3Achieved: false,
+      meta4Achieved: false,
+      meta5Achieved: false,
       additionalRate: 0,
     },
     ranking: {
@@ -545,21 +550,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         if (!investorForm.nationality) missing.push("Nacionalidade");
         if (!investorForm.maritalStatus) missing.push("Estado civil");
         if (!investorForm.profession) missing.push("Profissão");
-        if (!investorForm.password) missing.push("Senha");
-        if (!investorForm.confirmPassword) missing.push("Confirmar senha");
-
-        if (
-          investorForm.password &&
-          investorForm.confirmPassword &&
-          investorForm.password !== investorForm.confirmPassword
-        ) {
-          toast({
-            title: "Senhas não coincidem",
-            description: "A senha e confirmação de senha devem ser iguais.",
-            variant: "destructive",
-          });
-          return false;
-        }
+        // Removido: validação de senha - senha será gerada automaticamente
         break;
       }
       case 1: {
@@ -637,6 +628,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="fullName">Nome Completo *</Label>
               <Input
                 id="fullName"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.fullName}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -654,6 +646,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Input
                 id="email"
                 type="email"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.email}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -670,6 +663,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="phone">Telefone</Label>
               <Input
                 id="phone"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.phone}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -685,6 +679,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="cpf">CPF *</Label>
               <Input
                 id="cpf"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.cpf}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -701,6 +696,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="rg">RG *</Label>
               <Input
                 id="rg"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.rg}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -717,6 +713,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="nationality">Nacionalidade *</Label>
               <Input
                 id="nationality"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.nationality}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -740,7 +737,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     maritalStatus: e.target.value,
                   }))
                 }
-                className="w-full rounded-md border p-2"
+                className="w-full h-11 rounded-xl border border-white/50 bg-white/40 px-3 text-sm text-[#064E3B] shadow-[0_1px_0_rgba(255,255,255,0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
                 required
               >
                 <option value="">Selecione o estado civil</option>
@@ -768,40 +765,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               />
             </div>
 
-            <div>
-              <Label htmlFor="password">Senha *</Label>
-              <Input
-                id="password"
-                type="password"
-                value={investorForm.password}
-                onChange={(e) =>
-                  setInvestorForm((prev) => ({
-                    ...prev,
-                    password: e.target.value,
-                  }))
-                }
-                placeholder="Senha do investidor"
-                required
-                minLength={6}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={investorForm.confirmPassword}
-                onChange={(e) =>
-                  setInvestorForm((prev) => ({
-                    ...prev,
-                    confirmPassword: e.target.value,
-                  }))
-                }
-                placeholder="Confirme a senha"
-                required
-                minLength={6}
-              />
+            <div className="md:col-span-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-700">
+                <Mail className="h-4 w-4" />
+                <p className="text-sm">
+                  Uma senha temporária será gerada automaticamente e enviada por email ao usuário.
+                </p>
+              </div>
             </div>
           </div>
         );
@@ -812,6 +782,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="street">Rua *</Label>
               <Input
                 id="street"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.street}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -828,6 +799,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="number">Número *</Label>
               <Input
                 id="number"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.number}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -844,6 +816,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="complement">Complemento</Label>
               <Input
                 id="complement"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.complement}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -859,6 +832,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="neighborhood">Bairro *</Label>
               <Input
                 id="neighborhood"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.neighborhood}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -875,6 +849,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="city">Cidade *</Label>
               <Input
                 id="city"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.city}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -891,6 +866,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="state">Estado *</Label>
               <Input
                 id="state"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.state}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -908,6 +884,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <div className="flex gap-2">
                 <Input
                   id="zipCode"
+                  className={`${REGISTRATION_INPUT_CLASS} flex-1`}
                   value={investorForm.zipCode}
                   onChange={(e) => handleZipChange(e.target.value)}
                   onKeyDown={(e) => {
@@ -953,6 +930,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <Label htmlFor="pixKey">Chave PIX ou Endereço USDT</Label>
               <Input
                 id="pixKey"
+                className={REGISTRATION_INPUT_CLASS}
                 value={investorForm.pixKey}
                 onChange={(e) =>
                   setInvestorForm((prev) => ({
@@ -969,6 +947,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <div className="relative">
                 <Input
                   value={bankSearchTerm}
+                  className={REGISTRATION_INPUT_CLASS}
                   onChange={(e) => {
                     setBankSearchTerm(e.target.value);
                     setInvestorForm((prev) => ({
@@ -1092,6 +1071,9 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       performanceBonus: {
         meta1Achieved: totalCaptured >= 3000000,
         meta2Achieved: totalCaptured >= 7000000,
+        meta3Achieved: totalCaptured >= 15000000,
+        meta4Achieved: totalCaptured >= 30000000,
+        meta5Achieved: totalCaptured >= 50000000,
         additionalRate: totalCaptured >= 7000000 ? 5 : 0,
       },
       ranking: {
@@ -1106,8 +1088,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   const showContractsTab = user?.role === "assessor" || user?.role === "escritorio";
   const tabsGridCols =
     user?.role === "escritorio" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
-  const overviewGridCols =
-    user?.role === "escritorio" ? "lg:grid-cols-5" : "lg:grid-cols-4";
+  const overviewGridCols = "lg:grid-cols-5";
   const filteredContractsOverview = useMemo(() => {
     if (!contractsSearchTerm.trim()) {
       return contractsOverview;
@@ -1259,9 +1240,17 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       const transformedInvestors: Investor[] = (
         profilesWithInvestments || []
       ).map((profile) => {
+        // Considerar apenas investimentos ativos com commitment_period >= 360 dias (D+360)
         const totalInvested =
           profile.investments?.reduce(
-            (sum: number, inv: any) => sum + (inv.amount || 0),
+            (sum: number, inv: any) => {
+              // Filtrar apenas investimentos ativos com commitment_period >= 360 dias (12 meses)
+              const commitmentPeriodDays = (inv.commitment_period || 0) * 30;
+              if (inv.status === "active" && commitmentPeriodDays >= 360) {
+                return sum + (inv.amount || 0);
+              }
+              return sum;
+            },
             0
           ) || 0;
 
@@ -1439,7 +1428,6 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     if (
       !investorForm.fullName ||
       !investorForm.email ||
-      !investorForm.password ||
       !investorForm.rg ||
       !investorForm.nationality ||
       !investorForm.maritalStatus ||
@@ -1497,23 +1485,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       }
     }
 
-    if (investorForm.password !== investorForm.confirmPassword) {
-      toast({
-        title: "Senhas não coincidem",
-        description: "A senha e confirmação de senha devem ser iguais.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (investorForm.password.length < 6) {
-      toast({
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 6 caracteres.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Removido: validação de senha - senha será gerada automaticamente
 
     try {
       setSubmittingInvestor(true);
@@ -1607,9 +1579,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         : "";
       const metadataNotes = `CPF: ${investorForm.cpf}${pixNote}${bankNote}`;
 
+      // Gerar senha temporária
+      const { generateTemporaryPassword } = await import("@/lib/password-utils");
+      const temporaryPassword = generateTemporaryPassword(12);
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: investorForm.email,
-        password: investorForm.password,
+        password: temporaryPassword,
         options: {
           emailRedirectTo:
             process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
@@ -1684,6 +1660,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             bank_name: investorForm.bankName || null,
             bank_branch: investorForm.agency || null,
             bank_account: investorForm.accountNumber || null,
+            is_pass_temp: true, // Marcar que precisa trocar senha no primeiro login
           },
         ])
         .select()
@@ -1697,9 +1674,34 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         console.log("Perfil criado:", profileData);
       }
 
+      // Enviar senha temporária por email
+      try {
+        const sendPasswordResponse = await fetch("/api/auth/send-temporary-password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: investorForm.email,
+            userName: investorForm.fullName,
+            password: temporaryPassword,
+          }),
+        });
+
+        const sendPasswordData = await sendPasswordResponse.json();
+        
+        if (sendPasswordData.success) {
+          console.log("Senha temporária enviada com sucesso");
+        } else {
+          console.error("Erro ao enviar senha temporária:", sendPasswordData.error);
+        }
+      } catch (passwordError) {
+        console.error("Erro ao enviar senha temporária:", passwordError);
+      }
+
       toast({
         title: userType === "investor" ? "Investidor cadastrado!" : "Assessor cadastrado!",
-        description: `${investorForm.fullName} foi cadastrado com sucesso.`,
+        description: `${investorForm.fullName} foi cadastrado com sucesso. Senha temporária enviada por email.`,
       });
       
       resetInvestorForm();
@@ -2796,138 +2798,151 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   if (!user) return null;
 
   const meta1Progress = Math.min(
-    (distributorData.totalCaptured / 500000) * 100,
+    (distributorData.totalCaptured / 3000000) * 100,
     100
   );
   const meta2Progress = Math.min(
-    (distributorData.totalCaptured / 1000000) * 100,
+    (distributorData.totalCaptured / 7000000) * 100,
+    100
+  );
+  const meta3Progress = Math.min(
+    (distributorData.totalCaptured / 15000000) * 100,
+    100
+  );
+  const meta4Progress = Math.min(
+    (distributorData.totalCaptured / 30000000) * 100,
+    100
+  );
+  const meta5Progress = Math.min(
+    (distributorData.totalCaptured / 50000000) * 100,
     100
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <div className="container mx-auto px-4 py-6 md:py-8">
         {/* Welcome Section */}
         <div className="mb-6 md:mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
             {user && user.role === "escritorio"
               ? "Dashboard do Escritório"
+              : user && user.role === "distribuidor"
+              ? "Dashboard do Distribuidor"
               : "Dashboard do Assessor"}
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-white/80">
             Acompanhe suas vendas, comissões e performance
           </p>
         </div>
 
         {/* Overview Cards */}
         <div className={`grid grid-cols-1 sm:grid-cols-2 ${overviewGridCols} gap-4 md:gap-6 mb-6 md:mb-8`}>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+          <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+            <div className="absolute right-0 top-0 opacity-10">
+              <DollarSign className="h-24 w-24" />
+            </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium text-white">
                 Total Captado
               </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-primary">
+            <CardContent className="relative z-10">
+              <div className="text-xl md:text-2xl font-bold text-white">
                 {formatCurrency(distributorData.totalCaptured)}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+          <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+            <div className="absolute right-0 top-0 opacity-10">
+              <TrendingUp className="h-24 w-24" />
+            </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium text-white">
                 Comissão Mensal
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-secondary">
+            <CardContent className="relative z-10">
+              <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
                 {formatCurrency(distributorData.monthlyCommission)}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-white/70 mt-1">
                 Baseado na captação atual
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+          <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+            <div className="absolute right-0 top-0 opacity-10">
+              <Users className="h-24 w-24" />
+            </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium text-white">
                 Meus Investidores
               </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl md:text-2xl font-bold text-accent">
+            <CardContent className="relative z-10">
+              <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
                 {myInvestors.length}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-white/70 mt-1">
                 Investidores cadastrados por você
               </p>
             </CardContent>
           </Card>
 
-          {user?.role === "escritorio" && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+          {user?.role === "escritorio" || user?.role === "assessor" ? (
+            <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+              <div className="absolute right-0 top-0 opacity-10">
+                <UserCheck className="h-24 w-24" />
+              </div>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-medium text-white">
                   Meus Assessores
                 </CardTitle>
-                <UserCheck className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
-                <div className="text-xl md:text-2xl font-bold text-accent">
-                  {myAdvisors.length}
+              <CardContent className="relative z-10">
+                <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
+                  {user?.role === "escritorio" ? myAdvisors.length : 0}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-white/70 mt-1">
                   Assessores cadastrados por você
                 </p>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ranking</CardTitle>
-              <Award className="h-4 w-4 text-muted-foreground" />
+          <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+            <div className="absolute right-0 top-0 opacity-10">
+              <Award className="h-24 w-24" />
+            </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="relative z-10">
               {user?.role === "assessor" ? (
                 <>
-                  <div className="text-xl md:text-2xl font-bold">
+                  <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
                     {distributorData.ranking.position > 0
                       ? `#${distributorData.ranking.position}`
                       : "-"}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-white/70 mt-1">
                     {distributorData.ranking.totalDistributors > 0
-                      ? `de ${distributorData.ranking.totalDistributors} assessores do escritório`
+                      ? `de ${distributorData.ranking.totalDistributors} Distribuidores`
                       : "Aguardando dados"}
                   </p>
-                  {distributorData.ranking.topAdvisorName && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Top 1: {distributorData.ranking.topAdvisorName} (
-                      {formatCurrency(distributorData.ranking.topAdvisorTotal)})
-                    </p>
-                  )}
                 </>
               ) : (
                 <>
-                  <div className="text-lg md:text-2xl font-bold leading-tight">
+                  <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
                     {distributorData.ranking.topAdvisorName || "-"}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-white/70 mt-1">
                     {distributorData.ranking.totalDistributors > 0
                       ? `Total de ${distributorData.ranking.totalDistributors} assessores`
                       : "Aguardando dados"}
                   </p>
-                  {distributorData.ranking.topAdvisorName && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Captação líder: {formatCurrency(distributorData.ranking.topAdvisorTotal)}
-                    </p>
-                  )}
                 </>
               )}
             </CardContent>
@@ -2936,39 +2951,39 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
         {/* Commission Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-1 gap-4 md:gap-6 mb-6 md:mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Divisão de Comissões</CardTitle>
-              <CardDescription>
+          <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-[#003F28] text-xl font-bold">Divisão de Comissões</CardTitle>
+              <CardDescription className="text-gray-600 text-sm mt-1">
                 Distribuição mensal das comissões
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
-                <div>
-                  <h4 className="font-semibold text-primary">Assessor (3%)</h4>
-                  <p className="text-sm text-muted-foreground">
+            <CardContent className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg">
+                <div className="flex-1">
+                  <h4 className="font-bold text-[#003F28] text-base mb-1">Assessor (3%)</h4>
+                  <p className="text-sm text-gray-600">
                     Sua parte da comissão (Até 3 milhões)
                   </p>
                 </div>
-                <div className="text-left sm:text-right">
-                  <p className="font-bold text-primary">
+                <div className="text-left sm:text-right mt-2 sm:mt-0">
+                  <p className="font-bold text-[#003F28] text-lg">
                     {formatCurrency(distributorData.advisorShare)}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-border rounded-lg space-y-2 sm:space-y-0">
-                <div>
-                  <h4 className="font-semibold text-secondary">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg">
+                <div className="flex-1">
+                  <h4 className="font-bold text-[#01223F] text-base mb-1">
                     Escritório (1%)
                   </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Parte do escritório (Até 3 milhões)
+                  <p className="text-sm text-gray-600">
+                    Parte do escritório (até R$ 3 milhões)
                   </p>
                 </div>
-                <div className="text-left sm:text-right">
-                  <p className="font-bold text-secondary">
+                <div className="text-left sm:text-right mt-2 sm:mt-0">
+                  <p className="font-bold text-[#01223F] text-lg">
                     {formatCurrency(distributorData.officeShare)}
                   </p>
                 </div>
@@ -2994,17 +3009,17 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           </Card>
 
           {user.email === "felipe@aethosconsultoria.com.br" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Metas de Performance</CardTitle>
-                <CardDescription>
+            <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-[#003F28] text-xl font-bold">Metas de Performance</CardTitle>
+                <CardDescription className="text-gray-600 text-sm mt-1">
                   Progresso para bônus adicionais
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
+              <CardContent className="space-y-3">
+                <div className="p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-bold text-[#003F28]">
                       Meta 1: R$ 3.000.000,00
                     </span>
                     <Badge
@@ -3020,16 +3035,16 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     </Badge>
                   </div>
                   <Progress value={meta1Progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-600">
                     Captados em contratos de D+360 dias até 06/12/2025, bônus
                     fixo de R$ 150.000,00 (cento e cinquenta mil reais) a ser
                     pago até 20/12/2025
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-bold text-[#003F28]">
                       Meta 2: R$ 7.000.000,00
                     </span>
                     <Badge
@@ -3045,7 +3060,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     </Badge>
                   </div>
                   <Progress value={meta2Progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-600">
                     Captados em contratos de D+360 dias, bônus de R$ 250.000,00
                     (duzentos e cinquenta mil reais) para a aquisição de
                     carteiras de assessores ou absorção de escritório menor em
@@ -3054,50 +3069,50 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-bold text-[#003F28]">
                       Meta 3: R$ 15.000.000,00
                     </span>
                     <Badge
                       variant={
-                        distributorData.performanceBonus.meta2Achieved
+                        distributorData.performanceBonus.meta3Achieved
                           ? "default"
                           : "secondary"
                       }
                     >
-                      {distributorData.performanceBonus.meta2Achieved
+                      {distributorData.performanceBonus.meta3Achieved
                         ? "Atingida"
                         : "Pendente"}
                     </Badge>
                   </div>
-                  <Progress value={meta2Progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
-                    Captados em contratos de D+360 dias, bônus de fixo de R$
+                  <Progress value={meta3Progress} className="h-2" />
+                  <p className="text-xs text-gray-600">
+                    Captados em contratos de D+360 dias, bônus fixo de R$
                     300.000,00 (trezentos mil reais) após 120 dias do
                     atingimento da meta.
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-bold text-[#003F28]">
                       Meta 4: R$ 30.000.000,00
                     </span>
                     <Badge
                       variant={
-                        distributorData.performanceBonus.meta2Achieved
+                        distributorData.performanceBonus.meta4Achieved
                           ? "default"
                           : "secondary"
                       }
                     >
-                      {distributorData.performanceBonus.meta2Achieved
+                      {distributorData.performanceBonus.meta4Achieved
                         ? "Atingida"
                         : "Pendente"}
                     </Badge>
                   </div>
-                  <Progress value={meta2Progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
+                  <Progress value={meta4Progress} className="h-2" />
+                  <p className="text-xs text-gray-600">
                     Captados em contratos de D+360 dias, bônus de R$ 350.000,00
                     (trezentos e cinquenta mil reais) para a aquisição de
                     carteiras de assessores ou absorção de escritório menor em
@@ -3106,53 +3121,41 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-1 sm:space-y-0">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-bold text-[#003F28]">
                       Meta 5: R$ 50.000.000,00
                     </span>
                     <Badge
                       variant={
-                        distributorData.performanceBonus.meta2Achieved
+                        distributorData.performanceBonus.meta5Achieved
                           ? "default"
                           : "secondary"
                       }
                     >
-                      {distributorData.performanceBonus.meta2Achieved
+                      {distributorData.performanceBonus.meta5Achieved
                         ? "Atingida"
                         : "Pendente"}
                     </Badge>
                   </div>
-                  <Progress value={meta2Progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
+                  <Progress value={meta5Progress} className="h-2" />
+                  <p className="text-xs text-gray-600">
                     Captados em contratos de D+360 dias, bônus de participação
                     societária minoritária (equity) de 5% (cinco por cento) em
                     estrutura da AKINTEC, devendo ser ajustado por aditivo
                     contratual.
                   </p>
                 </div>
-
-                {distributorData.ranking.poolShare > 0 && (
-                  <div className="p-4 bg-muted rounded-lg">
-                    <h4 className="font-semibold mb-2">Pool Nacional</h4>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Sua participação no pool dos top escritórios:
-                    </p>
-                    <p className="font-bold text-accent">
-                      {formatCurrency(distributorData.ranking.poolShare)}
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
         </div>
 
         {/* Sales Chart */}
-        <Card className="mb-6 md:mb-8">
-          <CardHeader>
-            <CardTitle>Evolução de Vendas</CardTitle>
-            <CardDescription>
+        <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg mb-6 md:mb-8">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-[#003F28] text-xl font-bold">Evolução de Vendas</CardTitle>
+            <CardDescription className="text-gray-600 text-sm mt-1">
               Captação mensal nos últimos 6 meses
             </CardDescription>
           </CardHeader>
@@ -3587,38 +3590,38 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           )}
 
           <TabsContent value="register">
-            <Card>
+            <Card className="border border-[#C7F3E1] bg-[#E9FBF5] shadow-sm rounded-2xl">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#064E3B] text-xl font-semibold">
                   <UserPlus className="w-5 h-5" />
                   {user.role === "escritorio" ? "Cadastrar Assessor" : "Cadastrar Novo Investidor"}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-[#047857]/80">
                   {user.role === "escritorio" 
                     ? "Cadastre um novo assessor para o seu escritório."
                     : "Cadastre um novo investidor na plataforma. Ele será automaticamente associado a você como assessor."
                   }
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-2">
                 <form
                   onSubmit={handleCreateInvestor}
                   className="max-w-full space-y-6"
                 >
                   {/* Switch para escolher tipo de usuário (apenas para escritório) */}
                   {user.role === "escritorio" ? null : user.role === "assessor" ? (
-                    <div className="rounded-lg border bg-muted/50 p-4">
-                      <Label className="mb-0 block text-base font-semibold">
+                    <div className="rounded-xl border border-[#C7F3E1] bg-white/80 p-4">
+                      <Label className="mb-0 block text-base font-semibold text-[#064E3B]">
                         Investidor
                       </Label>
                     </div>
                   ) : (
-                    <div className="rounded-lg border bg-muted/50 p-4">
-                      <Label className="mb-3 block text-base font-semibold">
+                    <div className="rounded-xl border border-[#C7F3E1] bg-white/80 p-4">
+                      <Label className="mb-3 block text-base font-semibold text-[#064E3B]">
                         Tipo de Usuário
                       </Label>
                       <div className="flex gap-4">
-                        <label className="flex items-center space-x-2 cursor-pointer">
+                        <label className="flex items-center space-x-2 cursor-pointer text-[#064E3B]">
                           <input
                             type="radio"
                             name="userType"
@@ -3628,11 +3631,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                               setUserType(e.target.value as "investor" | "advisor");
                               setCurrentStep(0);
                             }}
-                            className="w-4 h-4"
+                            className="w-4 h-4 accent-[#047857]"
                           />
                           <span>Investidor</span>
                         </label>
-                        <label className="flex items-center space-x-2 cursor-pointer">
+                        <label className="flex items-center space-x-2 cursor-pointer text-[#064E3B]">
                           <input
                             type="radio"
                             name="userType"
@@ -3642,7 +3645,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                               setUserType(e.target.value as "investor" | "advisor");
                               setCurrentStep(0);
                             }}
-                            className="w-4 h-4"
+                            className="w-4 h-4 accent-[#047857]"
                           />
                           <span>Assessor</span>
                         </label>
@@ -3659,12 +3662,12 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                         return (
                           <div
                             key={step}
-                            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
+                            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
                               isActive
-                                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                                ? "border-[#047857] bg-white text-[#064E3B] shadow-sm"
                                 : isCompleted
-                                ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                                : "border-border text-muted-foreground"
+                                ? "border-[#A7F3D0] bg-[#DCFCE7] text-[#047857]"
+                                : "border-transparent bg-transparent text-slate-500"
                             }`}
                           >
                             <span className="font-semibold">{index + 1}</span>

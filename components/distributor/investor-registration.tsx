@@ -76,29 +76,42 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
   }
 
   const sendCredentialsEmail = async (email: string, password: string, investorName: string) => {
-    // Simulação de envio de email - em produção, usar serviço real
-    console.log(`
-      Para: ${email}
-      Assunto: Bem-vindo ao Clube de Investimentos AGRINVEST
-      
-      Olá ${investorName},
-      
-      Seu assessor ${assessorName} cadastrou você na plataforma AGRINVEST.
-      
-      Suas credenciais de acesso:
-      Email: ${email}
-      Senha: ${password}
-      
-      Acesse: ${window.location.origin}/login
-      
-      Atenciosamente,
-      Equipe AGRINVEST
-    `)
+    try {
+      const response = await fetch("/api/auth/send-temporary-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          userName: investorName,
+          password: password,
+        }),
+      });
 
-    toast({
-      title: "Email enviado",
-      description: `Credenciais enviadas para ${email}`,
-    })
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: "Email enviado",
+          description: `Senha temporária enviada para ${email}`,
+        });
+      } else {
+        console.error("Erro ao enviar email:", data.error);
+        toast({
+          title: "Aviso",
+          description: `Credenciais criadas, mas houve erro ao enviar email. Entre em contato com o suporte.`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao enviar email:", error);
+      toast({
+        title: "Aviso",
+        description: `Credenciais criadas, mas houve erro ao enviar email. Entre em contato com o suporte.`,
+        variant: "destructive",
+      });
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -171,6 +184,7 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
             is_active: true,
+            is_pass_temp: true, // Marcar que precisa trocar senha no primeiro login
           },
         ])
         .select()

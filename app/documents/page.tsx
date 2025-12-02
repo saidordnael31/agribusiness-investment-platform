@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { DistributorLayout } from "@/components/layout/distributor-layout";
 
 interface UserData {
   name: string;
@@ -88,7 +89,8 @@ export default function DocumentsPage() {
     }
   };
 
-  return (
+  const isDistributor = user?.user_type === "distributor";
+  const content = (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-4">
@@ -804,5 +806,13 @@ export default function DocumentsPage() {
         </section>
       )}
     </div>
+  );
+
+  return isDistributor ? (
+    <DistributorLayout>
+      {content}
+    </DistributorLayout>
+  ) : (
+    content
   );
 }

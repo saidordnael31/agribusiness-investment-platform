@@ -33,6 +33,8 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCheck,
+  Mail,
+  MapPin,
 } from "lucide-react";
 import {
   Dialog,
@@ -43,7 +45,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { RegisterForm } from "../../auth/register-form";
+import { AdminRegisterForm } from "./admin-register-form";
 import { UserProfileView } from "../user-profile-view";
 import { UserProfileEdit } from "../user-profile-edit";
 import { useUserManager } from "./useUserManager";
@@ -58,11 +60,7 @@ export function UserManager() {
     currentPage,
     totalPages,
     totalUsers,
-    showInvestorModal,
     showCreateUserModal,
-    investorForm,
-    submittingInvestor,
-    assessors,
     showQRModal,
     qrCodeData,
     generatingQR,
@@ -71,9 +69,7 @@ export function UserManager() {
     selectedUserId,
     selectedUserData,
     loadingUserData,
-    setShowInvestorModal,
     setShowCreateUserModal,
-    setInvestorForm,
     setShowQRModal,
     setShowProfileViewModal,
     setShowProfileEditModal,
@@ -81,8 +77,6 @@ export function UserManager() {
     handleTypeFilterChange,
     handleStatusFilterChange,
     handlePageChange,
-    handleCreateInvestor,
-    formatCurrencyInput,
     copyPixCode,
     handleViewProfile,
     handleEditProfile,
@@ -115,198 +109,20 @@ export function UserManager() {
               Cadastrar Usuário
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Cadastrar Novo Usuário</DialogTitle>
               <DialogDescription>
                 Cadastre um novo usuário na plataforma.
               </DialogDescription>
             </DialogHeader>
-            <RegisterForm closeModal={() => setShowCreateUserModal(false)} />
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={showInvestorModal} onOpenChange={setShowInvestorModal}>
-          <DialogTrigger asChild>
-            <Button className="flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              Cadastrar Investidor
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Cadastrar Novo Investidor</DialogTitle>
-              <DialogDescription>
-                Cadastre um novo investidor na plataforma. Um QR Code PIX será
-                gerado para pagamento.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateInvestor} className="space-y-4">
-              <div>
-                <Label htmlFor="fullName">Nome Completo *</Label>
-                <Input
-                  id="fullName"
-                  value={investorForm.fullName}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      fullName: e.target.value,
-                    }))
-                  }
-                  placeholder="Nome completo do investidor"
-                  required
+            <div className="flex-1 overflow-y-auto pr-2">
+              {showCreateUserModal && (
+                <AdminRegisterForm 
+                  closeModal={() => setShowCreateUserModal(false)} 
                 />
-              </div>
-
-              <div>
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={investorForm.email}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      email: e.target.value,
-                    }))
-                  }
-                  placeholder="email@exemplo.com"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="phone">Telefone</Label>
-                <Input
-                  id="phone"
-                  value={investorForm.phone}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      phone: e.target.value,
-                    }))
-                  }
-                  placeholder="(11) 99999-9999"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="cpf">CPF *</Label>
-                <Input
-                  id="cpf"
-                  value={investorForm.cpf}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      cpf: e.target.value,
-                    }))
-                  }
-                  placeholder="000.000.000-00"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="investmentValue">
-                  Valor do Investimento * (mínimo R$ 5.000,00)
-                </Label>
-                <Input
-                  id="investmentValue"
-                  value={investorForm.investmentValue}
-                  onChange={(e) => {
-                    const formatted = formatCurrencyInput(e.target.value);
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      investmentValue: formatted,
-                    }));
-                  }}
-                  placeholder="R$ 5.000,00"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="assessorId">Assessor Responsável</Label>
-                <select
-                  id="assessorId"
-                  value={investorForm.assessorId}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      assessorId: e.target.value,
-                    }))
-                  }
-                  className="w-full mt-1 px-3 py-2 border rounded-lg"
-                >
-                  <option value="">Selecione um assessor</option>
-                  {assessors.map((assessor) => (
-                    <option key={assessor.id} value={assessor.id}>
-                      {assessor.name} ({assessor.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <Label htmlFor="password">Senha *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={investorForm.password}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      password: e.target.value,
-                    }))
-                  }
-                  placeholder="Senha do investidor"
-                  required
-                  minLength={6}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={investorForm.confirmPassword}
-                  onChange={(e) =>
-                    setInvestorForm((prev) => ({
-                      ...prev,
-                      confirmPassword: e.target.value,
-                    }))
-                  }
-                  placeholder="Confirme a senha"
-                  required
-                  minLength={6}
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowInvestorModal(false)}
-                  disabled={submittingInvestor}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={submittingInvestor}>
-                  {submittingInvestor ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Cadastrando...
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Cadastrar
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>

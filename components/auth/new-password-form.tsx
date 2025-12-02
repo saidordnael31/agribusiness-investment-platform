@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,41 +12,73 @@ export function NewPasswordForm() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isFirstTime, setIsFirstTime] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Verificar se o usuário está autenticado via Supabase
-    const checkSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error("Erro ao verificar sessão:", error);
+    // Verificar se é obrigatório (primeira senha) ou reset normal
+    const force = searchParams.get("force") === "true";
+    
+    if (force) {
+      // É primeira senha, verificar se está logado
+      setIsFirstTime(true);
+      checkSessionForFirstPassword();
+    } else {
+      // É reset normal, precisa de sessão válida
+      checkSessionForReset();
+    }
+  }, [router, supabase.auth, toast, searchParams]);
+
+  const checkSessionForFirstPassword = async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error || !session) {
+      // Para primeira senha, usuário pode estar logado mas sem sessão persistida
+      // Verificar através do localStorage
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
         toast({
-          title: "Erro de autenticação",
-          description: "Erro ao verificar sua sessão. Tente novamente.",
+          title: "Acesso necessário",
+          description: "Faça login primeiro para definir sua senha.",
           variant: "destructive",
         });
         router.push("/login");
         return;
       }
+    }
 
-      if (!session) {
-        toast({
-          title: "Link inválido",
-          description: "Link inválido ou expirado. Redirecionando para o login.",
-          variant: "destructive",
-        });
-        router.push("/login");
-        return;
-      }
+    console.log("Usuário acessando primeira definição de senha");
+  };
 
-      console.log("Usuário autenticado para reset de senha:", session.user.email);
-    };
+  const checkSessionForReset = async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error("Erro ao verificar sessão:", error);
+      toast({
+        title: "Erro de autenticação",
+        description: "Erro ao verificar sua sessão. Tente novamente.",
+        variant: "destructive",
+      });
+      router.push("/login");
+      return;
+    }
 
-    checkSession();
-  }, [router, supabase.auth, toast]);
+    if (!session) {
+      toast({
+        title: "Link inválido",
+        description: "Link inválido ou expirado. Redirecionando para o login.",
+        variant: "destructive",
+      });
+      router.push("/login");
+      return;
+    }
+
+    console.log("Usuário autenticado para reset de senha:", session.user.email);
+  };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,21 +104,75 @@ export function NewPasswordForm() {
     setIsLoading(true);
     
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      // Atualizar senha no Supabase
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       
-      if (error) {
+      if (updateError) {
         toast({
           title: "Erro ao atualizar senha",
-          description: error.message,
+          description: updateError.message,
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Senha atualizada com sucesso!",
-          description: "Sua senha foi alterada. Redirecionando para o login.",
-        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Remover flag is_pass_temp do profile (para primeira senha ou reset) e redirecionar
+      const userStr = localStorage.getItem("user");
+      let userData = null;
+      
+      if (userStr) {
+        try {
+          userData = JSON.parse(userStr);
+          
+          // Chamar API para remover flag
+          const clearFlagResponse = await fetch("/api/auth/clear-password-change-flag", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId: userData.id }),
+          });
+
+          const clearFlagData = await clearFlagResponse.json();
+          if (clearFlagData.success) {
+            console.log("Flag is_pass_temp removida do profile");
+          } else {
+            console.error("Erro ao remover flag:", clearFlagData.error);
+          }
+        } catch (error) {
+          console.error("Erro ao processar user data:", error);
+        }
+      }
+
+      toast({
+        title: "Senha atualizada com sucesso!",
+        description: isFirstTime 
+          ? "Sua senha foi definida com sucesso! Redirecionando para o dashboard..."
+          : "Sua senha foi alterada. Redirecionando...",
+      });
+      
+      // Redirecionar para dashboard baseado no tipo de usuário
+      if (userData) {
+        let redirectPath = "/investor";
         
-        router.push("/investor");
+        if (userData.user_type === "distributor") {
+          redirectPath = "/distributor";
+        } else if (userData.user_type === "admin") {
+          redirectPath = "/admin";
+        } else if (userData.user_type === "investor") {
+          redirectPath = "/investor";
+        }
+        
+        // Aguardar um pouco para mostrar o toast antes de redirecionar
+        setTimeout(() => {
+          router.push(redirectPath);
+        }, 1500);
+      } else {
+        // Se não tiver dados do usuário, redirecionar para login
+        setTimeout(() => {
+          router.push("/login");
+        }, 1500);
       }
     } catch (error: any) {
       toast({
@@ -143,7 +229,9 @@ export function NewPasswordForm() {
           verticalAlign: 'middle'
         }}
       >
-        {isLoading ? "Atualizando..." : "Atualizar Senha"}
+        {isLoading 
+          ? (isFirstTime ? "Definindo..." : "Atualizando...") 
+          : (isFirstTime ? "Definir Senha" : "Atualizar Senha")}
       </Button>
     </form>
   );

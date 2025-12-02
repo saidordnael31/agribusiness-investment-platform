@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { ProtectedRoute } from "@/components/auth/protected-route"
+import { DistributorLayout } from "@/components/layout/distributor-layout"
 import { formatCurrency } from "@/lib/utils"
 
 interface ApprovalRequest {
@@ -187,9 +188,29 @@ function ApprovalsContent() {
 }
 
 export default function ApprovalsPage() {
+  const [userType, setUserType] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userStr = localStorage.getItem("user")
+      if (userStr) {
+        const userData = JSON.parse(userStr)
+        setUserType(userData.user_type)
+      }
+    }
+  }, [])
+
+  const isDistributor = userType === "distributor"
+
   return (
     <ProtectedRoute allowedTypes={["distributor"]} requiresHierarchy="office">
-      <ApprovalsContent />
+      {isDistributor ? (
+        <DistributorLayout>
+          <ApprovalsContent />
+        </DistributorLayout>
+      ) : (
+        <ApprovalsContent />
+      )}
     </ProtectedRoute>
   )
 }

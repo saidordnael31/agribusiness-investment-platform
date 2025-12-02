@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,8 @@ export function Navbar() {
   const pathname = usePathname();
   const { toast } = useToast();
 
-  useEffect(() => {
+  // Função para carregar usuário do localStorage
+  const loadUser = () => {
     const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
@@ -67,8 +69,37 @@ export function Navbar() {
       } catch (error) {
         console.error("Erro ao parsear dados do usuário:", error);
         localStorage.removeItem("user");
+        setUser(null);
       }
+    } else {
+      setUser(null);
     }
+  };
+
+  useEffect(() => {
+    // Carregar usuário inicialmente
+    loadUser();
+
+    // Listener para mudanças no localStorage (quando login é feito)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "user") {
+        loadUser();
+      }
+    };
+
+    // Listener para eventos customizados (para mesma aba)
+    const handleUserUpdate = () => {
+      loadUser();
+    };
+
+    // Adicionar listeners
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("userUpdated", handleUserUpdate);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("userUpdated", handleUserUpdate);
+    };
   }, []);
 
   // Fechar menu quando clicar fora
@@ -121,17 +152,31 @@ export function Navbar() {
 
   const getUserTypeLabel = () => {
     if (!user) return "";
-    switch (user.user_type) {
+    
+    // Usar role se disponível, senão usar user_type como fallback
+    const role = user.role || user.user_type;
+    
+    // Formatar role para exibição
+    switch (role) {
       case "investor":
+      case "investidor":
         return "Investidor";
+      case "assessor":
+        return "Assessor";
+      case "escritorio":
+        return "Escritório";
+      case "distributor":
+      case "distribuidor":
+        return "Distribuidor";
       case "admin":
         return "Admin";
-      case "distributor":
-      case "advisor":
-      case "assessor":
-        return "Distribuidor";
+      case "gestor":
+        return "Gestor";
+      case "lider":
+        return "Líder";
       default:
-        return user.user_type;
+        // Capitalizar primeira letra se não houver match
+        return role.charAt(0).toUpperCase() + role.slice(1);
     }
   };
 
@@ -153,18 +198,34 @@ export function Navbar() {
   // Detectar se está nas páginas de redefinir senha
   const isPasswordResetPage = pathname === '/resetPassword' || pathname === '/newPassword';
   
+  // Verificar se é distribuidor, assessor ou escritório
+  const isDistributorUser = user && (
+    user.user_type === "distributor" || 
+    user.user_type === "advisor" || 
+    user.user_type === "assessor" ||
+    user.role === "escritorio" ||
+    user.role === "assessor" ||
+    user.role === "distribuidor"
+  );
+  
+  // Cor da navbar: #01223F para distribuidores/assessores/escritórios/investidores, #003F28 para outros
+  const navbarBgColor = (isDistributorUser || user?.user_type === "investor") ? 'bg-[#01223F]' : 'bg-[#003F28]';
+  
   return (
     <header 
-      className={`sticky top-0 z-50 w-full border-b ${isPasswordResetPage ? 'border-transparent bg-transparent' : 'border-white/20 bg-[#003F28]'}`} 
+      className={`sticky top-0 z-50 w-full border-b ${isPasswordResetPage ? 'border-transparent bg-transparent' : `border-white/20 ${navbarBgColor}`}`} 
     >
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <TrendingUp className="h-8 w-8 text-white" />
-            <span className="text-xl font-bold text-white">
-              Agrinvest
-            </span>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/images/logo_branco.png"
+              alt="Agrinvest"
+              width={120}
+              height={32}
+              className="h-8 w-auto"
+            />
           </Link>
 
           {/* Desktop Navigation */}

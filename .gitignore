@@ -25,3 +25,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# OTP codes and email files (development only)
+.otp-codes.json
+.email-verification-codes.json
+/emails/

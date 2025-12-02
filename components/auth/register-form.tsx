@@ -25,8 +25,6 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    password: "",
-    confirmPassword: "",
     type: "distributor",
     role: "",
     parentId: "",
@@ -163,15 +161,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Erro no cadastro",
-        description: "As senhas não coincidem.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
+    // Removido: validação de senha - senha será gerada automaticamente
 
     if (formData.role !== "escritorio" && !formData.parentId) {
       toast({
@@ -188,9 +178,13 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
 
       const supabase = createClient();
 
+      // Gerar senha temporária
+      const { generateTemporaryPassword } = await import("@/lib/password-utils");
+      const temporaryPassword = generateTemporaryPassword(12);
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
-        password: formData.password,
+        password: temporaryPassword,
         options: {
           emailRedirectTo: `${window.location.origin}/login`,
           data: {
@@ -201,6 +195,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
             cpf_cnpj: formData.cpfCnpj,
             phone: formData.phone,
             notes: formData.notes,
+            is_pass_temp: true, // Marcar que precisa trocar senha
           },
         },
       });
@@ -250,6 +245,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
             notes: "Cadastro de profile via login",
             hierarchy_level: "advisor",
             is_active: true,
+            is_pass_temp: true, // Marcar que precisa trocar senha no primeiro login
           },
         ])
         .select()
@@ -263,12 +259,74 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
         console.log("Perfil criado:", profileData);
       }
 
-      toast({
-        title: "Cadastro realizado com sucesso!",
-        description: `Peça a ${formData.name} para verificar o email e confirmar a conta antes de fazer login.`,
-      });
+      // Enviar senha temporária por email
+      try {
+        const sendPasswordResponse = await fetch("/api/auth/send-temporary-password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            userName: formData.name,
+            password: temporaryPassword,
+          }),
+        });
 
-      closeModal();
+        const sendPasswordData = await sendPasswordResponse.json();
+        
+        if (sendPasswordData.success) {
+          console.log("[v0] Senha temporária enviada com sucesso");
+        } else {
+          console.error("[v0] Erro ao enviar senha temporária:", sendPasswordData.error);
+        }
+      } catch (passwordError) {
+        console.error("[v0] Erro ao enviar senha temporária:", passwordError);
+      }
+
+      // Enviar código de verificação por email
+      try {
+        const sendCodeResponse = await fetch("/api/auth/verify-email/send-code", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            userId: authData.user.id,
+          }),
+        });
+
+        const sendCodeData = await sendCodeResponse.json();
+        
+        if (sendCodeData.success) {
+          console.log("[v0] Código de verificação enviado com sucesso");
+          
+          toast({
+            title: "Cadastro realizado com sucesso!",
+            description: "Senha temporária e código de verificação enviados para seu email. Verifique sua caixa de entrada.",
+          });
+
+          closeModal();
+          
+          // Redirecionar para página de verificação de email
+          router.push(`/verify-email?email=${encodeURIComponent(formData.email)}&userId=${encodeURIComponent(authData.user.id)}`);
+        } else {
+          console.error("[v0] Erro ao enviar código de verificação:", sendCodeData.error);
+          toast({
+            title: "Cadastro realizado!",
+            description: "Conta criada e senha temporária enviada. Entre em contato para receber o código de verificação.",
+          });
+          closeModal();
+        }
+      } catch (codeError) {
+        console.error("[v0] Erro ao enviar código de verificação:", codeError);
+        toast({
+          title: "Cadastro realizado!",
+          description: "Conta criada e senha temporária enviada. Entre em contato para receber o código de verificação.",
+        });
+        closeModal();
+      }
     } catch (error: any) {
       console.log("[v0] Erro no registro:", error);
       toast({
@@ -460,32 +518,13 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="password">Senha</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            value={formData.password}
-            onChange={(e) =>
-              setFormData({ ...formData, password: e.target.value })
-            }
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            placeholder="••••••••"
-            value={formData.confirmPassword}
-            onChange={(e) =>
-              setFormData({ ...formData, confirmPassword: e.target.value })
-            }
-            required
-          />
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center gap-2 text-blue-800">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="text-sm font-medium">
+              Uma senha temporária será gerada e enviada por email ao usuário.
+            </p>
+          </div>
         </div>
 
         <Button

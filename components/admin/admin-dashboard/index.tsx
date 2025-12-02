@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Users, DollarSign, TrendingUp, Gift, Target, BarChart3, Shield, AlertCircle, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react"
+import { Users, DollarSign, TrendingUp, Target, BarChart3, Shield, AlertCircle, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react"
 import { PromotionManager } from "../promotion-manager"
 import { BonificationManager } from "../bonification-manager"
 import { UserManager } from "../user-manager"
@@ -153,36 +153,6 @@ export function AdminDashboard() {
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Gift className="w-5 h-5" />
-                  Promoções Ativas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                    <div>
-                      <p className="font-medium">Promoção Ano Novo</p>
-                      <p className="text-sm text-muted-foreground">+0.4% a.m. até 31/03</p>
-                    </div>
-                    <Badge variant="secondary">Ativa</Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
-                    <div>
-                      <p className="font-medium">Indicação Premiada</p>
-                      <p className="text-sm text-muted-foreground">+0.2% por indicação</p>
-                    </div>
-                    <Badge variant="secondary">Ativa</Badge>
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full mt-4 bg-transparent">
-                  Gerenciar Promoções
-                </Button>
-              </CardContent>
-            </Card>
-
             {user.email === "felipe@aethosconsultoria.com.br" && (
               <Card>
                 <CardHeader>

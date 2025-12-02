@@ -2,6 +2,7 @@
 
 import { DistributorDashboard } from "@/components/distributor/distributor-dashboard"
 import { DistribuidorDashboard } from "@/components/distributor/distribuidor-dashboard"
+import { DistributorLayout } from "@/components/layout/distributor-layout"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -39,11 +40,13 @@ export default function DistributorPage() {
   if (loading) {
     return (
       <ProtectedRoute allowedTypes={["distributor"]}>
-        <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center py-8">
-            <div className="text-muted-foreground">Carregando...</div>
+        <DistributorLayout>
+          <div className="container mx-auto p-6">
+            <div className="flex items-center justify-center py-8">
+              <div className="text-white">Carregando...</div>
+            </div>
           </div>
-        </div>
+        </DistributorLayout>
       </ProtectedRoute>
     )
   }
@@ -52,7 +55,9 @@ export default function DistributorPage() {
   if (role === "distribuidor") {
     return (
       <ProtectedRoute allowedTypes={["distributor"]}>
-        <DistribuidorDashboard />
+        <DistributorLayout>
+          <DistribuidorDashboard />
+        </DistributorLayout>
       </ProtectedRoute>
     )
   }
@@ -60,7 +65,9 @@ export default function DistributorPage() {
   // Caso contrário, usar o dashboard padrão (para assessores/escritórios)
   return (
     <ProtectedRoute allowedTypes={["distributor"]}>
-      <DistributorDashboard />
+      <DistributorLayout>
+        <DistributorDashboard />
+      </DistributorLayout>
     </ProtectedRoute>
   )
 }

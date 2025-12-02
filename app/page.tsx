@@ -72,6 +72,24 @@ export default function HomePage() {
             </Badge>
           </div>
 
+          <div className="flex justify-center">
+            <Button
+              asChild
+              size="lg"
+              className="bg-[#00BC6E] hover:bg-[#00A568] text-white font-bold px-8 py-6 text-lg font-ibm-plex-sans"
+            >
+              <a
+                href={calendlyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2"
+              >
+                <Calendar className="w-5 h-5" />
+                Agendar Reunião
+              </a>
+            </Button>
+          </div>
+
         </div>
       </section>
 

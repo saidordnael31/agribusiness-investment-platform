@@ -94,6 +94,9 @@ export function LoginForm() {
         console.log("[v0] Saving user data:", userData);
         localStorage.setItem("user", JSON.stringify(userData));
 
+        // Disparar evento para atualizar navbar
+        window.dispatchEvent(new Event("userUpdated"));
+
         toast({
           title: "Login realizado com sucesso!",
           description: `Bem-vindo à plataforma Akintec, ${userInfo.name}!`,
@@ -261,6 +264,22 @@ export function LoginForm() {
       console.log("[v0] Saving Supabase user data:", userData);
       localStorage.setItem("user", JSON.stringify(userData));
 
+      // Disparar evento para atualizar navbar
+      window.dispatchEvent(new Event("userUpdated"));
+
+      // Verificar se o usuário precisa trocar a senha
+      if (profile.is_pass_temp === true) {
+        console.log("[v0] Usuário precisa trocar senha. Redirecionando para /newPassword");
+        toast({
+          title: "Troca de senha obrigatória",
+          description: "Você precisa criar uma nova senha para continuar.",
+        });
+        
+        // Redirecionar para página de nova senha
+        router.push("/newPassword?force=true");
+        return;
+      }
+
       toast({
         title: "Login realizado com sucesso!",
         description: `Bem-vindo à plataforma Akintec, ${profile.full_name}!`, // Corrigido: usar full_name
@@ -341,10 +360,10 @@ export function LoginForm() {
         </div>
         <div className="text-center">
           <Link
-            href="/magicLink"
+            href="/loginWithCode"
             className="text-sm text-[#00BC6E] hover:underline font-ibm-plex-sans font-medium"
           >
-            Entrar com Magic Link
+            Entrar com Código
           </Link>
         </div>
       </div>

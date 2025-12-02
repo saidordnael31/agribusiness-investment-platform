@@ -27,9 +27,23 @@ interface InvestorForm {
   email: string;
   phone: string;
   cpf: string;
+  rg: string;
+  nationality: string;
+  maritalStatus: string;
+  profession: string;
+  street: string;
+  number: string;
+  complement: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  pixKey: string;
+  bankCode: string;
+  bankName: string;
+  agency: string;
+  accountNumber: string;
   assessorId: string;
-  password: string;
-  confirmPassword: string;
   investmentValue: string;
 }
 
@@ -55,11 +69,31 @@ export function useUserManager() {
     email: "",
     phone: "",
     cpf: "",
+    rg: "",
+    nationality: "",
+    maritalStatus: "",
+    profession: "",
+    street: "",
+    number: "",
+    complement: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    pixKey: "",
+    bankCode: "",
+    bankName: "",
+    agency: "",
+    accountNumber: "",
     assessorId: "",
-    password: "",
-    confirmPassword: "",
     investmentValue: "",
   });
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
+  const [isBankListOpen, setIsBankListOpen] = useState(false);
+  const [bankSearchTerm, setBankSearchTerm] = useState("");
   const [submittingInvestor, setSubmittingInvestor] = useState(false);
   const [assessors, setAssessors] = useState<User[]>([]);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -241,13 +275,129 @@ export function useUserManager() {
     }
   };
 
+  const REGISTRATION_STEPS = ["Gerais", "Endereço", "Dados Bancários"];
+
+  const validateStep = (stepIndex: number) => {
+    const missing: string[] = [];
+
+    switch (stepIndex) {
+      case 0: {
+        if (!investorForm.fullName) missing.push("Nome completo");
+        if (!investorForm.email) missing.push("Email");
+        if (!investorForm.cpf) missing.push("CPF");
+        if (!investorForm.rg) missing.push("RG");
+        if (!investorForm.nationality) missing.push("Nacionalidade");
+        if (!investorForm.maritalStatus) missing.push("Estado civil");
+        if (!investorForm.profession) missing.push("Profissão");
+        break;
+      }
+      case 1: {
+        if (!investorForm.street) missing.push("Rua");
+        if (!investorForm.number) missing.push("Número");
+        if (!investorForm.neighborhood) missing.push("Bairro");
+        if (!investorForm.city) missing.push("Cidade");
+        if (!investorForm.state) missing.push("Estado");
+        if (!investorForm.zipCode) {
+          missing.push("CEP");
+        } else if (investorForm.zipCode.replace(/\D/g, "").length !== 8) {
+          toast({
+            title: "CEP inválido",
+            description: "Informe um CEP com 8 dígitos.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        break;
+      }
+      case 2: {
+        const hasPix = Boolean(investorForm.pixKey?.trim());
+        const hasBankData =
+          Boolean(investorForm.bankCode) ||
+          Boolean(investorForm.agency) ||
+          Boolean(investorForm.accountNumber);
+
+        if (!hasPix && !hasBankData) {
+          missing.push("Chave PIX ou dados bancários");
+        }
+
+        if (hasBankData) {
+          const bankMissing: string[] = [];
+          if (!investorForm.bankCode) bankMissing.push("Banco");
+          if (!investorForm.agency) bankMissing.push("Agência");
+          if (!investorForm.accountNumber) bankMissing.push("Conta");
+
+          if (bankMissing.length > 0) {
+            missing.push(...bankMissing);
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    if (missing.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Preencha os campos: ${missing.join(", ")}.`,
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (!validateStep(currentStep)) return;
+    setCurrentStep((prev) => Math.min(prev + 1, REGISTRATION_STEPS.length - 1));
+  };
+
+  const handlePreviousStep = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const resetInvestorForm = () => {
+    setInvestorForm({
+      fullName: "",
+      email: "",
+      phone: "",
+      cpf: "",
+      rg: "",
+      nationality: "",
+      maritalStatus: "",
+      profession: "",
+      street: "",
+      number: "",
+      complement: "",
+      neighborhood: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      pixKey: "",
+      bankCode: "",
+      bankName: "",
+      agency: "",
+      accountNumber: "",
+      assessorId: "",
+      investmentValue: "",
+    });
+    setCurrentStep(0);
+  };
+
   const handleCreateInvestor = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateStep(currentStep)) return;
+
+    if (currentStep < REGISTRATION_STEPS.length - 1) {
+      handleNextStep();
+      return;
+    }
 
     if (
       !investorForm.fullName ||
       !investorForm.email ||
-      !investorForm.password ||
       !investorForm.investmentValue
     ) {
       toast({
@@ -271,23 +421,7 @@ export function useUserManager() {
       return;
     }
 
-    if (investorForm.password !== investorForm.confirmPassword) {
-      toast({
-        title: "Senhas não coincidem",
-        description: "A senha e confirmação de senha devem ser iguais.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (investorForm.password.length < 6) {
-      toast({
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 6 caracteres.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Removido: validação de senha - senha será gerada automaticamente
 
     try {
       setSubmittingInvestor(true);
@@ -297,11 +431,15 @@ export function useUserManager() {
         .split(" ");
       const lastName = lastNameParts.join(" ") || firstName;
 
+      // Gerar senha temporária
+      const { generateTemporaryPassword } = await import("@/lib/password-utils");
+      const temporaryPassword = generateTemporaryPassword(12);
+
       const registrationData = {
         firstName,
         lastName,
         email: investorForm.email,
-        password: investorForm.password,
+        password: temporaryPassword,
         phone: investorForm.phone,
         cpf: investorForm.cpf,
         rg: "",
@@ -345,9 +483,34 @@ export function useUserManager() {
         );
       }
 
+      // Enviar senha temporária por email
+      try {
+        const sendPasswordResponse = await fetch("/api/auth/send-temporary-password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: investorForm.email,
+            userName: investorForm.fullName,
+            password: temporaryPassword,
+          }),
+        });
+
+        const sendPasswordData = await sendPasswordResponse.json();
+        
+        if (sendPasswordData.success) {
+          console.log("Senha temporária enviada com sucesso");
+        } else {
+          console.error("Erro ao enviar senha temporária:", sendPasswordData.error);
+        }
+      } catch (passwordError) {
+        console.error("Erro ao enviar senha temporária:", passwordError);
+      }
+
       toast({
         title: "Investidor cadastrado!",
-        description: `${investorForm.fullName} foi cadastrado com sucesso. Gerando QR Code PIX...`,
+        description: `${investorForm.fullName} foi cadastrado com sucesso. Senha temporária enviada por email. Gerando QR Code PIX...`,
       });
 
       await generateQRCode(investmentValue, investorForm.cpf);
@@ -357,11 +520,26 @@ export function useUserManager() {
         email: "",
         phone: "",
         cpf: "",
+        rg: "",
+        nationality: "",
+        maritalStatus: "",
+        profession: "",
+        street: "",
+        number: "",
+        complement: "",
+        neighborhood: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        pixKey: "",
+        bankCode: "",
+        bankName: "",
+        agency: "",
+        accountNumber: "",
         assessorId: "",
-        password: "",
-        confirmPassword: "",
         investmentValue: "",
       });
+      setCurrentStep(0);
       setShowInvestorModal(false);
 
       setTimeout(() => fetchUsers(), 2000);
@@ -518,6 +696,136 @@ export function useUserManager() {
     setShowProfileEditModal(true);
   };
 
+  const sanitizeCep = (value: string) => value.replace(/\D/g, "").slice(0, 8);
+
+  const formatCep = (value: string) => {
+    const digits = sanitizeCep(value);
+    if (digits.length > 5) {
+      return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+    }
+    return digits;
+  };
+
+  const handleZipChange = (value: string) => {
+    const formatted = formatCep(value);
+    setInvestorForm((prev) => ({
+      ...prev,
+      zipCode: formatted,
+    }));
+  };
+
+  const fetchAddressByCep = async () => {
+    const cepDigits = sanitizeCep(investorForm.zipCode);
+
+    if (cepDigits.length !== 8) {
+      toast({
+        title: "CEP inválido",
+        description: "Informe um CEP com 8 dígitos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsFetchingCep(true);
+      setInvestorForm((prev) => ({
+        ...prev,
+        street: "",
+        number: "",
+        complement: "",
+        neighborhood: "",
+        city: "",
+        state: "",
+      }));
+
+      const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      if (!response.ok) {
+        throw new Error("Não foi possível consultar o CEP.");
+      }
+
+      const data = await response.json();
+      if (data?.erro) {
+        throw new Error("CEP não encontrado.");
+      }
+
+      setInvestorForm((prev) => ({
+        ...prev,
+        street: data.logradouro || "",
+        number: "",
+        complement: data.complemento || "",
+        neighborhood: data.bairro || "",
+        city: data.localidade || "",
+        state: data.uf || "",
+      }));
+
+      toast({
+        title: "Endereço atualizado",
+        description: "Os campos de endereço foram preenchidos com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao buscar CEP",
+        description: error.message || "Tente novamente mais tarde.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingCep(false);
+    }
+  };
+
+  const handleSelectBank = (bankCode: string) => {
+    const bank = banks.find((item) => item.code === bankCode);
+    setInvestorForm((prev) => ({
+      ...prev,
+      bankCode,
+      bankName: bank?.name || "",
+    }));
+    setBankSearchTerm(bank ? `${bank.code} - ${bank.name}` : "");
+    setIsBankListOpen(false);
+  };
+
+  useEffect(() => {
+    const loadBanks = async () => {
+      try {
+        setIsLoadingBanks(true);
+        const response = await fetch("https://brasilapi.com.br/api/banks/v1");
+        if (!response.ok) {
+          throw new Error("Não foi possível carregar a lista de bancos.");
+        }
+        const data = await response.json();
+        const mappedBanks = Array.isArray(data)
+          ? data
+              .filter((bank: any) => bank?.code && bank?.name)
+              .map((bank: any) => ({
+                code: String(bank.code),
+                name: String(bank.name),
+              }))
+              .sort((a: any, b: any) => a.name.localeCompare(b.name))
+          : [];
+        setBanks(mappedBanks);
+      } catch (error: any) {
+        console.error("Erro ao carregar bancos:", error);
+        toast({
+          title: "Erro ao carregar bancos",
+          description: error.message || "Tente novamente mais tarde.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingBanks(false);
+      }
+    };
+
+    loadBanks();
+  }, [toast]);
+
+  useEffect(() => {
+    if (!investorForm.bankCode) return;
+    const selected = banks.find((bank) => bank.code === investorForm.bankCode);
+    if (selected) {
+      setBankSearchTerm(`${selected.code} - ${selected.name}`);
+    }
+  }, [investorForm.bankCode, banks]);
+
   useEffect(() => {
     fetchUsers(1, "", "all", "all");
     fetchAssessors();
@@ -570,6 +878,23 @@ export function useUserManager() {
     getStatusColor,
     getStatusLabel,
     getTypeLabel,
+    currentStep,
+    setCurrentStep,
+    REGISTRATION_STEPS,
+    validateStep,
+    handleNextStep,
+    handlePreviousStep,
+    resetInvestorForm,
+    isFetchingCep,
+    banks,
+    isLoadingBanks,
+    isBankListOpen,
+    bankSearchTerm,
+    handleZipChange,
+    fetchAddressByCep,
+    handleSelectBank,
+    setBankSearchTerm,
+    setIsBankListOpen,
   };
 }
 

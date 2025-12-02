@@ -31,6 +31,7 @@ import {
   Edit,
   Eye,
   MapPin,
+  Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
@@ -100,8 +101,6 @@ export function DistribuidorDashboard() {
     email: "",
     phone: "",
     cpfCnpj: "",
-    password: "",
-    confirmPassword: "",
     street: "",
     number: "",
     complement: "",
@@ -507,21 +506,7 @@ export function DistribuidorDashboard() {
         if (!escritorioForm.fullName) missing.push("Nome completo");
         if (!escritorioForm.email) missing.push("Email");
         if (!escritorioForm.cpfCnpj) missing.push("CPF/CNPJ");
-        if (!escritorioForm.password) missing.push("Senha");
-        if (!escritorioForm.confirmPassword) missing.push("Confirmar senha");
-
-        if (
-          escritorioForm.password &&
-          escritorioForm.confirmPassword &&
-          escritorioForm.password !== escritorioForm.confirmPassword
-        ) {
-          toast({
-            title: "Senhas não coincidem",
-            description: "A senha e confirmação de senha devem ser iguais.",
-            variant: "destructive",
-          });
-          return false;
-        }
+        // Removido: validação de senha - senha será gerada automaticamente
         break;
       }
       case 1: {
@@ -600,8 +585,6 @@ export function DistribuidorDashboard() {
       email: "",
       phone: "",
       cpfCnpj: "",
-      password: "",
-      confirmPassword: "",
       street: "",
       number: "",
       complement: "",
@@ -692,40 +675,13 @@ export function DistribuidorDashboard() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="password">Senha *</Label>
-              <Input
-                id="password"
-                type="password"
-                value={escritorioForm.password}
-                onChange={(e) =>
-                  setEscritorioForm((prev) => ({
-                    ...prev,
-                    password: e.target.value,
-                  }))
-                }
-                placeholder="Mínimo 6 caracteres"
-                required
-                minLength={6}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={escritorioForm.confirmPassword}
-                onChange={(e) =>
-                  setEscritorioForm((prev) => ({
-                    ...prev,
-                    confirmPassword: e.target.value,
-                  }))
-                }
-                placeholder="Confirme a senha"
-                required
-                minLength={6}
-              />
+            <div className="md:col-span-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-700">
+                <Mail className="h-4 w-4" />
+                <p className="text-sm">
+                  Uma senha temporária será gerada automaticamente e enviada por email ao escritório.
+                </p>
+              </div>
             </div>
           </div>
         );
@@ -1018,9 +974,13 @@ export function DistribuidorDashboard() {
         : "";
       const metadataNotes = `CPF/CNPJ: ${escritorioForm.cpfCnpj}${pixNote}${bankNote}`;
 
+      // Gerar senha temporária
+      const { generateTemporaryPassword } = await import("@/lib/password-utils");
+      const temporaryPassword = generateTemporaryPassword(12);
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: escritorioForm.email,
-        password: escritorioForm.password,
+        password: temporaryPassword,
         options: {
           emailRedirectTo:
             process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
@@ -1075,6 +1035,7 @@ export function DistribuidorDashboard() {
             bank_name: escritorioForm.bankName || null,
             bank_branch: escritorioForm.agency || null,
             bank_account: escritorioForm.accountNumber || null,
+            is_pass_temp: true, // Marcar que precisa trocar senha no primeiro login
           },
         ])
         .select()
@@ -1085,9 +1046,34 @@ export function DistribuidorDashboard() {
         throw new Error(`Erro ao criar perfil: ${profileError.message}`);
       }
 
+      // Enviar senha temporária por email
+      try {
+        const sendPasswordResponse = await fetch("/api/auth/send-temporary-password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: escritorioForm.email,
+            userName: escritorioForm.fullName,
+            password: temporaryPassword,
+          }),
+        });
+
+        const sendPasswordData = await sendPasswordResponse.json();
+        
+        if (sendPasswordData.success) {
+          console.log("Senha temporária enviada com sucesso");
+        } else {
+          console.error("Erro ao enviar senha temporária:", sendPasswordData.error);
+        }
+      } catch (passwordError) {
+        console.error("Erro ao enviar senha temporária:", passwordError);
+      }
+
       toast({
         title: "Escritório cadastrado!",
-        description: `${escritorioForm.fullName} foi cadastrado com sucesso.`,
+        description: `${escritorioForm.fullName} foi cadastrado com sucesso. Senha temporária enviada por email.`,
       });
 
       resetEscritorioForm();
@@ -1280,42 +1266,48 @@ export function DistribuidorDashboard() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-2">Dashboard do Distribuidor</h1>
-        <p className="text-muted-foreground mb-6">
+        <h1 className="text-3xl font-bold mb-2 text-white">Dashboard do Distribuidor</h1>
+        <p className="text-white/80 mb-6">
           Gerencie seus escritórios e acompanhe sua rentabilidade
         </p>
       </div>
 
       {/* Estatísticas Gerais */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Escritórios</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+        <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+          <div className="absolute right-0 top-0 opacity-10">
+            <Building2 className="h-24 w-24" />
+          </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-medium text-white">Total de Escritórios</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalStats.totalEscritorios}</div>
+          <CardContent className="relative z-10">
+            <div className="text-2xl font-bold text-white">{totalStats.totalEscritorios}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Investido</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+        <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+          <div className="absolute right-0 top-0 opacity-10">
+            <DollarSign className="h-24 w-24" />
+          </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-medium text-white">Total Investido</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalStats.totalInvested)}</div>
+          <CardContent className="relative z-10">
+            <div className="text-2xl font-bold text-[#00BC6E]">{formatCurrency(totalStats.totalInvested)}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Comissão Total (1%)</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+          <div className="absolute right-0 top-0 opacity-10">
+            <TrendingUp className="h-24 w-24" />
+          </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-medium text-white">Comissão Total (1%)</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalStats.totalCommission)}</div>
-            <p className="text-xs text-muted-foreground">Sobre escritórios</p>
+          <CardContent className="relative z-10">
+            <div className="text-2xl font-bold text-[#00BC6E]">{formatCurrency(totalStats.totalCommission)}</div>
+            <p className="text-xs text-white/70 mt-1">Sobre escritórios</p>
           </CardContent>
         </Card>
       </div>
@@ -1524,17 +1516,17 @@ export function DistribuidorDashboard() {
         </TabsContent>
 
         <TabsContent value="criar">
-          <Card>
+          <Card className="border border-[#C7F3E1] bg-[#E9FBF5] shadow-sm rounded-2xl">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-[#064E3B] text-xl font-semibold">
                 <UserPlus className="w-5 h-5" />
                 Criar Novo Escritório
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-[#047857]/80">
                 Preencha os dados do escritório que será vinculado ao seu distribuidor.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-2">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1551,12 +1543,12 @@ export function DistribuidorDashboard() {
                       return (
                         <div
                           key={step}
-                          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
+                          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
                             isActive
-                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                              ? "border-[#047857] bg-white text-[#064E3B] shadow-sm"
                               : isCompleted
-                              ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                              : "border-border text-muted-foreground"
+                              ? "border-[#A7F3D0] bg-[#DCFCE7] text-[#047857]"
+                              : "border-transparent bg-transparent text-slate-500"
                           }`}
                         >
                           <span className="font-semibold">{index + 1}</span>
