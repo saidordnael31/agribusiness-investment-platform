@@ -9,9 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    staticPageGenerationTimeout: 1000,
-  },
+  staticPageGenerationTimeout: 1000,
 }
 
 export default nextConfig
