@@ -2765,7 +2765,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       case 12:
         return ["Mensal", "Semestral", "Anual"];
       case 24:
-        return ["Mensal", "Semestral", "Anual"];
+        // Para 24 meses, incluir também a opção Bienal
+        return ["Mensal", "Semestral", "Anual", "Bienal"];
       case 36:
         return ["Mensal", "Semestral", "Anual", "Bienal", "Trienal"];
       default:
