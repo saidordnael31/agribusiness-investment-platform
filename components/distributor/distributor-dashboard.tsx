@@ -2786,6 +2786,23 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     return baseRates[period]?.[liquidity] || 0.03;
   };
 
+  const getLiquidityCycleMonths = (liquidityLabel: string): number => {
+    switch (liquidityLabel) {
+      case "Mensal":
+        return 1;
+      case "Semestral":
+        return 6;
+      case "Anual":
+        return 12;
+      case "Bienal":
+        return 24;
+      case "Trienal":
+        return 36;
+      default:
+        return 1;
+    }
+  };
+
   const calculateProjectedReturns = (
     amountStr: string,
     periodStr: string,
@@ -2814,8 +2831,33 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       };
     }
 
-    const finalAmount = rawAmount * Math.pow(1 + rate, periodMonths);
-    const totalReturn = finalAmount - rawAmount;
+    const cycleMonths = getLiquidityCycleMonths(liquidity);
+
+    if (!cycleMonths || cycleMonths <= 0) {
+      const finalAmountFallback = rawAmount * Math.pow(1 + rate, periodMonths);
+      return {
+        monthlyReturn: rawAmount * rate,
+        totalReturn: finalAmountFallback - rawAmount,
+        finalAmount: finalAmountFallback,
+      };
+    }
+
+    const fullCycles = Math.floor(periodMonths / cycleMonths);
+    const remainingMonths = periodMonths % cycleMonths;
+
+    let totalReturn = 0;
+
+    if (fullCycles > 0) {
+      const cycleFactor = Math.pow(1 + rate, cycleMonths);
+      totalReturn += rawAmount * (cycleFactor - 1) * fullCycles;
+    }
+
+    if (remainingMonths > 0) {
+      const remainingFactor = Math.pow(1 + rate, remainingMonths);
+      totalReturn += rawAmount * (remainingFactor - 1);
+    }
+
+    const finalAmount = rawAmount + totalReturn;
     // Retorno mensal exibido deve ser o juros simples (valor * taxa mensal)
     const monthlyReturn = rawAmount * rate;
 

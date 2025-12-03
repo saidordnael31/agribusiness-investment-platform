@@ -131,10 +131,10 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
     try {
       const password = generatePassword()
 
-      // Buscar o distributor_id do assessor
+      // Buscar distributor_id e office_id do assessor
       const { data: assessorProfile, error: assessorError } = await supabase
         .from("profiles")
-        .select("distributor_id")
+        .select("distributor_id, office_id, role")
         .eq("id", assessorId)
         .single()
 
@@ -143,6 +143,12 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
       }
 
       const distributorId = assessorProfile?.distributor_id || null
+      // Se o assessor for um escritório (role = 'escritorio'), o office_id é o próprio id
+      // Caso contrário, usar o office_id do perfil do assessor
+      const officeId =
+        assessorProfile?.role === "escritorio"
+          ? assessorId
+          : assessorProfile?.office_id || null
 
       // Criar usuário no Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -156,6 +162,7 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
             role: "investidor",
             parent_id: assessorId,
             distributor_id: distributorId,
+            office_id: officeId,
             cpf_cnpj: formData.cpf,
             phone: formData.phone,
             birth_date: formData.birthDate,
@@ -181,6 +188,7 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
             role: "investidor",
             parent_id: assessorId,
             distributor_id: distributorId,
+            office_id: officeId,
             phone: authData.user.user_metadata.phone || null,
             cnpj: authData.user.user_metadata.cpf_cnpj || null,
             is_active: true,

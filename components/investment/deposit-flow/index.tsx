@@ -53,6 +53,70 @@ export function DepositFlow() {
     router,
   } = useDepositFlow();
 
+  const getLiquidityCycleMonths = (liquidityLabel: string): number => {
+    switch (liquidityLabel) {
+      case "Mensal":
+        return 1;
+      case "Semestral":
+        return 6;
+      case "Anual":
+        return 12;
+      case "Bienal":
+        return 24;
+      case "Trienal":
+        return 36;
+      default:
+        return 1;
+    }
+  };
+
+  const calculateReturnsWithLiquidity = (
+    principal: number,
+    periodMonths: number,
+    monthlyRate: number,
+    liquidityLabel: string
+  ) => {
+    if (!principal || !periodMonths || !monthlyRate) {
+      return {
+        totalReturn: 0,
+        finalValue: principal || 0,
+      };
+    }
+
+    const cycleMonths = getLiquidityCycleMonths(liquidityLabel);
+
+    // Se por algum motivo não tivermos ciclo, cair para juros compostos normais
+    if (!cycleMonths || cycleMonths <= 0) {
+      const finalValue = principal * Math.pow(1 + monthlyRate, periodMonths);
+      return {
+        totalReturn: finalValue - principal,
+        finalValue,
+      };
+    }
+
+    const fullCycles = Math.floor(periodMonths / cycleMonths);
+    const remainingMonths = periodMonths % cycleMonths;
+
+    let totalReturn = 0;
+
+    if (fullCycles > 0) {
+      const cycleFactor = Math.pow(1 + monthlyRate, cycleMonths);
+      totalReturn += principal * (cycleFactor - 1) * fullCycles;
+    }
+
+    if (remainingMonths > 0) {
+      const remainingFactor = Math.pow(1 + monthlyRate, remainingMonths);
+      totalReturn += principal * (remainingFactor - 1);
+    }
+
+    const finalValue = principal + totalReturn;
+
+    return {
+      totalReturn,
+      finalValue,
+    };
+  };
+
   if (step === "success") {
     return (
       <div className="max-w-2xl mx-auto">
@@ -124,11 +188,11 @@ export function DepositFlow() {
     const principal = Number(depositAmount);
     const periodMonths = Number(commitmentPeriod);
 
-    const finalValue =
-      principal && monthlyRate && periodMonths
-        ? principal * Math.pow(1 + monthlyRate, periodMonths)
-        : 0;
-    const totalReturn = finalValue && principal ? finalValue - principal : 0;
+    const { totalReturn, finalValue } =
+      principal && monthlyRate && periodMonths && liquidity
+        ? calculateReturnsWithLiquidity(principal, periodMonths, monthlyRate, liquidity)
+        : { totalReturn: 0, finalValue: 0 };
+
     // Retorno mensal mostrado deve ser juros simples (principal * taxa mensal)
     const monthlyReturn = principal && monthlyRate ? principal * monthlyRate : 0;
 
@@ -322,12 +386,18 @@ export function DepositFlow() {
   let totalReturn = 0;
   let finalValue = 0;
 
-  if (depositAmount && monthlyRate && commitmentPeriod) {
+  if (depositAmount && monthlyRate && commitmentPeriod && liquidity) {
     const principal = Number(depositAmount);
     const periodMonths = Number(commitmentPeriod);
 
-    finalValue = principal * Math.pow(1 + monthlyRate, periodMonths);
-    totalReturn = finalValue - principal;
+    const result = calculateReturnsWithLiquidity(
+      principal,
+      periodMonths,
+      monthlyRate,
+      liquidity
+    );
+    finalValue = result.finalValue;
+    totalReturn = result.totalReturn;
     // Retorno mensal exibido: juros simples (principal * taxa mensal)
     monthlyReturn = principal * monthlyRate;
   }
