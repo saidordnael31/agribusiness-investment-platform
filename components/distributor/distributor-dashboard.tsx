@@ -2816,7 +2816,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
     const finalAmount = rawAmount * Math.pow(1 + rate, periodMonths);
     const totalReturn = finalAmount - rawAmount;
-    const monthlyReturn = totalReturn / periodMonths;
+    // Retorno mensal exibido deve ser o juros simples (valor * taxa mensal)
+    const monthlyReturn = rawAmount * rate;
 
     return {
       monthlyReturn,

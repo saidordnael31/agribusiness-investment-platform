@@ -129,8 +129,8 @@ export function DepositFlow() {
         ? principal * Math.pow(1 + monthlyRate, periodMonths)
         : 0;
     const totalReturn = finalValue && principal ? finalValue - principal : 0;
-    const monthlyReturn =
-      totalReturn && periodMonths ? totalReturn / periodMonths : 0;
+    // Retorno mensal mostrado deve ser juros simples (principal * taxa mensal)
+    const monthlyReturn = principal && monthlyRate ? principal * monthlyRate : 0;
 
     return (
       <div className="max-w-4xl mx-auto">
@@ -328,7 +328,8 @@ export function DepositFlow() {
 
     finalValue = principal * Math.pow(1 + monthlyRate, periodMonths);
     totalReturn = finalValue - principal;
-    monthlyReturn = totalReturn / periodMonths;
+    // Retorno mensal exibido: juros simples (principal * taxa mensal)
+    monthlyReturn = principal * monthlyRate;
   }
 
   return (
