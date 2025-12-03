@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Calculator } from "lucide-react"
-import { 
-  calculateRoleCommission, 
-  calculateCommissionWithBonus, 
-  calculateCommissionBreakdown
-} from "@/lib/commission-calculator"
+import { calculateRoleCommission } from "@/lib/commission-calculator"
 
 export function CommissionSimulator() {
   const [capturedAmount, setCapturedAmount] = useState("")
@@ -18,10 +14,6 @@ export function CommissionSimulator() {
   const [results, setResults] = useState<{
     monthlyCommission: number
     annualCommission: number
-    advisorShare: number
-    officeShare: number
-    performanceBonus: number
-    totalWithBonus: number
   } | null>(null)
 
   useEffect(() => {
@@ -40,27 +32,12 @@ export function CommissionSimulator() {
     const userRole = user?.role === "investidor" ? "investidor" : 
                      user?.role === "escritorio" ? "escritorio" : "assessor"
 
-    // Calcular comissão baseada no role do usuário
-    const roleCalculation = calculateCommissionWithBonus(amount, userRole, 12)
-    
-    // Mostrar apenas a comissão do usuário atual
-    let advisorShare = 0, officeShare = 0
-    if (userRole === "assessor") {
-      advisorShare = roleCalculation.totalCommission
-    } else if (userRole === "escritorio") {
-      officeShare = roleCalculation.totalCommission
-    } else if (userRole === "investidor") {
-      // Para investidor, mostrar sua comissão total
-      advisorShare = roleCalculation.totalCommission
-    }
+    // Calcular comissão baseada no role do usuário (sem bônus)
+    const roleCalculation = calculateRoleCommission(amount, userRole, 12)
 
     setResults({
       monthlyCommission: roleCalculation.monthlyCommission,
       annualCommission: roleCalculation.totalCommission,
-      advisorShare,
-      officeShare,
-      performanceBonus: roleCalculation.performanceBonus,
-      totalWithBonus: roleCalculation.totalCommission + roleCalculation.performanceBonus,
     })
   }
 
@@ -121,34 +98,15 @@ export function CommissionSimulator() {
               </p>
             </div>
 
-            {results.performanceBonus > 0 && (
-              <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border border-gray-300">
-                <p className="text-sm text-gray-600">Bônus de Performance</p>
-                <p className="text-xl font-bold text-[#00BC6E]">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(results.performanceBonus)}
-                </p>
-                <p className="text-xs text-gray-600">
-                  {Number.parseFloat(capturedAmount) >= 1000000
-                    ? "Meta 2 atingida: +3% adicional"
-                    : Number.parseFloat(capturedAmount) >= 500000
-                    ? "Meta 1 atingida: +1% adicional"
-                    : "Nenhum bônus aplicado"}
-                </p>
-              </div>
-            )}
-
             <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border-2 border-[#003F28]">
               <p className="text-sm text-gray-600">
-                Total Anual {results.performanceBonus > 0 ? "(com bônus)" : ""}
+                Total Anual
               </p>
               <p className="text-3xl font-bold text-[#003F28]">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
                   currency: "BRL",
-                }).format(results.totalWithBonus)}
+                }).format(results.annualCommission)}
               </p>
             </div>
           </div>
