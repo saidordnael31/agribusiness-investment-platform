@@ -2786,6 +2786,45 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     return baseRates[period]?.[liquidity] || 0.03;
   };
 
+  const calculateProjectedReturns = (
+    amountStr: string,
+    periodStr: string,
+    liquidity: string
+  ) => {
+    const rawAmount = Number.parseFloat(
+      amountStr.replace(/[^\d,]/g, "").replace(",", ".")
+    );
+    const periodMonths = Number(periodStr);
+
+    if (!rawAmount || !periodMonths || !liquidity) {
+      return {
+        monthlyReturn: 0,
+        totalReturn: 0,
+        finalAmount: 0,
+      };
+    }
+
+    const rate = getRateByPeriodAndLiquidity(periodMonths, liquidity);
+
+    if (!rate) {
+      return {
+        monthlyReturn: 0,
+        totalReturn: 0,
+        finalAmount: rawAmount,
+      };
+    }
+
+    const finalAmount = rawAmount * Math.pow(1 + rate, periodMonths);
+    const totalReturn = finalAmount - rawAmount;
+    const monthlyReturn = totalReturn / periodMonths;
+
+    return {
+      monthlyReturn,
+      totalReturn,
+      finalAmount,
+    };
+  };
+
   // Função para construir endereço completo
   const buildFullAddress = () => {
     const { street, number, complement, neighborhood, city, state, zipCode } = investorForm;
@@ -4695,16 +4734,14 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                       <div>
-                        <p className="text-muted-foreground">Retorno mensal</p>
+                        <p className="text-muted-foreground">Retorno mensal (média)</p>
                         <p className="text-lg font-semibold text-emerald-700">
                           {formatCurrency(
-                            Number.parseFloat(
-                              newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
-                            ) *
-                              getRateByPeriodAndLiquidity(
-                                Number(newInvestmentForm.commitmentPeriod),
-                                newInvestmentForm.liquidity
-                              )
+                            calculateProjectedReturns(
+                              newInvestmentForm.amount,
+                              newInvestmentForm.commitmentPeriod,
+                              newInvestmentForm.liquidity
+                            ).monthlyReturn
                           )}
                         </p>
                       </div>
@@ -4714,14 +4751,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                         </p>
                         <p className="text-lg font-semibold text-emerald-700">
                           {formatCurrency(
-                            Number.parseFloat(
-                              newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
-                            ) *
-                              getRateByPeriodAndLiquidity(
-                                Number(newInvestmentForm.commitmentPeriod),
-                                newInvestmentForm.liquidity
-                              ) *
-                              Number(newInvestmentForm.commitmentPeriod)
+                            calculateProjectedReturns(
+                              newInvestmentForm.amount,
+                              newInvestmentForm.commitmentPeriod,
+                              newInvestmentForm.liquidity
+                            ).totalReturn
                           )}
                         </p>
                       </div>
@@ -4729,17 +4763,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                         <p className="text-muted-foreground">Valor final estimado</p>
                         <p className="text-lg font-semibold text-emerald-700">
                           {formatCurrency(
-                            Number.parseFloat(
-                              newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
-                            ) +
-                              Number.parseFloat(
-                                newInvestmentForm.amount.replace(/[^\d,]/g, "").replace(",", ".")
-                              ) *
-                                getRateByPeriodAndLiquidity(
-                                  Number(newInvestmentForm.commitmentPeriod),
-                                  newInvestmentForm.liquidity
-                                ) *
-                                Number(newInvestmentForm.commitmentPeriod)
+                            calculateProjectedReturns(
+                              newInvestmentForm.amount,
+                              newInvestmentForm.commitmentPeriod,
+                              newInvestmentForm.liquidity
+                            ).finalAmount
                           )}
                         </p>
                       </div>

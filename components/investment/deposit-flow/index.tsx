@@ -120,9 +120,17 @@ export function DepositFlow() {
 
   if (step === "confirmation") {
     const monthlyRate = getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity);
-    const monthlyReturn = Number(depositAmount) * monthlyRate;
-    const totalReturn = monthlyReturn * Number(commitmentPeriod);
-    const finalValue = Number(depositAmount) + totalReturn;
+
+    const principal = Number(depositAmount);
+    const periodMonths = Number(commitmentPeriod);
+
+    const finalValue =
+      principal && monthlyRate && periodMonths
+        ? principal * Math.pow(1 + monthlyRate, periodMonths)
+        : 0;
+    const totalReturn = finalValue && principal ? finalValue - principal : 0;
+    const monthlyReturn =
+      totalReturn && periodMonths ? totalReturn / periodMonths : 0;
 
     return (
       <div className="max-w-4xl mx-auto">
@@ -305,10 +313,23 @@ export function DepositFlow() {
     );
   }
 
-  const monthlyRate = commitmentPeriod && liquidity ? getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) : 0;
-  const monthlyReturn = depositAmount && monthlyRate ? Number(depositAmount) * monthlyRate : 0;
-  const totalReturn = monthlyReturn * Number(commitmentPeriod || 0);
-  const finalValue = depositAmount ? Number(depositAmount) + totalReturn : 0;
+  const monthlyRate =
+    commitmentPeriod && liquidity
+      ? getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity)
+      : 0;
+
+  let monthlyReturn = 0;
+  let totalReturn = 0;
+  let finalValue = 0;
+
+  if (depositAmount && monthlyRate && commitmentPeriod) {
+    const principal = Number(depositAmount);
+    const periodMonths = Number(commitmentPeriod);
+
+    finalValue = principal * Math.pow(1 + monthlyRate, periodMonths);
+    totalReturn = finalValue - principal;
+    monthlyReturn = totalReturn / periodMonths;
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
