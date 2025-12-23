@@ -494,8 +494,9 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           break;
         case "admin":
         default:
+          // Admins da plataforma terão role "gestor" para fins de hierarquia/permissões de negócio
           userType = "admin";
-          userRole = "admin";
+          userRole = "gestor";
           break;
       }
 
