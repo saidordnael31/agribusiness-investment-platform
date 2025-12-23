@@ -680,45 +680,55 @@ export function calculateNewCommissionLogic(
     // 1. Determinar período de corte
     cutoffPeriod = getInvestmentCutoffPeriod(paymentDate);
     
-    // VERIFICAR SE É PARA ASSESSOR/DISTRIBUIDOR (sem D+60)
+    // VERIFICAR SE É PARA ASSESSOR/DISTRIBUIDOR
     const isForAdvisor = investment.isForAdvisor === true;
     
     if (isForAdvisor) {
-    // REGRA PARA ASSESSORES/DISTRIBUIDORES: Sem D+60, cálculo proporcional aos dias acumulados até o corte atual
+    // REGRA PARA ASSESSORES/DISTRIBUIDORES:
+    // - Sem D+60
+    // - Sempre paga comissão (se houver dias até o corte), usando pró-rata
+    // - Para o primeiro período, o corte considerado é SEMPRE o primeiro corte do investimento
+    //   (dia 20 calculado por getInvestmentCutoffPeriod), independente da data atual.
+    //   Períodos seguintes são tratados via monthlyBreakdown.
     
-    // Calcular a data de corte atual (dia 20 do mês atual ou anterior)
-    const currentCutoffDate = getCurrentCutoffDate();
-    currentCutoffDate.setHours(0, 0, 0, 0);
-    
-    // Usar o corte atual se for mais recente que o corte inicial do investimento
-    // Caso contrário, usar o corte inicial
-    const cutoffDate = currentCutoffDate > cutoffPeriod.cutoffDate 
-      ? currentCutoffDate 
-      : cutoffPeriod.cutoffDate;
+    // Para o cálculo deste objeto, usamos apenas o corte inicial do investimento
+    const cutoffDate = cutoffPeriod.cutoffDate;
     
       // Ajustar cutoffDate para meia-noite para cálculo correto (usar UTC)
-      const cutoffDateMidnight = new Date(Date.UTC(cutoffDate.getUTCFullYear(), cutoffDate.getUTCMonth(), cutoffDate.getUTCDate(), 0, 0, 0, 0));
-      // IMPORTANTE: Contar a partir do dia seguinte ao depósito
-      // Exemplo: depósito dia 13, conta do dia 14 até o dia 20 = 7 dias
-      const paymentDateNextDay = new Date(Date.UTC(paymentDate.getUTCFullYear(), paymentDate.getUTCMonth(), paymentDate.getUTCDate(), 0, 0, 0, 0));
-      paymentDateNextDay.setUTCDate(paymentDateNextDay.getUTCDate() + 1); // Dia seguinte ao depósito
-    
-    // Calcular diferença em dias acumulados desde o dia seguinte ao depósito até o corte atual
-    // Exemplo: depósito dia 13, conta do dia 14 até 20/10 = 7 dias (14, 15, 16, 17, 18, 19, 20)
-      const rawDaysDiff = Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const cutoffDateMidnight = new Date(Date.UTC(
+        cutoffDate.getUTCFullYear(),
+        cutoffDate.getUTCMonth(),
+        cutoffDate.getUTCDate(),
+        0, 0, 0, 0
+      ));
+
+      // Dia seguinte ao depósito (D+1)
+      const paymentDateNextDay = new Date(Date.UTC(
+        paymentDate.getUTCFullYear(),
+        paymentDate.getUTCMonth(),
+        paymentDate.getUTCDate(),
+        0, 0, 0, 0
+      ));
+      paymentDateNextDay.setUTCDate(paymentDateNextDay.getUTCDate() + 1);
+
+      // Calcular diferença em dias acumulados desde o dia seguinte ao depósito até o corte inicial
+      // Exemplo: depósito dia 23/09, conta de 24/09 até 20/10 = 27 dias
+      const rawDaysDiff = Math.floor(
+        (cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) /
+        (1000 * 60 * 60 * 24)
+      ) + 1; // +1 para incluir o dia do corte
       const daysDiff = Math.max(0, rawDaysDiff);
       
       // Taxa mensal do assessor: 3%
       // Taxa diária: 3% / 30 = 0.1% por dia
       const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
       const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
-      const dailyRateInvestor = COMMISSION_RATES.investidor / 30;
       
     // Comissão proporcional: taxa diária * dias acumulados
       const proportionalRateAdvisor = dailyRateAdvisor * daysDiff;
       const proportionalRateOffice = dailyRateOffice * daysDiff;
       
-    // Calcular comissões de assessor e escritório (proporcionais, sem D+60)
+    // Calcular comissões de assessor e escritório (proporcionais)
       advisorCommission = investment.amount * proportionalRateAdvisor;
       officeCommission = investment.amount * proportionalRateOffice;
     
@@ -770,17 +780,20 @@ export function calculateNewCommissionLogic(
       const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
       const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
       
-      // Construir monthlyBreakdown alinhado com as datas de pagamento
-      // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual
-      // 2. Meses futuros: comissão mensal completa (30 dias = 3% do valor)
+      // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
+      // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
+      //    pago no 5º dia útil do mês seguinte ao corte
+      // 2. Meses futuros: comissão mensal completa (30 dias = 3% do valor),
+      //    sempre mostrando o mês em que a comissão é paga
       monthlyBreakdown = [];
       
       // Adicionar período atual (proporcional) - primeiro mês
-      const monthName = monthNames[cutoffDate.getMonth()];
+      const firstPaymentDate = paymentDueDate[0];
+      const monthName = monthNames[firstPaymentDate.getMonth()];
       monthlyBreakdown.push({
         month: monthName,
-        monthNumber: cutoffDate.getMonth() + 1,
-        year: cutoffDate.getFullYear(),
+        monthNumber: firstPaymentDate.getMonth() + 1,
+        year: firstPaymentDate.getFullYear(),
         advisorCommission, // Comissão proporcional calculada acima
         officeCommission, // Comissão proporcional calculada acima
         investorCommission,
@@ -788,7 +801,7 @@ export function calculateNewCommissionLogic(
       
       // Adicionar períodos futuros (comissão mensal completa)
       // Cada data de pagamento corresponde a um mês no breakdown
-      // Começar do segundo mês (índice 1) porque o primeiro já foi adicionado
+      // Começar do segundo pagamento (índice 1) porque o primeiro já foi adicionado
       for (let i = 1; i < paymentDueDate.length; i++) {
         const paymentDateMonth = paymentDueDate[i];
         const futureMonthName = monthNames[paymentDateMonth.getMonth()];
@@ -897,17 +910,20 @@ export function calculateNewCommissionLogic(
       endDate: new Date(cutoffDate),
     };
     
-    // Construir monthlyBreakdown alinhado com as datas de pagamento
-    // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual
-    // 2. Meses futuros: comissão mensal completa (30 dias = taxa mensal)
+    // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
+    // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
+    //    pago no 5º dia útil do mês seguinte ao corte
+    // 2. Meses futuros: comissão mensal completa (30 dias = taxa mensal),
+    //    sempre mostrando o mês em que a comissão é paga
     monthlyBreakdown = [];
     
     // Adicionar período atual (proporcional) - primeiro mês
-    const monthName = monthNames[cutoffDate.getMonth()];
+    const firstPaymentDate = paymentDueDate[0];
+    const monthName = monthNames[firstPaymentDate.getMonth()];
     monthlyBreakdown.push({
       month: monthName,
-      monthNumber: cutoffDate.getMonth() + 1,
-      year: cutoffDate.getFullYear(),
+      monthNumber: firstPaymentDate.getMonth() + 1,
+      year: firstPaymentDate.getFullYear(),
       advisorCommission, // Comissão proporcional calculada acima
       officeCommission, // Comissão proporcional calculada acima
       investorCommission,
@@ -915,7 +931,7 @@ export function calculateNewCommissionLogic(
     
     // Adicionar períodos futuros (comissão mensal completa)
     // Cada data de pagamento corresponde a um mês no breakdown
-    // Começar do segundo mês (índice 1) porque o primeiro já foi adicionado
+    // Começar do segundo pagamento (índice 1) porque o primeiro já foi adicionado
     for (let i = 1; i < paymentDueDate.length; i++) {
       const paymentDateMonth = paymentDueDate[i];
       const futureMonthName = monthNames[paymentDateMonth.getMonth()];

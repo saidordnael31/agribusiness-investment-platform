@@ -25,10 +25,9 @@ import {
   type NewCommissionCalculation,
 } from "@/lib/commission-calculator"
 import { useToast } from "@/hooks/use-toast"
-import { Download, Search, Eye, Building2, TrendingUp, Calendar, FileText, Calculator } from "lucide-react"
+import { Download, Search, Eye, Building2, TrendingUp, Calendar, Calculator } from "lucide-react"
 import { DynamicCommissionCalculator } from "./dynamic-commission-calculator"
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import * as XLSX from "xlsx"
 import { getFifthBusinessDayOfMonth } from "@/lib/commission-calculator"
 import {
   LineChart,
@@ -749,7 +748,7 @@ export function OfficeCommissionsDetail() {
 
   const nextPayments = getNextPayments()
 
-  const exportToCSV = () => {
+  const exportToExcel = () => {
     const headers = [
       "Assessor",
       "Investidor",
@@ -763,117 +762,88 @@ export function OfficeCommissionsDetail() {
       "Status",
     ]
 
-    const rows = filteredCommissions.map((c) => [
-      c.advisorName || "N/A",
-      c.investorName,
-      c.investorEmail || "",
-      formatCurrency(c.amount),
-      formatDate(c.paymentDate),
-      formatDate(c.paymentDueDate.length > 0 ? c.paymentDueDate[0] : new Date()),
-      c.periodLabel,
-      formatCurrency(c.officeCommission),
-      formatCurrency(c.advisorCommission),
-      (c.paymentDueDate.length > 0 ? c.paymentDueDate[0] : new Date()) < new Date() ? "Vencida" : "Pendente",
-    ])
+    // Ordenar por assessor para agrupar seções
+    const sortedCommissions = [...filteredCommissions].sort((a, b) => {
+      const aAdvisor = a.advisorName || "Sem Assessor"
+      const bAdvisor = b.advisorName || "Sem Assessor"
+      if (aAdvisor !== bAdvisor) return aAdvisor.localeCompare(bAdvisor)
+      return a.investorName.localeCompare(b.investorName)
+    })
 
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n")
+    const worksheetData: any[][] = []
+    let currentAdvisor: string | null = null
+    let advisorOfficeTotal = 0
+    let advisorAdvisorTotal = 0
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `comissoes_escritorio_${new Date().toISOString().split("T")[0]}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
+    for (const c of sortedCommissions) {
+      const advisorLabel = c.advisorName || "Sem Assessor"
 
-  const exportToPDF = () => {
-    const doc = new jsPDF('landscape')
-    
-    // Título
-    doc.setFontSize(18)
-    doc.text('Relatório de Comissões - Escritório', 14, 15)
-    
-    // Data de geração
-    doc.setFontSize(10)
-    doc.setTextColor(100, 100, 100)
-    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22)
-    doc.setTextColor(0, 0, 0)
-    
-    // A receber no próximo quinto dia útil
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "bold")
-    doc.text(`A receber no próximo quinto dia útil (${nextPaymentInfo.dateFormatted}):`, 14, 30)
-    doc.setTextColor(59, 130, 246)
-    doc.text(`Escritório: ${formatCurrency(nextPaymentInfo.officeTotal)}`, 14, 38)
-    doc.text(`Assessores: ${formatCurrency(nextPaymentInfo.advisorTotal)}`, 14, 46)
-    doc.text(`Total: ${formatCurrency(nextPaymentInfo.total)}`, 150, 38)
-    doc.setTextColor(0, 0, 0)
-    doc.setFont("helvetica", "normal")
-    
-    // Próxima data a receber (se houver recebimentos futuros)
-    let startY = 54
-    if (nextPayments.length > 0) {
-      const nextPayment = nextPayments[0]
-      doc.setFontSize(12)
-      doc.setFont("helvetica", "bold")
-      doc.text('Próxima data a receber:', 14, startY)
-      doc.text(nextPayment.dateFull, 100, startY)
-      doc.setTextColor(34, 197, 94)
-      doc.text(`Escritório: ${formatCurrency(nextPayment.officeTotal)}`, 14, startY + 8)
-      doc.text(`Assessores: ${formatCurrency(nextPayment.advisorTotal)}`, 14, startY + 16)
-      doc.text(`Total: ${formatCurrency(nextPayment.total)}`, 150, startY + 8)
-      doc.setTextColor(0, 0, 0)
-      doc.setFont("helvetica", "normal")
-      startY += 24
-    }
-    
-    // Totais gerais
-    doc.setFontSize(12)
-    doc.text(`Total Comissões Escritório: ${formatCurrency(totalOfficeCommission)}`, 14, startY)
-    doc.text(`Total Comissões Assessores: ${formatCurrency(totalAdvisorCommissions)}`, 14, startY + 7)
-    doc.text(`Quantidade: ${filteredCommissions.length} comissões`, 14, startY + 14)
-    startY += 22
-    
-    // Preparar dados da tabela
-    const tableData = filteredCommissions.map((c) => {
-      const isMultipleMonths = c.monthlyBreakdown && c.monthlyBreakdown.length > 1
-      const officeCommissionText = isMultipleMonths 
-        ? `${formatCurrency(c.officeCommission)} (${c.monthlyBreakdown.length} meses)`
-        : formatCurrency(c.officeCommission)
-      const advisorCommissionText = isMultipleMonths 
-        ? `${formatCurrency(c.advisorCommission)} (${c.monthlyBreakdown.length} meses)`
-        : formatCurrency(c.advisorCommission)
-      
-      return [
-        c.advisorName || 'N/A',
+      if (advisorLabel !== currentAdvisor) {
+        // Antes de mudar de assessor, escrever subtotal do anterior
+        if (currentAdvisor !== null) {
+          worksheetData.push([
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Total do Assessor",
+            formatCurrency(advisorOfficeTotal),
+            formatCurrency(advisorAdvisorTotal),
+            "",
+          ])
+          worksheetData.push([]) // linha em branco entre seções
+        }
+
+        currentAdvisor = advisorLabel
+        advisorOfficeTotal = 0
+        advisorAdvisorTotal = 0
+
+        // Cabeçalho da nova seção
+        worksheetData.push([`Assessor: ${advisorLabel}`])
+        worksheetData.push(headers)
+      }
+
+      advisorOfficeTotal += c.officeCommission
+      advisorAdvisorTotal += c.advisorCommission
+
+      worksheetData.push([
+        advisorLabel,
         c.investorName,
-        c.investorEmail || '-',
+        c.investorEmail || "",
         formatCurrency(c.amount),
         formatDate(c.paymentDate),
         formatDate(c.paymentDueDate.length > 0 ? c.paymentDueDate[0] : new Date()),
-        officeCommissionText,
-        advisorCommissionText,
-      ]
-    })
-    
-    // Adicionar tabela
-    autoTable(doc, {
-      head: [['Assessor', 'Investidor', 'Email', 'Valor Investido', 'Data Entrada', 'Data Pagamento', 'Comissão Escritório', 'Comissão Assessor']],
-      body: tableData,
-      startY: startY,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
-      margin: { left: 14, right: 14 },
-    })
-    
-    // Salvar PDF
-    doc.save(`comissoes_escritorio_${new Date().toISOString().split("T")[0]}.pdf`)
+        c.periodLabel,
+        formatCurrency(c.officeCommission),
+        formatCurrency(c.advisorCommission),
+        (c.paymentDueDate.length > 0 ? c.paymentDueDate[0] : new Date()) < new Date() ? "Vencida" : "Pendente",
+      ])
+    }
+
+    // Subtotal do último assessor
+    if (currentAdvisor !== null) {
+      worksheetData.push([
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Total do Assessor",
+        formatCurrency(advisorOfficeTotal),
+        formatCurrency(advisorAdvisorTotal),
+        "",
+      ])
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Comissões Escritório")
+
+    const fileName = `comissoes_escritorio_${new Date().toISOString().split("T")[0]}.xlsx`
+    XLSX.writeFile(workbook, fileName)
   }
 
   if (loading) {
@@ -905,13 +875,9 @@ export function OfficeCommissionsDetail() {
                 <Calculator className="mr-2 h-4 w-4" />
                 Calcular Comissões
               </Button>
-              <Button onClick={exportToCSV} variant="outline">
+              <Button onClick={exportToExcel} variant="outline">
                 <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              <Button onClick={exportToPDF} variant="outline">
-                <FileText className="mr-2 h-4 w-4" />
-                Exportar PDF
+                Exportar Excel
               </Button>
             </div>
           </div>

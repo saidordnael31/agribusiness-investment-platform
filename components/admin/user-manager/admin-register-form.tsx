@@ -216,6 +216,15 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
     }
   };
 
+  const buildFullAddress = () => {
+    const { street, number, complement, neighborhood, city, state, zipCode } = formData;
+    const parts = [street, number, complement, neighborhood, city, state, zipCode]
+      .map((part) => (part || "").trim())
+      .filter((part) => part.length > 0);
+
+    return parts.join(", ");
+  };
+
   const handleSelectBank = (bankCode: string) => {
     const bank = banks.find((item) => item.code === bankCode);
     setFormData((prev) => ({
@@ -588,13 +597,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           nationality: formData.nationality || null,
           marital_status: formData.maritalStatus || null,
           profession: formData.profession || null,
-          street: formData.street || null,
-          number: formData.number || null,
-          complement: formData.complement || null,
-          neighborhood: formData.neighborhood || null,
-          city: formData.city || null,
-          state: formData.state || null,
-          zip_code: formData.zipCode || null,
+          address: buildFullAddress(),
           pix_usdt_key: formData.pixKey || null,
           bank_name: formData.bankName || null,
           bank_branch: formData.agency || null,

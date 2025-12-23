@@ -25,10 +25,9 @@ import {
   type NewCommissionCalculation,
 } from "@/lib/commission-calculator"
 import { useToast } from "@/hooks/use-toast"
-import { Download, Search, Eye, Calendar, DollarSign, FileText } from "lucide-react"
+import { Download, Search, Eye, Calendar, DollarSign } from "lucide-react"
 import { getFifthBusinessDayOfMonth } from "@/lib/commission-calculator"
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import * as XLSX from "xlsx"
 import {
   Dialog,
   DialogContent,
@@ -410,6 +409,163 @@ export function AdvisorCommissionsDetail() {
     return `${day}/${month}/${year}`
   }
 
+  // Calcula informações de pró-rata com base na comissão efetivamente paga
+  const getProrataInfo = (commission: CommissionDetail) => {
+    if (!commission.paymentDate || !commission.commissionPeriod) return null
+
+    const monthlyRate = 0.03 // 3% ao mês para assessor
+    const dailyRate = monthlyRate / 30
+    const amount = commission.amount
+    if (!amount || amount <= 0) return null
+
+    // Quando vier de \"Próximos Recebimentos\", teremos contexto extra:
+    const ctx: { monthlyCommissionForDate?: number; paymentDateIndex?: number } =
+      (commission as any)
+
+    // Determinar qual período explicar:
+    // 1) Se veio de Próximos Recebimentos, usamos o índice informado (paymentDateIndex)
+    // 2) Caso contrário, usamos o próximo pagamento futuro (ou o último, se todos já passaram)
+    let periodIndex = ctx.paymentDateIndex
+    if (periodIndex === undefined || periodIndex === null) {
+      const dueDates = commission.paymentDueDate || []
+      if (dueDates.length === 0) {
+        periodIndex = 0
+      } else {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        let bestIndex = -1
+        let bestDate: Date | null = null
+
+        dueDates.forEach((d, idx) => {
+          const local = new Date(d)
+          local.setHours(0, 0, 0, 0)
+
+          if (local >= today) {
+            if (!bestDate || local < bestDate) {
+              bestDate = local
+              bestIndex = idx
+            }
+          }
+        })
+
+        if (bestIndex === -1) {
+          // Se todas as datas são passadas, usar a última para fins de explicação
+          periodIndex = dueDates.length - 1
+        } else {
+          periodIndex = bestIndex
+        }
+      }
+    }
+
+    // Determinar a comissão específica deste período:
+    // 1) Se veio de Próximos Recebimentos, usar monthlyCommissionForDate
+    // 2) Senão, se for um período futuro (periodIndex > 0), usar o valor do monthlyBreakdown
+    // 3) Caso contrário, usar advisorCommission (primeiro período)
+    let commissionForThisPeriod: number
+    if (ctx.monthlyCommissionForDate !== undefined && ctx.monthlyCommissionForDate !== null) {
+      commissionForThisPeriod = ctx.monthlyCommissionForDate
+    } else if (
+      periodIndex > 0 &&
+      Array.isArray(commission.monthlyBreakdown) &&
+      commission.monthlyBreakdown.length > periodIndex
+    ) {
+      commissionForThisPeriod = commission.monthlyBreakdown[periodIndex].advisorCommission
+    } else {
+      commissionForThisPeriod = commission.advisorCommission
+    }
+
+    if (!commissionForThisPeriod || commissionForThisPeriod <= 0) return null
+
+    let days: number
+    let startLabel: string
+    let endLabel: string
+
+    if (periodIndex === 0) {
+      // PRIMEIRO PERÍODO: pró-rata entre depósito e primeiro corte
+      const basePerDay = amount * dailyRate
+      const inferredDays = basePerDay > 0 ? commissionForThisPeriod / basePerDay : 0
+      days = Math.max(0, Math.round(inferredDays))
+
+      startLabel = formatDate(commission.paymentDate)
+      endLabel =
+        typeof commission.commissionPeriod.endDate === "string"
+          ? formatDate(commission.commissionPeriod.endDate)
+          : formatDate(commission.commissionPeriod.endDate)
+    } else {
+      // PERÍODOS SEGUINTES: sempre 30 dias (mês cheio entre cortes)
+      days = 30
+
+      // Descobrir o corte atual e o anterior a partir da data de pagamento deste índice
+      const paymentForThis = commission.paymentDueDate[periodIndex]
+      const paymentDate = new Date(paymentForThis)
+      const year = paymentDate.getFullYear()
+      const month = paymentDate.getMonth() // mês do pagamento (5º dia útil)
+
+      // Corte atual é dia 20 do mês anterior ao pagamento
+      let cutoffMonth = month - 1
+      let cutoffYear = year
+      if (cutoffMonth < 0) {
+        cutoffMonth = 11
+        cutoffYear -= 1
+      }
+      const currentCutoff = new Date(cutoffYear, cutoffMonth, 20)
+
+      // Corte anterior é dia 20 do mês anterior ao cutoff atual
+      let prevMonth = cutoffMonth - 1
+      let prevYear = cutoffYear
+      if (prevMonth < 0) {
+        prevMonth = 11
+        prevYear -= 1
+      }
+      const previousCutoff = new Date(prevYear, prevMonth, 20)
+
+      startLabel = formatDate(previousCutoff)
+      endLabel = formatDate(currentCutoff)
+    }
+
+    const theoreticalFullMonth = amount * monthlyRate
+    const fractionOfMonth = days / 30
+
+    return {
+      startLabel,
+      endLabel,
+      days,
+      fractionOfMonth,
+      theoreticalFullMonth,
+      prorataCommission: commissionForThisPeriod,
+    }
+  }
+
+  // Retorna a próxima data de pagamento futura (ou de hoje) para uma comissão específica
+  const getNextPaymentDateForCommission = (commission: CommissionDetail): Date | null => {
+    if (!commission.paymentDueDate || commission.paymentDueDate.length === 0) {
+      return null
+    }
+
+    // Normalizar \"hoje\" para UTC (mesma base usada em paymentDueDate)
+    const today = new Date()
+    const todayUTC = new Date(Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+      0, 0, 0, 0
+    ))
+
+    // paymentDueDate já vem normalizado em UTC (00:00), então só precisamos clonar
+    const normalizedDates = commission.paymentDueDate.map((d) => new Date(d))
+
+    const futureOrToday = normalizedDates.filter((d) => d >= todayUTC)
+
+    if (futureOrToday.length === 0) {
+      // Se todas as datas são passadas, retornar a última (já para histórico)
+      return normalizedDates[normalizedDates.length - 1]
+    }
+
+    futureOrToday.sort((a, b) => a.getTime() - b.getTime())
+    return futureOrToday[0]
+  }
+
   const filteredCommissions = commissions.filter((commission) => {
     // Filtro de busca por texto
     const matchesSearch =
@@ -476,26 +632,50 @@ export function AdvisorCommissionsDetail() {
 
     const commissionsForNextFifthDay = filteredCommissions.filter((c) => {
       // Verificar se nextFifthDayStr está no array de paymentDueDate
-      const matches = c.paymentDueDate.some((paymentDate) => {
+      return c.paymentDueDate.some((paymentDate) => {
         // Extrair ano, mês e dia usando métodos UTC para garantir consistência
         const year = paymentDate.getUTCFullYear()
         const month = paymentDate.getUTCMonth()
         const day = paymentDate.getUTCDate()
-        
+
         // Criar string de data no formato YYYY-MM-DD
-        const paymentStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        const paymentStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(
+          day
+        ).padStart(2, "0")}`
+        return paymentStr === nextFifthDayStr
+      })
+    })
+    
+    // IMPORTANTE: usar a MESMA lógica de cálculo do valor mensal usada em getNextPayments,
+    // para que o total exibido no card "A receber no próximo quinto dia útil" seja
+    // idêntico ao total mostrado no modal de detalhes por data.
+    const totalNextPayment = commissionsForNextFifthDay.reduce((sum, c) => {
+      // Encontrar o índice da data de pagamento correspondente
+      const paymentIndex = c.paymentDueDate.findIndex((paymentDate) => {
+        const year = paymentDate.getUTCFullYear()
+        const month = paymentDate.getUTCMonth()
+        const day = paymentDate.getUTCDate()
+        const paymentStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(
+          day
+        ).padStart(2, "0")}`
         return paymentStr === nextFifthDayStr
       })
 
-      return matches
-    })
-    
-    // Para o primeiro pagamento, usar advisorCommission (comissão acumulada até o corte atual)
-    // Isso inclui todos os investimentos feitos antes de 20/09 e até 20/10 como um período único
-    const totalNextPayment = commissionsForNextFifthDay.reduce(
-      (sum, c) => sum + c.advisorCommission,
-      0
-    )
+      let monthlyCommission: number
+
+      if (paymentIndex === 0) {
+        // Primeiro pagamento: usar a comissão acumulada até o corte atual
+        monthlyCommission = c.advisorCommission
+      } else if (c.monthlyBreakdown && c.monthlyBreakdown.length > paymentIndex) {
+        // Meses futuros: usar a comissão mensal específica deste mês
+        monthlyCommission = c.monthlyBreakdown[paymentIndex].advisorCommission
+      } else {
+        // Fallback: calcular comissão mensal completa (3% do valor)
+        monthlyCommission = c.amount * 0.03
+      }
+
+      return sum + monthlyCommission
+    }, 0)
     
     return {
       date: nextFifthDay,
@@ -509,9 +689,9 @@ export function AdvisorCommissionsDetail() {
 
   // Preparar próximos recebimentos futuros
   const getNextPayments = () => {
-    // IMPORTANTE: Usar UTC para evitar problemas de fuso horário
+    // Considerar o \"hoje\" em horário local, zerando horas/minutos
     const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
+    today.setHours(0, 0, 0, 0)
     
     // Filtrar apenas comissões futuras (próximos 12 meses)
     // IMPORTANTE: Normalizar todas as datas para comparação correta
@@ -520,14 +700,11 @@ export function AdvisorCommissionsDetail() {
     oneYearFromNow.setHours(23, 59, 59, 999) // Fim do dia
     
     const futureCommissions = filteredCommissions.filter((c) => {
-      // Verificar se alguma data de pagamento está no futuro ou hoje
-      const todayUTC = new Date(today)
-      todayUTC.setUTCHours(0, 0, 0, 0)
-      
+      // Verificar se alguma data de pagamento está no futuro ou hoje (base UTC)
       return c.paymentDueDate.some((paymentDate) => {
-        paymentDate.setUTCHours(0, 0, 0, 0)
-        const isFutureOrToday = paymentDate >= todayUTC
-        const isWithinOneYear = paymentDate <= oneYearFromNow
+        const paymentUTC = new Date(paymentDate) // já vem em UTC 00:00
+        const isFutureOrToday = paymentUTC >= today
+        const isWithinOneYear = paymentUTC <= oneYearFromNow
         return isFutureOrToday && isWithinOneYear
       })
     })
@@ -543,16 +720,12 @@ export function AdvisorCommissionsDetail() {
     futureCommissions.forEach((commission) => {
       // Iterar sobre todas as datas de pagamento do array
       commission.paymentDueDate.forEach((paymentDate, paymentIndex) => {
-        // IMPORTANTE: Normalizar a data usando UTC antes de criar a string para agrupamento
-        paymentDate.setUTCHours(0, 0, 0, 0)
-        const dateStr = paymentDate.toISOString().split("T")[0]
-        
-        // Normalizar today também para UTC
-        const todayUTC = new Date(today)
-        todayUTC.setUTCHours(0, 0, 0, 0)
+        // Usar diretamente a data em UTC (já normalizada na geração)
+        const paymentUTC = new Date(paymentDate)
+        const dateStr = paymentUTC.toISOString().split("T")[0]
         
         // Só incluir se for futura ou hoje
-        if (paymentDate >= todayUTC && paymentDate <= oneYearFromNow) {
+        if (paymentUTC >= today && paymentUTC <= oneYearFromNow) {
           // Buscar a comissão correspondente ao mês desta data de pagamento
           // IMPORTANTE: Para o primeiro pagamento (índice 0), usar advisorCommission 
           // que é a comissão acumulada até o corte atual (inclui todos os dias até 20/10)
@@ -573,7 +746,7 @@ export function AdvisorCommissionsDetail() {
           
           if (!groupedByDate.has(dateStr)) {
             groupedByDate.set(dateStr, {
-              date: new Date(paymentDate),
+              date: new Date(paymentUTC),
               total: 0,
               count: 0,
               commissions: [],
@@ -601,16 +774,20 @@ export function AdvisorCommissionsDetail() {
         
         return {
           date: formatDate(item.date),
+          // IMPORTANTE: usar timeZone: 'UTC' para evitar que a data apareça um dia antes
+          // em localidades com fuso horário negativo (ex.: Brasil).
           dateFull: item.date.toLocaleDateString("pt-BR", {
             day: "2-digit",
             month: "2-digit",
             year: "numeric",
+            timeZone: "UTC",
           }),
           dateLong: item.date.toLocaleDateString("pt-BR", {
             weekday: "long",
             day: "2-digit",
             month: "long",
             year: "numeric",
+            timeZone: "UTC",
           }),
           total: item.total,
           count: item.count,
@@ -631,7 +808,7 @@ export function AdvisorCommissionsDetail() {
     return paymentDateStr !== nextPaymentDateStr
   })
 
-  const exportToCSV = () => {
+  const exportToExcel = () => {
     const baseHeaders = [
       "Investidor",
       "Email",
@@ -642,139 +819,125 @@ export function AdvisorCommissionsDetail() {
     ]
     
     // Se for escritório, adicionar coluna de Assessor
-    if (userRole === "escritorio") {
-      baseHeaders.splice(1, 0, "Assessor")
-    }
+    const headersForOffice = ["Assessor", ...baseHeaders]
 
-    const rows = filteredCommissions.map((c) => {
-      const isMultipleMonths = c.monthlyBreakdown && c.monthlyBreakdown.length > 1
-      const commissionText = isMultipleMonths 
-        ? `${formatCurrency(c.advisorCommission)} (Soma de ${c.monthlyBreakdown.length} meses)`
-        : formatCurrency(c.advisorCommission)
-      
-      const baseRow = [
-        c.investorName,
-        c.investorEmail || "",
-        formatCurrency(c.amount),
-        formatDate(c.paymentDate),
-        c.paymentDueDate.length > 0 ? formatDate(c.paymentDueDate[0]) : "N/A",
-        commissionText,
-      ]
-      
-      // Se for escritório, adicionar coluna de assessor após o investidor
+    // Clonar e ordenar comissões para ter agrupamento estável
+    const sortedCommissions = [...filteredCommissions].sort((a, b) => {
       if (userRole === "escritorio") {
-        baseRow.splice(1, 0, c.advisorName || "N/A")
+        const aAdvisor = a.advisorName || "Sem Assessor"
+        const bAdvisor = b.advisorName || "Sem Assessor"
+        if (aAdvisor !== bAdvisor) return aAdvisor.localeCompare(bAdvisor)
+        return a.investorName.localeCompare(b.investorName)
       }
-      
-      return baseRow
+      // Para assessor, ordenar por investidor
+      return a.investorName.localeCompare(b.investorName)
     })
 
-    const csvContent = [baseHeaders, ...rows]
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n")
+    const worksheetData: any[][] = []
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    const fileNamePrefix = userRole === "escritorio" ? "comissoes_escritorio" : "comissoes_assessor"
-    link.setAttribute("download", `${fileNamePrefix}_${new Date().toISOString().split("T")[0]}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const exportToPDF = () => {
-    const doc = new jsPDF('landscape')
-    
-    // Título - ajustar conforme o tipo de usuário
-    doc.setFontSize(18)
-    const reportTitle = userRole === "escritorio" 
-      ? 'Relatório de Comissões - Escritório'
-      : 'Relatório de Comissões - Assessor'
-    doc.text(reportTitle, 14, 15)
-    
-    // Data de geração
-    doc.setFontSize(10)
-    doc.setTextColor(100, 100, 100)
-    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22)
-    doc.setTextColor(0, 0, 0)
-    
-    // A receber no próximo quinto dia útil
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "bold")
-    doc.text(`A receber no próximo quinto dia útil (${nextPaymentInfo.dateFormatted}):`, 14, 30)
-    doc.setTextColor(59, 130, 246)
-    doc.text(formatCurrency(nextPaymentInfo.total), 150, 30)
-    doc.setTextColor(0, 0, 0)
-    doc.setFont("helvetica", "normal")
-    
-    // Próxima data a receber (se houver recebimentos futuros)
-    let startY = 38
-    if (nextPayments.length > 0) {
-      const nextPayment = nextPayments[0]
-      doc.setFontSize(12)
-      doc.setFont("helvetica", "bold")
-      doc.text('Próxima data a receber:', 14, startY)
-      doc.text(nextPayment.dateFull, 100, startY)
-      doc.setTextColor(34, 197, 94)
-      doc.text(formatCurrency(nextPayment.total), 150, startY)
-      doc.setTextColor(0, 0, 0)
-      doc.setFont("helvetica", "normal")
-      startY += 8
-    }
-    
-    // Quantidade de comissões
-    doc.setFontSize(12)
-    doc.text(`Quantidade: ${filteredCommissions.length} comissões`, 14, startY)
-    startY += 8
-    
-    // Preparar dados da tabela
-    const tableData = filteredCommissions.map((c) => {
-      const isMultipleMonths = c.monthlyBreakdown && c.monthlyBreakdown.length > 1
-      const commissionText = isMultipleMonths 
-        ? `${formatCurrency(c.advisorCommission)} (${c.monthlyBreakdown.length} meses)`
-        : formatCurrency(c.advisorCommission)
-      
-      // Montar linha base
-      const baseRow = [
-        c.investorName,
-        c.investorEmail || '-',
-        formatCurrency(c.amount),
-        formatDate(c.paymentDate),
-        c.paymentDueDate.length > 0 ? formatDate(c.paymentDueDate[0]) : "N/A",
-        commissionText,
-      ]
-      
-      // Se for escritório, adicionar coluna de assessor após o investidor (antes do email)
-      if (userRole === "escritorio") {
-        baseRow.splice(1, 0, c.advisorName || "N/A")
-      }
-      
-      return baseRow
-    })
-    
-    // Preparar cabeçalho da tabela
-    const baseHeaders = ['Investidor', 'Email', 'Valor Investido', 'Data de Depósito', 'Próximo Pagamento', 'Comissão']
     if (userRole === "escritorio") {
-      baseHeaders.splice(1, 0, 'Assessor')
+      // Escritório: dividir seções por assessor e somar total da comissão (1%) de cada assessor
+      let currentAdvisor: string | null = null
+      let advisorTotal = 0
+
+      for (const c of sortedCommissions) {
+        const advisorLabel = c.advisorName || "Sem Assessor"
+
+        if (advisorLabel !== currentAdvisor) {
+          // Antes de mudar de assessor, escrever subtotal do anterior
+          if (currentAdvisor !== null) {
+            worksheetData.push([
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "Total do Assessor",
+              formatCurrency(advisorTotal),
+            ])
+            worksheetData.push([]) // linha em branco entre seções
+          }
+
+          currentAdvisor = advisorLabel
+          advisorTotal = 0
+
+          // Cabeçalho da seção
+          worksheetData.push([`Assessor: ${advisorLabel}`])
+          worksheetData.push(headersForOffice)
+        }
+
+        const isMultipleMonths = c.monthlyBreakdown && c.monthlyBreakdown.length > 1
+        const commissionText = isMultipleMonths
+          ? `${formatCurrency(c.advisorCommission)} (Soma de ${c.monthlyBreakdown.length} meses)`
+          : formatCurrency(c.advisorCommission)
+
+        advisorTotal += c.advisorCommission
+
+        worksheetData.push([
+          advisorLabel,
+          c.investorName,
+          c.investorEmail || "",
+          formatCurrency(c.amount),
+          formatDate(c.paymentDate),
+          c.paymentDueDate.length > 0 ? formatDate(c.paymentDueDate[0]) : "N/A",
+          commissionText,
+        ])
+      }
+
+      // Subtotal do último assessor
+      if (currentAdvisor !== null) {
+        worksheetData.push([
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "Total do Assessor",
+          formatCurrency(advisorTotal),
+        ])
+      }
+    } else {
+      // Assessor: dividir seções por investidor
+      let currentInvestor: string | null = null
+
+      for (const c of sortedCommissions) {
+        const investorKey = `${c.investorName}${c.investorEmail ? ` <${c.investorEmail}>` : ""}`
+
+        if (investorKey !== currentInvestor) {
+          currentInvestor = investorKey
+          // Cabeçalho da seção
+          if (worksheetData.length > 0) {
+            worksheetData.push([]) // linha em branco entre seções
+          }
+          worksheetData.push([`Investidor: ${investorKey}`])
+          worksheetData.push(baseHeaders)
+        }
+
+        const isMultipleMonths = c.monthlyBreakdown && c.monthlyBreakdown.length > 1
+        const commissionText = isMultipleMonths
+          ? `${formatCurrency(c.advisorCommission)} (Soma de ${c.monthlyBreakdown.length} meses)`
+          : formatCurrency(c.advisorCommission)
+
+        worksheetData.push([
+          c.investorName,
+          c.investorEmail || "",
+          formatCurrency(c.amount),
+          formatDate(c.paymentDate),
+          c.paymentDueDate.length > 0 ? formatDate(c.paymentDueDate[0]) : "N/A",
+          commissionText,
+        ])
+      }
     }
-    
-    // Adicionar tabela
-    autoTable(doc, {
-      head: [baseHeaders],
-      body: tableData,
-      startY: startY,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
-      margin: { left: 14, right: 14 },
-    })
-    
-    // Salvar PDF
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Comissões")
+
     const fileNamePrefix = userRole === "escritorio" ? "comissoes_escritorio" : "comissoes_assessor"
-    doc.save(`${fileNamePrefix}_${new Date().toISOString().split("T")[0]}.pdf`)
+    const fileName = `${fileNamePrefix}_${new Date().toISOString().split("T")[0]}.xlsx`
+    XLSX.writeFile(workbook, fileName)
   }
 
   if (loading) {
@@ -799,13 +962,9 @@ export function AdvisorCommissionsDetail() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button onClick={exportToCSV} variant="outline">
+              <Button onClick={exportToExcel} variant="outline">
                 <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              <Button onClick={exportToPDF} variant="outline">
-                <FileText className="mr-2 h-4 w-4" />
-                Exportar PDF
+                Exportar Excel
               </Button>
             </div>
           </div>
@@ -856,7 +1015,26 @@ export function AdvisorCommissionsDetail() {
               <CardContent>
                 <div className="space-y-6">
                   {/* Área destacada com próximo quinto dia útil */}
-                  <Card className="bg-primary/5 border-primary/20">
+                  <Card 
+                    className="bg-primary/5 border-primary/20 cursor-pointer"
+                    onClick={() => {
+                      if (nextPaymentInfo.count > 0) {
+                        // Encontrar o grupo correspondente na lista de próximos recebimentos,
+                        // comparando pela mesma data formatada exibida no card
+                        const nextGroup =
+                          allNextPayments.find((p) => p.date === nextPaymentInfo.dateFormatted) ||
+                          allNextPayments[0]
+
+                        if (nextGroup) {
+                          setSelectedPaymentDate({
+                            date: nextGroup.dateFull,
+                            commissions: nextGroup.commissions || [],
+                          })
+                          setPaymentDetailModalOpen(true)
+                        }
+                      }
+                    }}
+                  >
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -969,9 +1147,6 @@ export function AdvisorCommissionsDetail() {
                   </TableRow>
                 ) : (
                   filteredCommissions.map((commission) => {
-                    // Verificar se é uma soma de múltiplas comissões (tem monthlyBreakdown com mais de 1 mês)
-                    const isMultipleMonths = commission.monthlyBreakdown && commission.monthlyBreakdown.length > 1
-                    
                     return (
                       <TableRow key={commission.investmentId}>
                         <TableCell>
@@ -992,9 +1167,10 @@ export function AdvisorCommissionsDetail() {
                         <TableCell>{formatCurrency(commission.amount)}</TableCell>
                         <TableCell>{formatDate(commission.paymentDate)}</TableCell>
                         <TableCell>
-                          {commission.paymentDueDate.length > 0 
-                            ? formatDate(commission.paymentDueDate[0]) 
-                            : "N/A"}
+                          {(() => {
+                            const nextDate = getNextPaymentDateForCommission(commission)
+                            return nextDate ? formatDate(nextDate) : "N/A"
+                          })()}
                           {commission.paymentDueDate.length > 1 && (
                             <span className="text-xs text-muted-foreground ml-1">
                               (+{commission.paymentDueDate.length - 1} mais)
@@ -1003,10 +1179,18 @@ export function AdvisorCommissionsDetail() {
                         </TableCell>
                         <TableCell className="font-semibold text-green-600">
                           <div className="flex flex-col">
-                            <span>{formatCurrency(commission.advisorCommission)}</span>
-                            {isMultipleMonths && (
+                            <span>
+                              {(() => {
+                                const info = getProrataInfo(commission)
+                                const value =
+                                  info?.prorataCommission ?? commission.advisorCommission
+                                return formatCurrency(value)
+                              })()}
+                            </span>
+                            {commission.monthlyBreakdown && commission.monthlyBreakdown.length > 1 && (
                               <span className="text-xs text-muted-foreground font-normal mt-1">
-                                Soma de {commission.monthlyBreakdown.length} {commission.monthlyBreakdown.length === 1 ? "mês" : "meses"}
+                                Recorrência de {commission.monthlyBreakdown.length}{" "}
+                                {commission.monthlyBreakdown.length === 1 ? "mês" : "meses"}
                               </span>
                             )}
                           </div>
@@ -1079,9 +1263,10 @@ export function AdvisorCommissionsDetail() {
                     Próximo Pagamento
                   </p>
                   <p>
-                    {selectedCommission.paymentDueDate.length > 0 
-                      ? formatDate(selectedCommission.paymentDueDate[0]) 
-                      : "N/A"}
+                    {(() => {
+                      const nextDate = getNextPaymentDateForCommission(selectedCommission)
+                      return nextDate ? formatDate(nextDate) : "N/A"
+                    })()}
                   </p>
                 </div>
               </div>
@@ -1094,17 +1279,38 @@ export function AdvisorCommissionsDetail() {
                       Sua Comissão ({userRole === "escritorio" ? "1%" : "3%"})
                     </p>
                     <p className="text-2xl font-bold text-green-600">
-                      {formatCurrency(selectedCommission.advisorCommission)}
+                      {(() => {
+                        const info = getProrataInfo(selectedCommission)
+                        const value =
+                          info?.prorataCommission ?? selectedCommission.advisorCommission
+                        return formatCurrency(value)
+                      })()}
                     </p>
                   </div>
                 </div>
-              </div>
 
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-2">Descrição da Comissão</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {selectedCommission.description}
-                </p>
+                {/* Detalhamento do pró-rata considerado */}
+                {(() => {
+                  const info = getProrataInfo(selectedCommission)
+                  if (!info) return null
+
+                  return (
+                    <div className="mt-4 text-sm text-muted-foreground space-y-1">
+                      <p>
+                        <span className="font-medium text-foreground">Pró-rata considerado:</span>{" "}
+                        de {info.startLabel} até {info.endLabel}{" "}
+                        ({info.days} {info.days === 1 ? "dia" : "dias"}, equivalente a{" "}
+                        {(info.fractionOfMonth * 100).toFixed(1)}% de um mês de 30 dias).
+                      </p>
+                      <p>
+                        A comissão cheia de 3% sobre {formatCurrency(selectedCommission.amount)} seria{" "}
+                        {formatCurrency(info.theoreticalFullMonth)}; aplicando o pró-rata de{" "}
+                        {info.days}/{30} dias, a comissão deste período é{" "}
+                        {formatCurrency(info.prorataCommission)}.
+                      </p>
+                    </div>
+                  )
+                })()}
               </div>
 
               {selectedCommission.monthlyBreakdown && selectedCommission.monthlyBreakdown.length > 0 && (
@@ -1121,6 +1327,11 @@ export function AdvisorCommissionsDetail() {
                             <p className="font-semibold capitalize text-base">
                               {month.month} de {month.year}
                             </p>
+                            {selectedCommission.paymentDueDate && selectedCommission.paymentDueDate[index] && (
+                              <p className="text-xs text-muted-foreground">
+                                Pagamento em {formatDate(selectedCommission.paymentDueDate[index])}
+                              </p>
+                            )}
                           </div>
                           <div className="text-right">
                             <p className="text-muted-foreground text-xs mb-1">
@@ -1137,7 +1348,12 @@ export function AdvisorCommissionsDetail() {
                       <div className="flex items-center justify-between">
                         <p className="font-semibold">Total do Período</p>
                         <p className="text-lg font-bold text-primary">
-                          {formatCurrency(selectedCommission.advisorCommission)}
+                          {(() => {
+                            const info = getProrataInfo(selectedCommission)
+                            const value =
+                              info?.prorataCommission ?? selectedCommission.advisorCommission
+                            return formatCurrency(value)
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -1214,7 +1430,8 @@ export function AdvisorCommissionsDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[200px]">Investidor</TableHead>
+                    <TableHead className="w-[40px] text-center">#</TableHead>
+                    <TableHead className="min-w-[200px]">Investidor</TableHead>
                       {userRole === "escritorio" && <TableHead className="min-w-[150px]">Assessor</TableHead>}
                       <TableHead className="min-w-[120px]">Valor Investido</TableHead>
                       <TableHead className="min-w-[120px]">Data de Depósito</TableHead>
@@ -1223,8 +1440,11 @@ export function AdvisorCommissionsDetail() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedPaymentDate.commissions.map((commission) => (
+                    {selectedPaymentDate.commissions.map((commission, index) => (
                       <TableRow key={commission.investmentId}>
+                        <TableCell className="text-center text-muted-foreground">
+                          {index + 1}
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{commission.investorName}</p>
