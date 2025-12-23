@@ -74,7 +74,6 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
   const [distributorOptions, setDistributorOptions] = useState<
     Array<{ id: string; name: string }>
   >([]);
-  const [emailError, setEmailError] = useState("");
 
   const [formData, setFormData] = useState<FormData>({
     name: "",
@@ -104,44 +103,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
     notes: "",
   });
 
-  const validatePersonalEmail = (email: string) => {
-    const personalDomains = [
-      "gmail.com",
-      "yahoo.com",
-      "outlook.com",
-      "hotmail.com",
-      "icloud.com",
-      "uol.com.br",
-      "terra.com.br",
-      "bol.com.br",
-    ];
-    const domain = email.split("@")[1]?.toLowerCase();
-    if (!domain) return false;
-    const isPersonal = personalDomains.includes(domain);
-    const corporateKeywords = [
-      "empresa",
-      "escritorio",
-      "consultoria",
-      "investimentos",
-      "financeira",
-      "capital",
-    ];
-    const isCorporate = corporateKeywords.some((keyword) =>
-      domain.includes(keyword)
-    );
-    return isPersonal && !isCorporate;
-  };
-
-  const handleEmailChange = (email: string) => {
-    setFormData({ ...formData, email });
-    if (email && !validatePersonalEmail(email)) {
-      setEmailError(
-        "Use apenas email pessoal (Gmail, Yahoo, Outlook, etc.). Emails corporativos não são aceitos."
-      );
-    } else {
-      setEmailError("");
-    }
-  };
+  // Removida a validação de email pessoal - agora aceitamos qualquer domínio de email válido.
 
   const sanitizeCep = (value: string) => value.replace(/\D/g, "").slice(0, 8);
 
@@ -422,14 +384,6 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
         if (formData.type === "escritorio") {
           if (!formData.parentId) missing.push("Distribuidor Responsável");
         }
-        if (emailError) {
-          toast({
-            title: "Email inválido",
-            description: emailError,
-            variant: "destructive",
-          });
-          return false;
-        }
         break;
       }
       case 1: {
@@ -700,19 +654,17 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
             </div>
 
             <div>
-              <Label htmlFor="email">Email Pessoal *</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => handleEmailChange(e.target.value)}
-                placeholder="seu@gmail.com"
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                placeholder="seu@email.com"
                 required
-                className={emailError ? "border-destructive" : ""}
               />
-              {emailError && (
-                <p className="text-sm text-destructive mt-1">{emailError}</p>
-              )}
             </div>
 
             <div>

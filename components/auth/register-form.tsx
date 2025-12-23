@@ -36,54 +36,12 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
     Array<{ id: string; name: string; role: string }>
   >([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [emailError, setEmailError] = useState("");
   const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
 
-  const validatePersonalEmail = (email: string) => {
-    const personalDomains = [
-      "gmail.com",
-      "yahoo.com",
-      "outlook.com",
-      "hotmail.com",
-      "icloud.com",
-      "uol.com.br",
-      "terra.com.br",
-      "bol.com.br",
-    ];
-    const domain = email.split("@")[1]?.toLowerCase();
-
-    if (!domain) return false;
-
-    const isPersonal = personalDomains.includes(domain);
-    const corporateKeywords = [
-      "empresa",
-      "escritorio",
-      "consultoria",
-      "investimentos",
-      "financeira",
-      "capital",
-    ];
-    const isCorporate = corporateKeywords.some((keyword) =>
-      domain.includes(keyword)
-    );
-
-    return isPersonal && !isCorporate;
-  };
-
-  const handleEmailChange = (email: string) => {
-    setFormData({ ...formData, email });
-
-    if (email && !validatePersonalEmail(email)) {
-      setEmailError(
-        "Use apenas email pessoal (Gmail, Yahoo, Outlook, etc.). Emails corporativos não são aceitos."
-      );
-    } else {
-      setEmailError("");
-    }
-  };
+  // Removida a validação de email pessoal - agora aceitamos qualquer domínio de email válido.
 
   const loadParentOptions = async () => {
     const mockParentOptions = {
@@ -151,16 +109,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
     console.log("[v0] Iniciando processo de registro");
     console.log("[v0] Dados do formulário:", formData);
 
-    if (emailError) {
-      toast({
-        title: "Erro no cadastro",
-        description: "Corrija o email antes de continuar.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
-
+    // Removido: validação de email pessoal - agora aceitamos qualquer domínio.
     // Removido: validação de senha - senha será gerada automaticamente
 
     if (formData.role !== "escritorio" && !formData.parentId) {
@@ -382,24 +331,19 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email Pessoal</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
-            placeholder="seu@gmail.com"
+            placeholder="seu@email.com"
             value={formData.email}
-            onChange={(e) => handleEmailChange(e.target.value)}
+            onChange={(e) =>
+              setFormData({ ...formData, email: e.target.value })
+            }
             required
-            className={emailError ? "border-destructive" : ""}
           />
-          {emailError && (
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <AlertTriangle className="h-4 w-4" />
-              {emailError}
-            </div>
-          )}
           <p className="text-xs text-muted-foreground">
-            Apenas emails pessoais são aceitos (Gmail, Yahoo, Outlook, etc.)
+            Usaremos este email para acesso e comunicações da plataforma.
           </p>
         </div>
 
@@ -530,7 +474,7 @@ function RegisterFormContent({closeModal}: {closeModal: () => void}) {
         <Button
           type="submit"
           className="w-full"
-          disabled={isLoading || !!emailError}
+          disabled={isLoading}
         >
           {isLoading ? "Cadastrando..." : "Criar Conta"}
         </Button>

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import { UserPlus, Mail, AlertTriangle } from "lucide-react"
+import { UserPlus, Mail } from "lucide-react"
 
 interface InvestorRegistrationProps {
   assessorId: string
@@ -30,41 +30,10 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
     notes: "",
   })
   const [isLoading, setIsLoading] = useState(false)
-  const [emailError, setEmailError] = useState("")
   const { toast } = useToast()
   const supabase = createClient()
 
-  const validatePersonalEmail = (email: string) => {
-    const personalDomains = [
-      "gmail.com",
-      "yahoo.com",
-      "outlook.com",
-      "hotmail.com",
-      "icloud.com",
-      "uol.com.br",
-      "terra.com.br",
-      "bol.com.br",
-    ]
-    const domain = email.split("@")[1]?.toLowerCase()
-
-    if (!domain) return false
-
-    const isPersonal = personalDomains.includes(domain)
-    const corporateKeywords = ["empresa", "escritorio", "consultoria", "investimentos", "financeira", "capital"]
-    const isCorporate = corporateKeywords.some((keyword) => domain.includes(keyword))
-
-    return isPersonal && !isCorporate
-  }
-
-  const handleEmailChange = (email: string) => {
-    setFormData({ ...formData, email })
-
-    if (email && !validatePersonalEmail(email)) {
-      setEmailError("Use apenas email pessoal (Gmail, Yahoo, Outlook, etc.). Emails corporativos não são aceitos.")
-    } else {
-      setEmailError("")
-    }
-  }
+  // Removida a validação de email pessoal - agora aceitamos qualquer domínio de email válido.
 
   const generatePassword = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -117,16 +86,6 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
-    if (emailError) {
-      toast({
-        title: "Erro no cadastro",
-        description: "Corrija o email antes de continuar.",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-      return
-    }
 
     try {
       const password = generatePassword()
@@ -260,22 +219,15 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Pessoal *</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="email@gmail.com"
+                placeholder="email@empresa.com"
                 value={formData.email}
-                onChange={(e) => handleEmailChange(e.target.value)}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
-                className={emailError ? "border-destructive" : ""}
               />
-              {emailError && (
-                <div className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  {emailError}
-                </div>
-              )}
             </div>
           </div>
 
@@ -379,7 +331,7 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
             </p>
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading || !!emailError}>
+          <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? "Cadastrando..." : "Cadastrar Investidor"}
           </Button>
         </form>
