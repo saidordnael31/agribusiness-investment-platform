@@ -515,6 +515,36 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
       const { generateTemporaryPassword } = await import("@/lib/password-utils");
       const temporaryPassword = generateTemporaryPassword(12);
 
+      // Mapear corretamente user_type e role para manter compatibilidade com o restante do sistema
+      let userType = formData.type;
+      let userRole = formData.type;
+
+      switch (formData.type) {
+        case "distributor":
+          userType = "distributor";
+          userRole = "distribuidor";
+          break;
+        case "escritorio":
+          // Escritórios fazem parte da hierarquia de distribuidores
+          userType = "distributor";
+          userRole = "escritorio";
+          break;
+        case "assessor":
+          // Assessores também ficam na hierarquia de distribuidores
+          userType = "distributor";
+          userRole = "assessor";
+          break;
+        case "investor":
+          userType = "investor";
+          userRole = "investidor";
+          break;
+        case "admin":
+        default:
+          userType = "admin";
+          userRole = "admin";
+          break;
+      }
+
       let distributorId: string | null = null;
       let finalOfficeId: string | null = null;
       let finalParentId: string | null = null;
@@ -568,8 +598,8 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           emailRedirectTo: `${window.location.origin}/login`,
           data: {
             full_name: formData.name,
-            user_type: formData.type,
-            role: formData.type,
+            user_type: userType,
+            role: userRole,
             parent_id: finalParentId || null,
             cpf_cnpj: formData.cpfCnpj,
             phone: formData.phone,
@@ -586,8 +616,8 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           id: authData.user.id,
           email: formData.email,
           full_name: formData.name,
-          user_type: formData.type,
-          role: formData.type,
+          user_type: userType,
+          role: userRole,
           parent_id: finalParentId,
           office_id: finalOfficeId,
           distributor_id: distributorId,
