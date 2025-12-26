@@ -56,35 +56,70 @@ export function InvestmentSimulator({ title }: { title?: string }) {
 
   // Função para obter a taxa baseada no prazo e liquidez
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
-    const rates: { [key: string]: { [key: string]: number } } = {
+    // Tabela padrão (investidores em geral)
+    const defaultRates: { [key: string]: { [key: string]: number } } = {
       "3": {
-        "mensal": 0.018, // 1.8%
+        mensal: 0.018, // 1,8%
       },
       "6": {
-        "mensal": 0.019, // 1.9%
-        "semestral": 0.02, // 2%
+        mensal: 0.019, // 1,9%
+        semestral: 0.02, // 2,0%
       },
       "12": {
-        "mensal": 0.021, // 2.1%
-        "semestral": 0.022, // 2.2%
-        "anual": 0.025, // 2.5%
+        mensal: 0.021, // 2,1%
+        semestral: 0.022, // 2,2%
+        anual: 0.025, // 2,5%
       },
       "24": {
-        "mensal": 0.023, // 2.3%
-        "semestral": 0.025, // 2.5%
-        "anual": 0.027, // 2.7%
-        "bienal": 0.03, // 3%
+        mensal: 0.023, // 2,3%
+        semestral: 0.025, // 2,5%
+        anual: 0.027, // 2,7%
+        bienal: 0.03, // 3,0%
       },
       "36": {
-        "mensal": 0.024, // 2.4%
-        "semestral": 0.026, // 2.6%
-        "anual": 0.03, // 3%
-        "bienal": 0.032, // 3.2%
-        "trienal": 0.035, // 3.5%
+        mensal: 0.024, // 2,4%
+        semestral: 0.026, // 2,6%
+        anual: 0.03, // 3,0%
+        bienal: 0.032, // 3,2%
+        trienal: 0.035, // 3,5%
       },
     };
 
-    return rates[period.toString()]?.[liquidity] || 0;
+    // Tabela especial para investidores de assessores externos
+    // Mapeando D+90/180/360/720/1080 para 3/6/12/24/36 meses
+    const externalAdvisorRates: { [key: string]: { [key: string]: number } } = {
+      "3": {
+        mensal: 0.0135, // 1,35%
+      },
+      "6": {
+        mensal: 0.014,  // 1,40%
+        semestral: 0.0145, // 1,45%
+      },
+      "12": {
+        mensal: 0.015,  // 1,50%
+        semestral: 0.0155, // 1,55%
+        anual: 0.016, // 1,60%
+      },
+      "24": {
+        mensal: 0.0165, // 1,65%
+        semestral: 0.017, // 1,70%
+        anual: 0.0175, // 1,75%
+        bienal: 0.018, // 1,80%
+      },
+      "36": {
+        mensal: 0.0185, // 1,85%
+        semestral: 0.019, // 1,90%
+        bienal: 0.0195, // 1,95%
+        trienal: 0.02, // 2,00%
+      },
+    };
+
+    const currentUser: any = user;
+    const isExternalAdvisor =
+      currentUser && (currentUser.role === "assessor_externo" || currentUser.user_type === "assessor_externo");
+
+    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
+    return table[period.toString()]?.[liquidity] || 0;
   };
 
   // Função para obter opções de liquidez disponíveis baseadas no prazo

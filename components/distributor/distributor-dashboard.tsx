@@ -1088,7 +1088,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   const showContractsTab = user?.role === "assessor" || user?.role === "escritorio";
   const tabsGridCols =
     user?.role === "escritorio" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
-  const overviewGridCols = "lg:grid-cols-5";
+  const overviewGridCols = "lg:grid-cols-4";
   const filteredContractsOverview = useMemo(() => {
     if (!contractsSearchTerm.trim()) {
       return contractsOverview;
@@ -3003,7 +3003,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
             </CardHeader>
             <CardContent className="relative z-10">
-              {user?.role === "assessor" ? (
+              {user?.role === "assessor" || user?.role === "assessor_externo" ? (
                 <>
                   <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
                     {distributorData.ranking.position > 0
@@ -3044,7 +3044,9 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             <CardContent className="space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg">
                 <div className="flex-1">
-                  <h4 className="font-bold text-[#003F28] text-base mb-1">Assessor (3%)</h4>
+                  <h4 className="font-bold text-[#003F28] text-base mb-1">
+                    {user?.role === "assessor_externo" ? "Assessor (2%)" : "Assessor (3%)"}
+                  </h4>
                   <p className="text-sm text-gray-600">
                     Sua parte da comissão (Até 3 milhões)
                   </p>

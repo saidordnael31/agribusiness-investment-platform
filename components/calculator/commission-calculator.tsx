@@ -11,6 +11,8 @@ interface UserData {
   name: string
   email: string
   type: string
+  role?: string
+  user_type?: string
 }
 
 export function CommissionCalculator() {
@@ -29,6 +31,8 @@ export function CommissionCalculator() {
   }
 
   if (!user) return null
+
+  const isExternalAdvisor = user.role === "assessor_externo" || user.user_type === "assessor_externo"
 
   return (
     <div className="min-h-screen bg-background">
@@ -82,7 +86,9 @@ export function CommissionCalculator() {
               <div className="rounded-lg bg-background/70 p-4">
                 <h4 className="font-semibold text-purple-700 mb-1">Taxas aplicadas</h4>
                 <p className="text-sm text-muted-foreground">
-                  Rentabilidade do investidor varia entre {`1.8%`} e {`3.5%`} ao mês, de acordo com a liquidez escolhida.
+                  Rentabilidade do investidor varia entre{" "}
+                  {isExternalAdvisor ? "1,35%" : "1,8%"} e {isExternalAdvisor ? "2,0%" : "3,5%"} ao mês, de acordo com a liquidez
+                  escolhida.
                 </p>
               </div>
             </div>

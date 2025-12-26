@@ -177,7 +177,7 @@ export function useRecurrenceCalculator() {
         })
         .map((investment: any): RecurrenceCalculation => {
         const investor = profilesMap.get(investment.user_id)
-        let advisor = null
+        let advisor: any = null
         let office = null
 
         if (investor?.parent_id) {
@@ -218,6 +218,7 @@ export function useRecurrenceCalculator() {
             investorName: investor?.full_name || "Investidor",
             advisorId: advisor?.id,
             advisorName: advisor?.full_name || "Assessor",
+            advisorRole: advisor?.role,
             officeId: office?.id,
             officeName: office?.full_name || "Escritório",
             isForAdvisor: true, // Para calcular comissão do assessor

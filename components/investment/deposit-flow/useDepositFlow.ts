@@ -36,6 +36,7 @@ export function useDepositFlow() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [allInvestmentsReturn, setAllInvestmentsReturn] = useState(0);
   const [allInvestmentsValue, setAllInvestmentsValue] = useState(0);
+  const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -44,6 +45,52 @@ export function useDepositFlow() {
       setUser(userData);
     }
   }, []);
+
+  useEffect(() => {
+    const checkIfExternalAdvisorInvestor = async () => {
+      try {
+        if (!user?.id) return;
+
+        const supabase = createClient();
+
+        // Buscar perfil completo do investidor
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id, parent_id, assessor_id")
+          .eq("id", user.id)
+          .single();
+
+        if (!profile) {
+          setIsExternalAdvisorInvestor(false);
+          return;
+        }
+
+        const advisorId = (profile as any).parent_id || (profile as any).assessor_id;
+        if (!advisorId) {
+          setIsExternalAdvisorInvestor(false);
+          return;
+        }
+
+        // Buscar role do assessor responsável
+        const { data: advisorProfile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", advisorId)
+          .single();
+
+        if (advisorProfile && advisorProfile.role === "assessor_externo") {
+          setIsExternalAdvisorInvestor(true);
+        } else {
+          setIsExternalAdvisorInvestor(false);
+        }
+      } catch (error) {
+        console.error("Erro ao verificar assessor externo:", error);
+        setIsExternalAdvisorInvestor(false);
+      }
+    };
+
+    checkIfExternalAdvisorInvestor();
+  }, [user]);
 
   const fetchInvestments = async () => {
     const supabase = createClient();
@@ -165,35 +212,66 @@ export function useDepositFlow() {
   };
 
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
-    const rates: { [key: string]: { [key: string]: number } } = {
+    // Tabela padrão de rentabilidade (investidores em geral)
+    const defaultRates: { [key: string]: { [key: string]: number } } = {
       "3": {
-        "Mensal": 0.018,
+        "Mensal": 0.018, // 1,8%
       },
       "6": {
-        "Mensal": 0.019,
-        "Semestral": 0.02,
+        "Mensal": 0.019, // 1,9%
+        "Semestral": 0.02, // 2,0%
       },
       "12": {
-        "Mensal": 0.021,
-        "Semestral": 0.022,
-        "Anual": 0.025,
+        "Mensal": 0.021, // 2,1%
+        "Semestral": 0.022, // 2,2%
+        "Anual": 0.025, // 2,5%
       },
       "24": {
-        "Mensal": 0.023,
-        "Semestral": 0.025,
-        "Anual": 0.027,
-        "Bienal": 0.03,
+        "Mensal": 0.023, // 2,3%
+        "Semestral": 0.025, // 2,5%
+        "Anual": 0.027, // 2,7%
+        "Bienal": 0.03, // 3,0%
       },
       "36": {
-        "Mensal": 0.024,
-        "Semestral": 0.026,
-        "Anual": 0.03,
-        "Bienal": 0.032,
-        "Trienal": 0.035,
+        "Mensal": 0.024, // 2,4%
+        "Semestral": 0.026, // 2,6%
+        "Anual": 0.03, // 3,0%
+        "Bienal": 0.032, // 3,2%
+        "Trienal": 0.035, // 3,5%
       },
     };
 
-    return rates[period.toString()]?.[liquidity] || 0;
+    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
+    const externalAdvisorRates: { [key: string]: { [key: string]: number } } = {
+      "3": {
+        "Mensal": 0.0135, // 1,35%
+      },
+      "6": {
+        "Mensal": 0.014, // 1,40%
+        "Semestral": 0.0145, // 1,45%
+      },
+      "12": {
+        "Mensal": 0.015, // 1,50%
+        "Semestral": 0.0155, // 1,55%
+        "Anual": 0.016, // 1,60%
+      },
+      "24": {
+        "Mensal": 0.0165, // 1,65%
+        "Semestral": 0.017, // 1,70%
+        "Anual": 0.0175, // 1,75%
+        "Bienal": 0.018, // 1,80%
+      },
+      "36": {
+        "Mensal": 0.0185, // 1,85%
+        "Semestral": 0.019, // 1,90%
+        "Bienal": 0.0195, // 1,95%
+        "Trienal": 0.02, // 2,00%
+      },
+    };
+
+    const table = isExternalAdvisorInvestor ? externalAdvisorRates : defaultRates;
+
+    return table[period.toString()]?.[liquidity] || 0;
   };
 
   const getAvailableLiquidityOptions = (period: number): string[] => {

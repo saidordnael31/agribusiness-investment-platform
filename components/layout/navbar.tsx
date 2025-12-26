@@ -162,6 +162,7 @@ export function Navbar() {
       case "investidor":
         return "Investidor";
       case "assessor":
+      case "assessor_externo":
         return "Assessor";
       case "escritorio":
         return "Escritório";

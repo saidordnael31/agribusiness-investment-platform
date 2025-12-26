@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -36,6 +36,7 @@ const liquidityLabels: Record<LiquidityOption, string> = {
 }
 
 export function ComparisonCalculator() {
+  const [isExternalAdvisor, setIsExternalAdvisor] = useState(false)
   const [scenarios, setScenarios] = useState<ScenarioConfig[]>([
     { name: "Cenário 1", amount: 500000, commitmentPeriod: 12, liquidity: "mensal" },
     { name: "Cenário 2", amount: 500000, commitmentPeriod: 12, liquidity: "semestral" },
@@ -43,10 +44,55 @@ export function ComparisonCalculator() {
   ])
   const [chartMode, setChartMode] = useState<"total" | "cycle">("total")
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const userStr = localStorage.getItem("user")
+    if (!userStr) return
+    try {
+      const parsed = JSON.parse(userStr)
+      const role = parsed.role || parsed.user_type || parsed.type
+      setIsExternalAdvisor(role === "assessor_externo")
+    } catch {
+      setIsExternalAdvisor(false)
+    }
+  }, [])
+
+  const getExternalAdvisorMonthlyRate = (commitmentPeriod: number, liquidity: LiquidityOption): number => {
+    const table: Record<number, Partial<Record<LiquidityOption, number>>> = {
+      3: {
+        mensal: 0.0135, // 1,35%
+      },
+      6: {
+        mensal: 0.014, // 1,40%
+        semestral: 0.0145, // 1,45%
+      },
+      12: {
+        mensal: 0.015, // 1,50%
+        semestral: 0.0155, // 1,55%
+        anual: 0.016, // 1,60%
+      },
+      24: {
+        mensal: 0.0165, // 1,65%
+        semestral: 0.017, // 1,70%
+        anual: 0.0175, // 1,75%
+        bienal: 0.018, // 1,80%
+      },
+      36: {
+        mensal: 0.0185, // 1,85%
+        semestral: 0.019, // 1,90%
+        bienal: 0.0195, // 1,95%
+        trienal: 0.02, // 2,00%
+      },
+    }
+
+    return table[commitmentPeriod]?.[liquidity] ?? 0
+  }
+
   const calculateScenario = (scenario: ScenarioConfig) => {
     const { amount, commitmentPeriod, liquidity } = scenario
-
-    const investorRate = getInvestorMonthlyRate(commitmentPeriod, liquidity)
+    const investorRate = isExternalAdvisor
+      ? getExternalAdvisorMonthlyRate(commitmentPeriod, liquidity)
+      : getInvestorMonthlyRate(commitmentPeriod, liquidity)
     const redemptionWindow = getRedemptionWindow(commitmentPeriod)
     const liquidityCycleMonths = getLiquidityCycleMonths(liquidity)
 
@@ -129,7 +175,7 @@ export function ComparisonCalculator() {
         liquidityCycleMonths: calc.liquidityCycleMonths,
       }
     })
-  }, [scenarios])
+  }, [scenarios, isExternalAdvisor])
 
   const chartData = useMemo(
     () =>

@@ -519,6 +519,7 @@ export function calculateNewCommissionLogic(
     investorName?: string;
     advisorId?: string;
     advisorName?: string;
+    advisorRole?: string;
     officeId?: string;
     officeName?: string;
     isForAdvisor?: boolean; // Flag para identificar se é cálculo para assessor
@@ -719,9 +720,11 @@ export function calculateNewCommissionLogic(
       ) + 1; // +1 para incluir o dia do corte
       const daysDiff = Math.max(0, rawDaysDiff);
       
-      // Taxa mensal do assessor: 3%
-      // Taxa diária: 3% / 30 = 0.1% por dia
-      const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
+      // Taxa do assessor: 3% padrão, 2% para assessor_externo
+      const advisorBaseRate =
+        investment.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor;
+      // Taxa diária do assessor
+      const dailyRateAdvisor = advisorBaseRate / 30;
       const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
       
     // Comissão proporcional: taxa diária * dias acumulados
@@ -775,8 +778,8 @@ export function calculateNewCommissionLogic(
       paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
       
       // Calcular comissão mensal completa para cada mês futuro
-      // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório)
-      const monthlyAdvisorCommission = investment.amount * COMMISSION_RATES.assessor;
+      // Comissão mensal = valor * taxa mensal (assessorBaseRate para assessor, 1% para escritório)
+      const monthlyAdvisorCommission = investment.amount * advisorBaseRate;
       const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
       const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
       
@@ -820,7 +823,7 @@ export function calculateNewCommissionLogic(
       
     // Descrição simplificada focada apenas na comissão do assessor
     const roleName = investment.advisorName || 'Assessor';
-    const roleRate = COMMISSION_RATES.assessor;
+    const roleRate = advisorBaseRate;
     
     description = `Comissão de ${roleName} calculada sobre investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
       `Taxa de comissão: ${(roleRate * 100).toFixed(0)}% ao mês. ` +

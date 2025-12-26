@@ -112,7 +112,7 @@ export function AdvisorCommissionsDetail() {
       }
 
       const isOffice = profile.role === "escritorio"
-      const isAdvisor = profile.role === "assessor"
+      const isAdvisor = profile.role === "assessor" || profile.role === "assessor_externo"
 
       if (!isOffice && !isAdvisor) {
         toast({
@@ -178,7 +178,7 @@ export function AdvisorCommissionsDetail() {
           }
         }
       } else {
-        // Assessor: buscar investidores por parent_id
+        // Assessor (interno ou externo): buscar investidores por parent_id
         const { data: investorsByParent } = await supabase
           .from("profiles")
           .select("id, full_name, email")
@@ -319,6 +319,7 @@ export function AdvisorCommissionsDetail() {
               investorName: investorProfile?.full_name || "Investidor",
               advisorId: user.id,
               advisorName: profile?.full_name || "Assessor",
+              advisorRole: profile.role,
               isForAdvisor: true, // Flag para aplicar regra sem D+60
             })
           }

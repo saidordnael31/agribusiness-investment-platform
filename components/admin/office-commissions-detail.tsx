@@ -137,10 +137,10 @@ export function OfficeCommissionsDetail() {
       console.log('[ESCRITÓRIO] Buscando assessores com office_id =', user.id);
       const { data: advisors, error: advisorsError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, office_id")
+        .select("id, full_name, email, office_id, role")
         .eq("office_id", user.id)
         .eq("user_type", "distributor")
-        .eq("role", "assessor")
+        .in("role", ["assessor", "assessor_externo"])
 
       if (advisorsError) {
         console.error('[ESCRITÓRIO] Erro ao buscar assessores:', advisorsError);
@@ -316,6 +316,7 @@ export function OfficeCommissionsDetail() {
             investorName: investorProfile?.full_name || "Investidor",
             advisorId: advisorId,
             advisorName: advisor?.full_name || "Assessor",
+            advisorRole: advisor?.role,
             isForAdvisor: true, // Sem D+60 para assessor
           })
           

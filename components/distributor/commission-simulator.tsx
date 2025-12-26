@@ -28,9 +28,25 @@ export function CommissionSimulator() {
     const amount = Number.parseFloat(capturedAmount)
     if (!amount) return
 
-    // Determinar role baseado no tipo de usuário
-    const userRole = user?.role === "investidor" ? "investidor" : 
-                     user?.role === "escritorio" ? "escritorio" : "assessor"
+    const isExternalAdvisor = user?.role === "assessor_externo"
+
+    if (isExternalAdvisor) {
+      // Assessor externo: 2% ao mês
+      const monthlyCommission = amount * 0.02
+      const annualCommission = monthlyCommission * 12
+      setResults({
+        monthlyCommission,
+        annualCommission,
+      })
+      return
+    }
+
+    // Determinar role baseado no tipo de usuário (interno)
+    const userRole = user?.role === "investidor"
+      ? "investidor"
+      : user?.role === "escritorio"
+      ? "escritorio"
+      : "assessor"
 
     // Calcular comissão baseada no role do usuário (sem bônus)
     const roleCalculation = calculateRoleCommission(amount, userRole, 12)
@@ -79,7 +95,7 @@ export function CommissionSimulator() {
           <div className="space-y-4">
             <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border border-gray-300">
               <p className="text-sm text-gray-600">
-                {user?.role === "assessor"
+                {user?.role === "assessor" || user?.role === "assessor_externo"
                   ? "Comissão Mensal (Assessor)"
                   : user?.role === "escritorio"
                   ? "Comissão Mensal (Escritório)"
@@ -94,7 +110,14 @@ export function CommissionSimulator() {
                 }).format(results.monthlyCommission)}
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                Equivalente a {user?.role === "investidor" ? "2% a.m." : user?.role === "escritorio" ? "1% a.m." : "3% a.m."}
+                Equivalente a{" "}
+                {user?.role === "investidor"
+                  ? "2% a.m."
+                  : user?.role === "escritorio"
+                  ? "1% a.m."
+                  : user?.role === "assessor_externo"
+                  ? "2% a.m."
+                  : "3% a.m."}
               </p>
             </div>
 
@@ -121,6 +144,8 @@ export function CommissionSimulator() {
               <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Escritório):</span> 1% ao mês sobre valor investido</p>
             ) : user?.role === "assessor" ? (
               <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Assessor):</span> 3% ao mês sobre valor investido</p>
+            ) : user?.role === "assessor_externo" ? (
+              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Assessor):</span> 2% ao mês sobre valor investido</p>
             ) : (
               <div className="space-y-1">
                 <p>• <span className="font-medium text-[#003F28]">Investidor:</span> 2% ao mês sobre valor investido</p>

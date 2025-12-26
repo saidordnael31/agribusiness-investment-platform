@@ -300,7 +300,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
 
 
   useEffect(() => {
-    if (formData.type === "assessor") {
+    if (formData.type === "assessor" || formData.type === "assessor_externo") {
       getOffices();
       setAdvisorOptions([]);
       setDistributorOptions([]);
@@ -369,13 +369,13 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
         if (!formData.email) missing.push("Email");
         if (!formData.type) missing.push("Tipo de usuário");
         if (!formData.cpfCnpj) missing.push(formData.type === "escritorio" ? "CNPJ" : "CPF");
-        if (formData.type === "assessor" || formData.type === "investor") {
+        if (formData.type === "assessor" || formData.type === "assessor_externo" || formData.type === "investor") {
           if (!formData.rg) missing.push("RG");
           if (!formData.nationality) missing.push("Nacionalidade");
           if (!formData.maritalStatus) missing.push("Estado civil");
           if (!formData.profession) missing.push("Profissão");
         }
-        if (formData.type === "assessor") {
+        if (formData.type === "assessor" || formData.type === "assessor_externo") {
           if (!formData.officeId || !formData.parentId) missing.push("Escritório Responsável");
         }
         if (formData.type === "investor") {
@@ -488,6 +488,11 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           userType = "distributor";
           userRole = "assessor";
           break;
+        case "assessor_externo":
+          // Assessores externos também ficam na hierarquia de distribuidores
+          userType = "distributor";
+          userRole = "assessor_externo";
+          break;
         case "investor":
           userType = "investor";
           userRole = "investidor";
@@ -510,8 +515,8 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
         finalParentId = formData.parentId;
         distributorId = formData.parentId;
         finalOfficeId = null;
-      } else if (formData.type === "assessor" && formData.officeId) {
-        // Assessor: parent_id = escritório, office_id = escritório
+      } else if ((formData.type === "assessor" || formData.type === "assessor_externo") && formData.officeId) {
+        // Assessor (interno ou externo): parent_id = escritório, office_id = escritório
         finalParentId = formData.officeId;
         finalOfficeId = formData.officeId;
         
@@ -646,7 +651,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
                 placeholder={
                   formData.type === "investor"
                     ? "Nome completo do investidor"
-                    : formData.type === "assessor"
+                    : (formData.type === "assessor" || formData.type === "assessor_externo")
                     ? "Nome completo do assessor"
                     : "Nome completo"
                 }
@@ -722,7 +727,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
               </div>
             )}
 
-            {(formData.type === "assessor" || formData.type === "investor") && (
+            {(formData.type === "assessor" || formData.type === "assessor_externo" || formData.type === "investor") && (
               <>
                 <div>
                   <Label htmlFor="rg">RG *</Label>
@@ -785,7 +790,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
               </>
             )}
 
-            {formData.type === "assessor" && (
+            {(formData.type === "assessor" || formData.type === "assessor_externo") && (
               <div className="md:col-span-2">
                 <Label htmlFor="officeId">Escritório Responsável *</Label>
                 <Select
@@ -1146,6 +1151,12 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
             <RadioGroupItem value="assessor" id="assessor" />
             <Label htmlFor="assessor" className="cursor-pointer">
               Assessor
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="assessor_externo" id="assessor_externo" />
+            <Label htmlFor="assessor_externo" className="cursor-pointer">
+              Assessor (Externo)
             </Label>
           </div>
           <div className="flex items-center space-x-2">
