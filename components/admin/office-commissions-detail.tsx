@@ -232,7 +232,7 @@ export function OfficeCommissionsDetail() {
       console.log('[ESCRITÓRIO] Buscando investimentos para IDs:', investorIds);
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
-        .select("id, user_id, amount, payment_date, created_at, status, commitment_period")
+        .select("id, user_id, amount, payment_date, created_at, status, commitment_period, profitability_liquidity")
         .in("user_id", investorIds)
         .eq("status", "active")
       
@@ -313,6 +313,7 @@ export function OfficeCommissionsDetail() {
             amount: Number(investment.amount),
             payment_date: investmentPaymentDate,
             commitment_period: investment.commitment_period || 12,
+            liquidity: investment.profitability_liquidity,
             investorName: investorProfile?.full_name || "Investidor",
             advisorId: advisorId,
             advisorName: advisor?.full_name || "Assessor",
@@ -327,6 +328,7 @@ export function OfficeCommissionsDetail() {
             amount: Number(investment.amount),
             payment_date: investmentPaymentDate,
             commitment_period: investment.commitment_period || 12,
+            liquidity: investment.profitability_liquidity,
             investorName: investorProfile?.full_name || "Investidor",
             officeId: user.id,
             officeName: profile?.full_name || "Escritório",
@@ -346,6 +348,7 @@ export function OfficeCommissionsDetail() {
             amount: Number(investment.amount),
             payment_date: investmentPaymentDate,
             commitment_period: investment.commitment_period || 12,
+            liquidity: investment.profitability_liquidity,
             investorName: investorProfile?.full_name || "Investidor",
             officeId: user.id,
             officeName: profile?.full_name || "Escritório",

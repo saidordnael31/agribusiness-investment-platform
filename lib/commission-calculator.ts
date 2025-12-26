@@ -81,6 +81,8 @@ export function getLiquidityCycleMonths(liquidity: LiquidityOption): number {
   switch (liquidity) {
     case "mensal":
       return 1;
+    // Para rentabilidades com pagamento não mensal,
+    // usamos múltiplos de meses como ciclos de recebimento
     case "semestral":
       return 6;
     case "anual":
@@ -516,6 +518,7 @@ export function calculateNewCommissionLogic(
     amount: number;
     payment_date: Date | string;
     commitment_period?: number; // Período de compromisso em meses (padrão: 12)
+    liquidity?: LiquidityOption | string; // Liquidez da rentabilidade (mensal, semestral, anual, bienal, trienal)
     investorName?: string;
     advisorId?: string;
     advisorName?: string;
@@ -583,6 +586,18 @@ export function calculateNewCommissionLogic(
   
   // Período de compromisso (padrão: 12 meses)
   const commitmentPeriod = investment.commitment_period || 12;
+
+  // Liquidez da rentabilidade (frequência de recebimento do investidor)
+  let liquidityOption: LiquidityOption = "mensal";
+  if (investment.liquidity) {
+    const raw = String(investment.liquidity).toLowerCase();
+    if (raw.includes("semestral")) liquidityOption = "semestral";
+    else if (raw.includes("anual")) liquidityOption = "anual";
+    else if (raw.includes("bienal")) liquidityOption = "bienal";
+    else if (raw.includes("trienal")) liquidityOption = "trienal";
+    else liquidityOption = "mensal";
+  }
+  const liquidityCycleMonths = getLiquidityCycleMonths(liquidityOption);
   
   let cutoffPeriod: { year: number; month: number; cutoffDate: Date };
   let commissionPeriod: { startDate: Date; endDate: Date };
@@ -777,11 +792,11 @@ export function calculateNewCommissionLogic(
       // Calcular todas as datas de pagamento primeiro (para usar como base)
       paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
       
-      // Calcular comissão mensal completa para cada mês futuro
-      // Comissão mensal = valor * taxa mensal (assessorBaseRate para assessor, 1% para escritório)
-      const monthlyAdvisorCommission = investment.amount * advisorBaseRate;
-      const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
-      const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+    // Calcular comissão mensal completa para cada mês futuro
+    // Comissão mensal = valor * taxa mensal (assessorBaseRate para assessor, 1% para escritório, 2% para investidor)
+    const monthlyAdvisorCommission = investment.amount * advisorBaseRate;
+    const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
+    const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
       
       // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
       // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
@@ -799,7 +814,7 @@ export function calculateNewCommissionLogic(
         year: firstPaymentDate.getFullYear(),
         advisorCommission, // Comissão proporcional calculada acima
         officeCommission, // Comissão proporcional calculada acima
-        investorCommission,
+        investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
       });
       
       // Adicionar períodos futuros (comissão mensal completa)
@@ -815,8 +830,43 @@ export function calculateNewCommissionLogic(
           year: paymentDateMonth.getFullYear(),
           advisorCommission: monthlyAdvisorCommission, // Comissão mensal completa (3%)
           officeCommission: monthlyOfficeCommission, // Comissão mensal completa (1%)
-          investorCommission: monthlyInvestorCommission, // Comissão mensal completa (2%)
+          investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
         });
+      }
+      
+      // Ajustar o fluxo do INVESTIDOR para respeitar D+60 e liquidez
+      // - D+60: já considerado em investorCommission (primeiro período, pró-rata)
+      // - Liquidez: mensal/semestral/anual/bienal/trienal => paga apenas no fim do ciclo, somando o que acumulou
+      if (paymentDueDate.length > 0) {
+        const investorPerMonth = new Array<number>(paymentDueDate.length).fill(0);
+        let cycleAcc = 0;
+        
+        for (let i = 0; i < paymentDueDate.length; i++) {
+          if (i === 0) {
+            // Primeiro período: usar o valor pró-rata calculado com D+60
+            cycleAcc += investorCommission;
+          } else {
+            // Períodos seguintes: acumular mês cheio
+            cycleAcc += monthlyInvestorCommission;
+          }
+          
+          // Fim de ciclo de liquidez: pagar tudo que acumulou
+          if ((i + 1) % liquidityCycleMonths === 0) {
+            investorPerMonth[i] = cycleAcc;
+            cycleAcc = 0;
+          }
+        }
+        
+        // Se sobrou algo acumulado (ex.: compromisso não fecha ciclo exato), paga no último mês
+        if (cycleAcc > 0) {
+          investorPerMonth[investorPerMonth.length - 1] += cycleAcc;
+        }
+        
+        // Aplicar no breakdown
+        monthlyBreakdown = monthlyBreakdown.map((m, idx) => ({
+          ...m,
+          investorCommission: investorPerMonth[idx] || 0,
+        }));
       }
       
       periodLabel = monthName;
@@ -902,7 +952,7 @@ export function calculateNewCommissionLogic(
     paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
     
     // Calcular comissão mensal completa para cada mês futuro
-    // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório)
+    // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório, 2% para investidor)
     const monthlyAdvisorCommission = investment.amount * COMMISSION_RATES.assessor;
     const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
     const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
@@ -929,7 +979,7 @@ export function calculateNewCommissionLogic(
       year: firstPaymentDate.getFullYear(),
       advisorCommission, // Comissão proporcional calculada acima
       officeCommission, // Comissão proporcional calculada acima
-      investorCommission,
+      investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
     });
     
     // Adicionar períodos futuros (comissão mensal completa)
@@ -945,8 +995,38 @@ export function calculateNewCommissionLogic(
         year: paymentDateMonth.getFullYear(),
         advisorCommission: monthlyAdvisorCommission, // Comissão mensal completa (3%)
         officeCommission: monthlyOfficeCommission, // Comissão mensal completa (1%)
-        investorCommission: monthlyInvestorCommission, // Comissão mensal completa (2%)
+        investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
       });
+    }
+    
+    // Ajustar o fluxo do INVESTIDOR para respeitar D+60 e liquidez
+    if (paymentDueDate.length > 0) {
+      const investorPerMonth = new Array<number>(paymentDueDate.length).fill(0);
+      let cycleAcc = 0;
+      
+      for (let i = 0; i < paymentDueDate.length; i++) {
+        if (i === 0) {
+          // Primeiro período (pró-rata com D+60)
+          cycleAcc += investorCommission;
+        } else {
+          // Meses seguintes: mês cheio
+          cycleAcc += monthlyInvestorCommission;
+        }
+        
+        if ((i + 1) % liquidityCycleMonths === 0) {
+          investorPerMonth[i] = cycleAcc;
+          cycleAcc = 0;
+        }
+      }
+      
+      if (cycleAcc > 0) {
+        investorPerMonth[investorPerMonth.length - 1] += cycleAcc;
+      }
+      
+      monthlyBreakdown = monthlyBreakdown.map((m, idx) => ({
+        ...m,
+        investorCommission: investorPerMonth[idx] || 0,
+      }));
     }
     
     periodLabel = monthName;

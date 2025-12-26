@@ -19,7 +19,7 @@ import { NotificationSystem } from "../notification-system"
 import { ApproveInvestmentModal } from "../approve-investment-modal"
 import { InvestmentsManager } from "../investments-manager"
 import AkintecManager from "../akintec-manager"
-import { OfficeCommissionsDetail } from "../office-commissions-detail"
+import { AdminCommissionsDetail } from "../admin-commissions-detail"
 import { useAdminDashboard } from "./useAdminDashboard"
 import { AdminContractsManager } from "../admin-contracts-manager"
 
@@ -552,7 +552,7 @@ export function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="commissions">
-          <OfficeCommissionsDetail />
+          <AdminCommissionsDetail />
         </TabsContent>
 
         <TabsContent value="reports">

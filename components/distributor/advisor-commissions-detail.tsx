@@ -202,7 +202,7 @@ export function AdvisorCommissionsDetail() {
       // IMPORTANTE: Não aplicar filtros de data aqui - buscar todos os ativos
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
-        .select("id, user_id, amount, payment_date, created_at, status, commitment_period")
+        .select("id, user_id, amount, payment_date, created_at, status, commitment_period, profitability_liquidity")
         .in("user_id", investorIds)
         .eq("status", "active")
       
@@ -291,6 +291,7 @@ export function AdvisorCommissionsDetail() {
               amount: Number(investment.amount),
               payment_date: investmentPaymentDate,
               commitment_period: investment.commitment_period || 12,
+              liquidity: investment.profitability_liquidity,
               investorName: investorProfile?.full_name || "Investidor",
               officeId: user.id,
               officeName: profile?.full_name || "Escritório",
@@ -316,6 +317,7 @@ export function AdvisorCommissionsDetail() {
               amount: Number(investment.amount),
               payment_date: investmentPaymentDate,
               commitment_period: investment.commitment_period || 12,
+              liquidity: investment.profitability_liquidity,
               investorName: investorProfile?.full_name || "Investidor",
               advisorId: user.id,
               advisorName: profile?.full_name || "Assessor",
