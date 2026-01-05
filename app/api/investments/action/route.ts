@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // Verificar se é admin ou assessor
     const isAdmin = profile.user_type === 'admin'
-    const isAdvisor = profile.user_type === 'distributor' && profile.role === 'assessor'
+    const isAdvisor = profile.user_type === 'distributor' && (profile.role === 'assessor' || profile.role === 'assessor_externo')
     
     if (!isAdmin && !isAdvisor) {
       return NextResponse.json(
