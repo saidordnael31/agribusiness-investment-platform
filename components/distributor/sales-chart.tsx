@@ -218,12 +218,16 @@ useEffect(() => {
               }).format(value),
               name === "captured" ? "Captado" : "Comissão",
             ]}
-            labelStyle={{ color: "hsl(var(--foreground))" }}
+            labelStyle={{ color: "#01223F", fontWeight: 600 }}
             contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
+              backgroundColor: "rgba(255,255,255,0.98)",
+              border: "1px solid rgba(15,23,42,0.12)",
               borderRadius: "8px",
+              boxShadow: "0 10px 25px rgba(15,23,42,0.25)",
+              color: "#01223F",
             }}
+            itemStyle={{ color: "#01223F", fontSize: 12 }}
+            cursor={{ fill: "rgba(255,255,255,0.12)" }}
           />
           <Bar
             dataKey="captured"

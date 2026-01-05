@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -46,12 +46,15 @@ import {
   MapPin,
   RefreshCw,
   Mail,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
 import { ApproveInvestmentModal } from "./approve-investment-modal";
 import { AdvisorCommissionsDetail } from "./advisor-commissions-detail";
 import { useToast } from "@/hooks/use-toast";
+import { calculateNewCommissionLogic } from "@/lib/commission-calculator";
 import { createClient } from "@/lib/supabase/client";
 import {
   Dialog,
@@ -127,6 +130,20 @@ interface Investor {
   advisorId?: string | null;
   advisorName?: string | null;
   advisorEmail?: string | null;
+  liquidityOptions?: string[];
+  liquidityDetails?: Record<
+    string,
+    Array<{
+      id: string;
+      amount: number;
+      quota_type?: string | null;
+      commitment_period?: number | null;
+      status?: string | null;
+      created_at?: string | null;
+      payment_date?: string | null;
+      profitability_liquidity?: string | null;
+    }>
+  >;
 }
 
 interface Advisor {
@@ -184,6 +201,7 @@ interface InvestorContractOverview {
 
 interface Investment {
   id: string;
+  user_id?: string;
   amount: number;
   quota_type: string;
   monthly_return_rate: number;
@@ -191,6 +209,9 @@ interface Investment {
   status: string;
   created_at: string;
   updated_at: string;
+  payment_date?: string | null;
+  profitability_liquidity?: string | null;
+  liquidity?: string | null;
 }
 
 export function DistributorDashboard() {
@@ -214,6 +235,107 @@ export function DistributorDashboard() {
   const [isBankListOpen, setIsBankListOpen] = useState(false);
   const [bankSearchTerm, setBankSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("simulator");
+  const [selectedLiquidityDetails, setSelectedLiquidityDetails] = useState<{
+    investor: Investor;
+    liquidity: string;
+  } | null>(null);
+
+  const getNextCommissionPaymentDate = (investment: {
+    id: string;
+    user_id?: string;
+    amount: number;
+    payment_date?: string | null;
+    created_at?: string | null;
+    commitment_period?: number | null;
+    profitability_liquidity?: string | null;
+    liquidity?: string | null;
+  }): Date | null => {
+    try {
+      const paymentDateSource = investment.payment_date || investment.created_at;
+      if (!paymentDateSource) return null;
+
+      const commissionData = calculateNewCommissionLogic({
+        id: investment.id,
+        user_id: investment.user_id ?? "",
+        amount: investment.amount,
+        payment_date: paymentDateSource,
+        commitment_period: investment.commitment_period ?? 12,
+        liquidity: investment.profitability_liquidity ?? investment.liquidity ?? "mensal",
+        advisorName: undefined,
+        advisorId: undefined,
+        advisorRole: undefined,
+        officeId: undefined,
+        officeName: undefined,
+        // Aqui queremos o fluxo de recebimento do INVESTIDOR, não do assessor/escritório
+        isForAdvisor: false,
+      });
+
+      const paymentDates = commissionData.paymentDueDate ?? [];
+      const breakdown = commissionData.monthlyBreakdown ?? [];
+
+      if (!paymentDates.length || !breakdown.length) {
+        return null;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Próximo pagamento de acordo com a LIQUIDEZ:
+      // pegar a primeira data futura (>= hoje) cujo investorCommission seja > 0
+      for (let i = 0; i < paymentDates.length; i++) {
+        const paymentDate = paymentDates[i];
+        const investorCommission = breakdown[i]?.investorCommission ?? 0;
+
+        if (!paymentDate || investorCommission <= 0) continue;
+
+        const normalized = new Date(paymentDate);
+        normalized.setHours(0, 0, 0, 0);
+
+        if (normalized >= today) {
+          return paymentDate;
+        }
+      }
+
+      // Se todas as datas com pagamento já passaram, não há "próximo" pagamento
+      return null;
+    } catch (error) {
+      console.error("Erro ao calcular próximo pagamento de comissão:", error);
+      return null;
+    }
+  };
+
+  const isPdfUrl = (url: string): boolean => {
+    try {
+      const clean = url.split("?")[0].split("#")[0].toLowerCase();
+      return clean.endsWith(".pdf");
+    } catch {
+      return false;
+    }
+  };
+
+  const formatInvestmentDate = (value?: string | null): string => {
+    if (!value) return "--";
+
+    try {
+      // Priorizar apenas a parte da data para evitar problemas de timezone
+      const dateOnly = value.split("T")[0];
+      const [year, month, day] = dateOnly.split("-");
+
+      if (year && month && day) {
+        return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+      }
+
+      // Fallback: tentar usar Date normal se o formato não for o esperado
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("pt-BR");
+      }
+
+      return "--";
+    } catch {
+      return "--";
+    }
+  };
 
   const resetInvestorForm = () => {
     setInvestorForm(createEmptyInvestorForm());
@@ -311,6 +433,9 @@ export function DistributorDashboard() {
     receiptUrl: string;
     fileName: string;
   } | null>(null);
+  const [receiptZoom, setReceiptZoom] = useState(1);
+  const receiptContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isDraggingReceipt, setIsDraggingReceipt] = useState(false);
   const [officeAdvisors, setOfficeAdvisors] = useState<Advisor[]>([]);
 const [showNewInvestmentModal, setShowNewInvestmentModal] = useState(false);
 const [newInvestmentForm, setNewInvestmentForm] = useState({
@@ -1254,6 +1379,70 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             0
           ) || 0;
 
+        // Calcular as opções de liquidez distintas para os investimentos considerados
+        const liquiditySet = new Set<string>();
+        const liquidityDetails: Record<
+          string,
+          Array<{
+            id: string;
+            amount: number;
+            quota_type?: string | null;
+            commitment_period?: number | null;
+            status?: string | null;
+            created_at?: string | null;
+            payment_date?: string | null;
+            profitability_liquidity?: string | null;
+          }>
+        > = {};
+
+        profile.investments?.forEach((inv: Investment) => {
+          const commitmentPeriodDays = (inv.commitment_period || 0) * 30;
+          if (inv.status !== "active" || commitmentPeriodDays < 360) {
+            return;
+          }
+
+          const rawLiquidity = inv.profitability_liquidity || inv.liquidity;
+          if (!rawLiquidity) return;
+
+          const normalized = String(rawLiquidity).toLowerCase();
+          let key: string | null = null;
+
+          if (normalized.includes("mensal")) {
+            key = "mensal";
+          } else if (normalized.includes("trimestral")) {
+            key = "trimestral";
+          } else if (normalized.includes("semestral")) {
+            key = "semestral";
+          } else if (normalized.includes("anual")) {
+            key = "anual";
+          } else if (normalized.includes("bienal")) {
+            key = "bienal";
+          } else if (normalized.includes("trienal")) {
+            key = "trienal";
+          }
+
+          if (!key) return;
+
+          liquiditySet.add(key);
+
+          if (!liquidityDetails[key]) {
+            liquidityDetails[key] = [];
+          }
+
+          liquidityDetails[key].push({
+            id: inv.id,
+            amount: inv.amount,
+            quota_type: inv.quota_type,
+            commitment_period: inv.commitment_period,
+            status: inv.status,
+            created_at: inv.created_at,
+            payment_date: inv.payment_date ?? null,
+            profitability_liquidity: inv.profitability_liquidity ?? inv.liquidity ?? null,
+          });
+        });
+
+        const liquidityOptions = Array.from(liquiditySet);
+
         const cpfFromProfile =
           profile.cnpj ||
           (profile.notes?.includes("CPF:")
@@ -1286,6 +1475,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           advisorId: parentId,
           advisorName: advisorInfo?.name ?? null,
           advisorEmail: advisorInfo?.email ?? null,
+          liquidityOptions,
+          liquidityDetails,
         };
       });
 
@@ -2446,6 +2637,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   // Função para visualizar comprovante
   const handleViewReceipt = async (investmentId: string) => {
     setLoadingReceipt(true);
+    setReceiptZoom(1);
     try {
       // Buscar comprovantes do investimento
       const response = await fetch(`/api/pix-receipts?transactionId=${investmentId}`);
@@ -2495,6 +2687,27 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     } finally {
       setLoadingReceipt(false);
     }
+  };
+
+  const handleReceiptMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!receiptContainerRef.current || event.button !== 0) return;
+    event.preventDefault();
+    setIsDraggingReceipt(true);
+  };
+
+  const handleReceiptMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingReceipt || !receiptContainerRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    const { movementX, movementY } = event as any;
+    receiptContainerRef.current.scrollLeft -= movementX;
+    receiptContainerRef.current.scrollTop -= movementY;
+  };
+
+  const handleReceiptMouseUp = () => {
+    setIsDraggingReceipt(false);
   };
 
   // Função para alterar observações
@@ -3337,10 +3550,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
-                        <TableHead>Email</TableHead>
+                        {user?.role !== "escritorio" && <TableHead>Email</TableHead>}
                         {user?.role === "escritorio" && (
                           <TableHead>Assessor Responsável</TableHead>
                         )}
+                        <TableHead>Liquidez</TableHead>
                         <TableHead>Total Investido</TableHead>
                         <TableHead>Data de Cadastro</TableHead>
                         <TableHead>Ações</TableHead>
@@ -3350,9 +3564,20 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                       {filteredInvestors.map((investor) => (
                         <TableRow key={investor.id}>
                           <TableCell className="font-medium">
-                            {investor.name}
+                            {user?.role === "escritorio" ? (
+                              <div className="flex flex-col">
+                                <span className="font-medium">{investor.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {investor.email}
+                                </span>
+                              </div>
+                            ) : (
+                              investor.name
+                            )}
                           </TableCell>
-                          <TableCell>{investor.email}</TableCell>
+                          {user?.role !== "escritorio" && (
+                            <TableCell>{investor.email}</TableCell>
+                          )}
                           {user?.role === "escritorio" && (
                             <TableCell>
                               {investor.advisorName ? (
@@ -3369,6 +3594,45 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                               )}
                             </TableCell>
                           )}
+                          <TableCell>
+                            {investor.liquidityOptions && investor.liquidityOptions.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {investor.liquidityOptions.map((liquidity) => {
+                                  const normalized = liquidity.toLowerCase();
+                                  const isMensal = normalized.includes("mensal");
+                                  const label =
+                                    normalized.charAt(0).toUpperCase() + normalized.slice(1);
+
+                                  return (
+                                    <Badge
+                                      key={liquidity}
+                                      variant="outline"
+                                      className={
+                                        isMensal
+                                          ? "border-transparent bg-orange-100 text-orange-800 cursor-pointer hover:bg-orange-200"
+                                          : "border-transparent bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
+                                      }
+                                      onClick={() =>
+                                        setSelectedLiquidityDetails({
+                                          investor,
+                                          liquidity,
+                                        })
+                                      }
+                                    >
+                                      {label}
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="border-transparent bg-gray-100 text-gray-600"
+                              >
+                                Sem investimentos
+                              </Badge>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {formatCurrency(investor.totalInvested)}
                           </TableCell>
@@ -4903,7 +5167,34 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                   <p className="text-sm text-muted-foreground">
                     Arquivo: {selectedReceipt.fileName}
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    {!isPdfUrl(selectedReceipt.receiptUrl) && (
+                      <div className="flex items-center gap-1 mr-4">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() =>
+                            setReceiptZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))
+                          }
+                          className="h-8 w-8"
+                        >
+                          <ZoomOut className="w-4 h-4" />
+                        </Button>
+                        <span className="text-xs text-muted-foreground w-12 text-center">
+                          {Math.round(receiptZoom * 100)}%
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() =>
+                            setReceiptZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))
+                          }
+                          className="h-8 w-8"
+                        >
+                          <ZoomIn className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -4922,21 +5213,161 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                   </div>
                 </div>
                 
-                <div className="border rounded-lg overflow-hidden">
-                  {selectedReceipt.receiptUrl.endsWith('.pdf') ? (
+                <div
+                  ref={receiptContainerRef}
+                  className={`border rounded-lg overflow-auto max-h-[70vh] select-none ${
+                    isPdfUrl(selectedReceipt.receiptUrl)
+                      ? ""
+                      : isDraggingReceipt
+                        ? "cursor-grabbing"
+                        : "cursor-grab"
+                  }`}
+                  onMouseDown={
+                    isPdfUrl(selectedReceipt.receiptUrl)
+                      ? undefined
+                      : handleReceiptMouseDown
+                  }
+                  onMouseMove={
+                    isPdfUrl(selectedReceipt.receiptUrl)
+                      ? undefined
+                      : handleReceiptMouseMove
+                  }
+                  onMouseUp={
+                    isPdfUrl(selectedReceipt.receiptUrl)
+                      ? undefined
+                      : handleReceiptMouseUp
+                  }
+                  onMouseLeave={
+                    isPdfUrl(selectedReceipt.receiptUrl)
+                      ? undefined
+                      : handleReceiptMouseUp
+                  }
+                >
+                  {isPdfUrl(selectedReceipt.receiptUrl) ? (
                     <iframe
                       src={selectedReceipt.receiptUrl}
                       className="w-full h-96"
                       title="Comprovante PDF"
                     />
                   ) : (
-                    <img
-                      src={selectedReceipt.receiptUrl}
-                      alt="Comprovante de pagamento"
-                      className="w-full h-auto max-h-96 object-contain"
-                    />
+                    <div className="flex items-center justify-center min-h-[40vh] p-4">
+                      <img
+                        src={selectedReceipt.receiptUrl}
+                        alt="Comprovante de pagamento"
+                        className="object-contain max-w-none"
+                        style={{
+                          width: `${receiptZoom * 100}%`,
+                          height: "auto",
+                        }}
+                      />
+                    </div>
                   )}
                 </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de detalhes de liquidez por investidor */}
+        <Dialog
+          open={!!selectedLiquidityDetails}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedLiquidityDetails(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex flex-col gap-1">
+                <span>Detalhes de liquidez</span>
+                {selectedLiquidityDetails && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {selectedLiquidityDetails.investor.name} —{" "}
+                    {selectedLiquidityDetails.liquidity.charAt(0).toUpperCase() +
+                      selectedLiquidityDetails.liquidity.slice(1)}
+                  </span>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                Veja os investimentos desse investidor com a liquidez selecionada.
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedLiquidityDetails && (
+              <div className="space-y-4">
+                {(() => {
+                  const { investor, liquidity } = selectedLiquidityDetails;
+                  const investments =
+                    investor.liquidityDetails?.[liquidity] ?? [];
+
+                  if (!investments.length) {
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum investimento encontrado para essa liquidez.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Valor investido</TableHead>
+                          <TableHead>Prazo (meses)</TableHead>
+                          <TableHead>Próximo pagamento</TableHead>
+                          <TableHead className="text-center">Comprovante</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Data do investimento</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {investments.map((inv) => (
+                          <TableRow key={inv.id}>
+                            <TableCell>
+                              {formatCurrency(inv.amount)}
+                            </TableCell>
+                            <TableCell>
+                              {inv.commitment_period ?? "--"}
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const nextDate = getNextCommissionPaymentDate(inv);
+                                return nextDate
+                                  ? nextDate.toLocaleDateString("pt-BR")
+                                  : "--";
+                              })()}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleViewReceipt(inv.id)}
+                                disabled={loadingReceipt}
+                                className="text-blue-700 hover:text-blue-900 hover:bg-blue-50"
+                                title="Ver comprovante de depósito"
+                              >
+                                {loadingReceipt ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Eye className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </TableCell>
+                            <TableCell className="capitalize">
+                              {inv.status ?? "--"}
+                            </TableCell>
+                            <TableCell>
+                              {formatInvestmentDate(
+                                (inv as any).payment_date || inv.created_at
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  );
+                })()}
               </div>
             )}
           </DialogContent>

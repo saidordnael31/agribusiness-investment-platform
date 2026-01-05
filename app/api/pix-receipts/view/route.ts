@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
     const isAdmin = profile?.user_type === 'admin'
     const isOwner = receipt.user_id === user.id
     const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor'
+    const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
 
     // Verificar se assessor tem acesso ao investidor
     let hasAdvisorAccess = false
@@ -66,8 +67,20 @@ export async function GET(request: NextRequest) {
       hasAdvisorAccess = investorProfile?.parent_id === user.id
     }
 
+    // Verificar se escritório tem acesso ao investidor (via office_id)
+    let hasOfficeAccess = false
+    if (isOffice) {
+      const { data: investorProfile } = await supabase
+        .from("profiles")
+        .select("office_id")
+        .eq("id", receipt.user_id)
+        .eq("user_type", "investor")
+        .single()
 
-    if (!isAdmin && !isOwner && !hasAdvisorAccess) {
+      hasOfficeAccess = investorProfile?.office_id === user.id
+    }
+
+    if (!isAdmin && !isOwner && !hasAdvisorAccess && !hasOfficeAccess) {
       return NextResponse.json(
         { success: false, error: "Acesso negado" },
         { status: 403 }

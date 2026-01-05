@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
 
     const isAdmin = profile?.user_type === 'admin'
     const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor'
+    const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
 
     let query = supabase
       .from("pix_receipts")
@@ -57,6 +58,21 @@ export async function GET(request: NextRequest) {
         query = query.in('user_id', ids)
       } else {
         // Se não tem investidores, retorna array vazio
+        query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
+      }
+    } else if (isOffice) {
+      // Escritório pode ver comprovantes dos investidores vinculados ao seu office_id
+      const { data: officeInvestors } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_type", "investor")
+        .eq("office_id", user.id)
+
+      if (officeInvestors && officeInvestors.length > 0) {
+        const ids = officeInvestors.map(inv => inv.id)
+        query = query.in('user_id', ids)
+      } else {
+        // Se não tem investidores vinculados, força retorno vazio
         query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
       }
     } else {
