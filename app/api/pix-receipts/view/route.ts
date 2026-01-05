@@ -51,7 +51,9 @@ export async function GET(request: NextRequest) {
 
     const isAdmin = profile?.user_type === 'admin'
     const isOwner = receipt.user_id === user.id
-    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor'
+    const isAdvisor =
+      profile?.user_type === 'distributor' &&
+      (profile?.role === 'assessor' || profile?.role === 'assessor_externo')
     const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
 
     // Verificar se assessor tem acesso ao investidor

@@ -2988,15 +2988,46 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   };
 
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string) => {
-    const baseRates: Record<number, Record<string, number>> = {
-      3: { "Mensal": 0.018 }, // 1.8%
-      6: { "Mensal": 0.019, "Semestral": 0.02 }, // 1.9% | 2%
-      12: { "Mensal": 0.021, "Semestral": 0.022, "Anual": 0.025 }, // 2.1% | 2.2% | 2.5%
-      24: { "Mensal": 0.023, "Semestral": 0.025, "Anual": 0.027, "Bienal": 0.03 }, // 2.3% | 2.5% | 2.7% | 3%
-      36: { "Mensal": 0.024, "Semestral": 0.026, "Anual": 0.03, "Bienal": 0.032, "Trienal": 0.035 } // 2.4% | 2.6% | 3% | 3.2% | 3.5%
+    // Tabela padrão de rentabilidade (investidores em geral)
+    const defaultRates: Record<number, Record<string, number>> = {
+      3: { Mensal: 0.018 }, // 1,8%
+      6: { Mensal: 0.019, Semestral: 0.02 }, // 1,9% | 2,0%
+      12: { Mensal: 0.021, Semestral: 0.022, Anual: 0.025 }, // 2,1% | 2,2% | 2,5%
+      24: { Mensal: 0.023, Semestral: 0.025, Anual: 0.027, Bienal: 0.03 }, // 2,3% | 2,5% | 2,7% | 3,0%
+      36: {
+        Mensal: 0.024,
+        Semestral: 0.026,
+        Anual: 0.03,
+        Bienal: 0.032,
+        Trienal: 0.035,
+      }, // 2,4% | 2,6% | 3,0% | 3,2% | 3,5%
     };
-    
-    return baseRates[period]?.[liquidity] || 0.03;
+
+    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
+    // Mesma regra da tabela usada no fluxo de depósito do investidor
+    const externalAdvisorRates: Record<number, Record<string, number>> = {
+      3: { Mensal: 0.0135 }, // 1,35%
+      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
+      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
+      24: {
+        Mensal: 0.0165,
+        Semestral: 0.017,
+        Anual: 0.0175,
+        Bienal: 0.018,
+      }, // 1,65% | 1,70% | 1,75% | 1,80%
+      36: {
+        Mensal: 0.0185,
+        Semestral: 0.019,
+        Bienal: 0.0195,
+        Trienal: 0.02,
+      }, // 1,85% | 1,90% | 1,95% | 2,00%
+    };
+
+    // Se o usuário logado for um assessor externo, aplicar tabela reduzida
+    const isExternalAdvisor = user?.role === "assessor_externo";
+    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
+
+    return table[period]?.[liquidity] ?? 0.03;
   };
 
   const getLiquidityCycleMonths = (liquidityLabel: string): number => {
@@ -4799,11 +4830,28 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                                 </div>
                               </div>
                               <div className="mt-4 space-y-3">
-                                <div className="text-sm text-muted-foreground">
+                                <div className="text-sm text-muted-foreground space-y-1">
                                   <p>Prazo: {investment.commitment_period} meses</p>
-                                  <p>Criado em: {new Date(investment.created_at).toLocaleDateString('pt-BR')}</p>
+                                  {(investment.profitability_liquidity || investment.liquidity) && (
+                                    <p>
+                                      Liquidez:{" "}
+                                      {(investment.profitability_liquidity ||
+                                        investment.liquidity) ?? ""}
+                                    </p>
+                                  )}
+                                  <p>
+                                    Criado em:{" "}
+                                    {new Date(investment.created_at).toLocaleDateString(
+                                      "pt-BR"
+                                    )}
+                                  </p>
                                   {investment.updated_at !== investment.created_at && (
-                                    <p>Atualizado em: {new Date(investment.updated_at).toLocaleDateString('pt-BR')}</p>
+                                    <p>
+                                      Atualizado em:{" "}
+                                      {new Date(investment.updated_at).toLocaleDateString(
+                                        "pt-BR"
+                                      )}
+                                    </p>
                                   )}
                                 </div>
                                 

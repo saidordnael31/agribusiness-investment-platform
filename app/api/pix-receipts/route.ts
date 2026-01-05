@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
       .single()
 
     const isAdmin = profile?.user_type === 'admin'
-    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor'
+    const isAdvisor =
+      profile?.user_type === 'distributor' &&
+      (profile?.role === 'assessor' || profile?.role === 'assessor_externo')
     const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
 
     let query = supabase
