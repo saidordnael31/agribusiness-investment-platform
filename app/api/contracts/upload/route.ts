@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic"
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Verificar autenticação
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { success: false, error: "Usuário não autenticado" },
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const investorId = formData.get('investorId') as string
+    const investmentId = formData.get('investmentId') as string | null
     const contractName = formData.get('contractName') as string
 
     if (!file || !investorId || !contractName) {
@@ -54,6 +55,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Investidor não encontrado" },
         { status: 404 }
+      )
+    }
+
+    // Validar investimento vinculado (novo comportamento)
+    if (!investmentId) {
+      return NextResponse.json(
+        { success: false, error: "ID do investimento é obrigatório para vincular o contrato" },
+        { status: 400 }
+      )
+    }
+
+    const { data: investment, error: investmentError } = await supabase
+      .from("investments")
+      .select("id, user_id, status, amount, quota_type")
+      .eq("id", investmentId)
+      .single()
+
+    if (investmentError || !investment) {
+      return NextResponse.json(
+        { success: false, error: "Investimento não encontrado" },
+        { status: 404 }
+      )
+    }
+
+    if (investment.user_id !== investorId) {
+      return NextResponse.json(
+        { success: false, error: "Investimento não pertence ao investidor selecionado" },
+        { status: 400 }
       )
     }
 
@@ -106,6 +135,7 @@ export async function POST(request: NextRequest) {
       .from("investor_contracts")
       .insert([{
         investor_id: investorId,
+        investment_id: investmentId,
         contract_name: contractName,
         file_name: file.name,
         file_url: urlData.publicUrl,

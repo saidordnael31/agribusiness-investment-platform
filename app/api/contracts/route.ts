@@ -165,6 +165,129 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+
+    // Verificar autenticação
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Usuário não autenticado" },
+        { status: 401 },
+      )
+    }
+
+    // Verificar se é admin
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .single()
+
+    if (profile?.user_type !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Apenas administradores podem alterar o vínculo de contratos" },
+        { status: 403 },
+      )
+    }
+
+    const body = await request.json()
+    const contractId = body.contractId as string | undefined
+    const investmentId = body.investmentId as string | undefined
+
+    if (!contractId) {
+      return NextResponse.json(
+        { success: false, error: "ID do contrato é obrigatório" },
+        { status: 400 },
+      )
+    }
+
+    if (!investmentId) {
+      return NextResponse.json(
+        { success: false, error: "ID do investimento é obrigatório" },
+        { status: 400 },
+      )
+    }
+
+    // Buscar contrato para obter o investidor
+    const {
+      data: contract,
+      error: contractError,
+    } = await supabase
+      .from("investor_contracts")
+      .select("id, investor_id")
+      .eq("id", contractId)
+      .single()
+
+    if (contractError || !contract) {
+      return NextResponse.json(
+        { success: false, error: "Contrato não encontrado" },
+        { status: 404 },
+      )
+    }
+
+    // Validar se o investimento existe e pertence ao mesmo investidor
+    const {
+      data: investment,
+      error: investmentError,
+    } = await supabase
+      .from("investments")
+      .select("id, user_id")
+      .eq("id", investmentId)
+      .single()
+
+    if (investmentError || !investment) {
+      return NextResponse.json(
+        { success: false, error: "Investimento não encontrado" },
+        { status: 404 },
+      )
+    }
+
+    if (investment.user_id !== contract.investor_id) {
+      return NextResponse.json(
+        { success: false, error: "Investimento selecionado não pertence ao mesmo investidor do contrato" },
+        { status: 400 },
+      )
+    }
+
+    // Atualizar vínculo
+    const {
+      data: updated,
+      error: updateError,
+    } = await supabase
+      .from("investor_contracts")
+      .update({ investment_id: investmentId })
+      .eq("id", contractId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error("DB update error:", updateError)
+      return NextResponse.json(
+        { success: false, error: "Erro ao atualizar vínculo do contrato" },
+        { status: 500 },
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: updated,
+      message: "Vínculo do contrato atualizado com sucesso!",
+    })
+  } catch (error) {
+    console.error("Patch contract link error:", error)
+    return NextResponse.json(
+      { success: false, error: "Erro interno do servidor" },
+      { status: 500 },
+    )
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
