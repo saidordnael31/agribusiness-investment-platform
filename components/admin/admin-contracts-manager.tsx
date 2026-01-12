@@ -591,14 +591,14 @@ export function AdminContractsManager() {
     }))
   }, [filteredContracts])
 
-  const openContractsForInvestment = (group: InvestorContractsGroup, investmentGroup: InvestmentContractsGroup, index: number) => {
-    setSelectedInvestmentContracts(investmentGroup.contracts)
-    const contractsCount = investmentGroup.contracts.length
+  const openContractsForInvestor = (group: InvestorContractsGroup) => {
+    // Juntar todos os contratos do investidor, independente do investimento
+    const allContracts = group.investments.flatMap((invGroup) => invGroup.contracts)
+    setSelectedInvestmentContracts(allContracts)
+
+    const contractsCount = allContracts.length
     const labelCount = `${contractsCount} ${contractsCount === 1 ? "contrato" : "contratos"}`
-    const filterLabel =
-      investmentGroup.investmentId && investmentGroup.investmentId !== "null"
-        ? `Investimento ${index + 1}`
-        : "Contratos sem investimento vinculado"
+    const filterLabel = "Todos os investimentos"
 
     setContractsModalTitle(`Contratos de ${group.investorName}`)
     setContractsFilterLabel(`${filterLabel} • ${labelCount}`)
@@ -880,23 +880,16 @@ export function AdminContractsManager() {
                           </TableCell>
                           <TableCell className="max-w-xs">
                             <div className="flex flex-wrap gap-2">
-                               {group.investments.map((invGroup, index) => {
-                                const count = invGroup.contracts.length
-                                const label =
-                                  count === 1 ? "1 contrato" : `${count} contratos`
-
-                                return (
-                                  <Button
-                                    key={invGroup.investmentId ?? `no-investment-${index}`}
-                                     variant="outline"
-                                    size="sm"
-                                    className="text-xs px-2 py-1"
-                                     onClick={() => openContractsForInvestment(group, invGroup, index)}
-                                  >
-                                    {label}
-                                  </Button>
-                                )
-                              })}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs px-2 py-1"
+                                onClick={() => openContractsForInvestor(group)}
+                              >
+                                {group.totalContracts === 1
+                                  ? "1 contrato"
+                                  : `${group.totalContracts} contratos`}
+                              </Button>
                             </div>
                           </TableCell>
                           <TableCell>
