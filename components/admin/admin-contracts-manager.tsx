@@ -955,10 +955,10 @@ export function AdminContractsManager() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50/80 via-background to-background shadow-xl">
           <DialogHeader>
-            <DialogTitle>Adicionar contrato</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-emerald-950">Adicionar contrato</DialogTitle>
+            <DialogDescription className="text-xs text-emerald-900/80">
               Selecione um usuário e um investimento para enviar o arquivo e vinculá-lo.
             </DialogDescription>
           </DialogHeader>
@@ -1071,17 +1071,10 @@ export function AdminContractsManager() {
                         const data = inv.payment_date
                           ? new Date(inv.payment_date).toLocaleDateString("pt-BR")
                           : "sem data"
-                        const tipo =
-                          inv.quota_type === "senior"
-                            ? "Sênior"
-                            : inv.quota_type === "subordinada"
-                            ? "Subordinada"
-                            : inv.quota_type || ""
 
                         return (
                           <SelectItem key={inv.id} value={inv.id}>
                             {index + 1}. {valor} — {data}
-                            {tipo ? ` — ${tipo}` : ""}
                           </SelectItem>
                         )
                       })}
@@ -1540,10 +1533,10 @@ export function AdminContractsManager() {
           setLinkError(null)
         }
       }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg rounded-2xl border border-emerald-100 bg-gradient-to-b from-emerald-50/80 via-background to-background shadow-xl">
           <DialogHeader>
-            <DialogTitle>Vincular contrato a investimento</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-emerald-950">Vincular contrato a investimento</DialogTitle>
+            <DialogDescription className="text-xs text-emerald-900/80">
               Selecione o investimento correto para este contrato. Você pode alterar o vínculo a qualquer momento.
             </DialogDescription>
           </DialogHeader>
@@ -1588,17 +1581,10 @@ export function AdminContractsManager() {
                         const data = inv.payment_date
                           ? new Date(inv.payment_date).toLocaleDateString("pt-BR")
                           : "sem data"
-                        const tipo =
-                          inv.quota_type === "senior"
-                            ? "Sênior"
-                            : inv.quota_type === "subordinada"
-                            ? "Subordinada"
-                            : inv.quota_type || ""
 
                         return (
                           <SelectItem key={inv.id} value={inv.id}>
                             {index + 1}. {valor} — {data}
-                            {tipo ? ` — ${tipo}` : ""}
                           </SelectItem>
                         )
                       })}
