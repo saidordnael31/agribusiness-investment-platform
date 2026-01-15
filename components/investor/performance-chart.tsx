@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 
 interface PerformanceDataPoint {
   month: string
+  year: number
   value: number
   monthNumber: number
   invested: number
@@ -19,6 +20,8 @@ interface Investment {
   amount: number
   monthly_return_rate: number
   created_at: string
+  payment_date?: string | null
+  profitability_liquidity?: string | null
   status: string
 }
 
@@ -28,6 +31,7 @@ export function PerformanceChart() {
   const [totalInvested, setTotalInvested] = useState(0)
   const [totalReturns, setTotalReturns] = useState(0)
   const [growthRate, setGrowthRate] = useState(0)
+  const [hasOnlySimpleInterest, setHasOnlySimpleInterest] = useState(false)
 
   const generatePerformanceData = (investments: Investment[], withdrawals: any[] = []): PerformanceDataPoint[] => {
     const months = [
@@ -42,24 +46,36 @@ export function PerformanceChart() {
     const totalInvestedAmount = investments.reduce((sum, inv) => sum + Number(inv.amount), 0)
     setTotalInvested(totalInvestedAmount)
     
-    // Encontrar o mês mais antigo dos investimentos
-    const oldestInvestment = investments.reduce((oldest, inv) => {
-      const invDate = new Date(inv.created_at)
-      return invDate < oldest ? invDate : oldest
-    }, new Date())
+    // Verificar se todos os investimentos são de liquidez mensal (juros simples)
+    const allMensal = investments.length > 0 && investments.every(inv => 
+      (inv.profitability_liquidity || "Mensal") === "Mensal"
+    )
+    setHasOnlySimpleInterest(allMensal)
     
-    // Calcular quantos meses atrás começar (máximo 12 meses, mínimo 6)
-    const monthsBack = Math.min(12, Math.max(6, 
+    // Encontrar o mês mais antigo dos investimentos (usando payment_date quando disponível)
+    // Sempre começar do mês de depósito mais antigo, sem limite mínimo
+    const firstInvestmentDate = new Date(investments[0]?.payment_date || investments[0]?.created_at || new Date())
+    const oldestInvestment = investments.reduce((oldest, inv) => {
+      const invDate = new Date(inv.payment_date || inv.created_at)
+      // Normalizar para o primeiro dia do mês para comparação correta
+      const invMonthStart = new Date(invDate.getFullYear(), invDate.getMonth(), 1)
+      const oldestMonthStart = new Date(oldest.getFullYear(), oldest.getMonth(), 1)
+      return invMonthStart < oldestMonthStart ? invMonthStart : oldestMonthStart
+    }, new Date(firstInvestmentDate.getFullYear(), firstInvestmentDate.getMonth(), 1))
+    
+    // Calcular quantos meses atrás começar (sempre do mês de depósito mais antigo até o mês atual)
+    const monthsBack = Math.max(1,
       (currentDate.getFullYear() - oldestInvestment.getFullYear()) * 12 + 
       (currentDate.getMonth() - oldestInvestment.getMonth()) + 1
-    ))
+    )
     
     // Debug: Log para verificar os dados
     console.log('Investments data:', investments.map(inv => ({
       id: inv.id,
       amount: inv.amount,
       created_at: inv.created_at,
-      date: new Date(inv.created_at).toLocaleDateString('pt-BR')
+      payment_date: inv.payment_date,
+      date: new Date(inv.payment_date || inv.created_at).toLocaleDateString('pt-BR')
     })))
     console.log('Withdrawals data:', withdrawals.map(w => ({
       investment_id: w.investment_id,
@@ -69,13 +85,19 @@ export function PerformanceChart() {
     console.log('Oldest investment:', oldestInvestment.toLocaleDateString('pt-BR'))
     console.log('Months back:', monthsBack)
     
-    // Gerar dados a partir do mês mais antigo ou últimos 6 meses (o que for maior)
-    for (let i = monthsBack - 1; i >= 0; i--) {
-      const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
+    // Gerar dados a partir do mês de depósito mais antigo até o mês atual
+    // Começar do mês mais antigo encontrado
+    const startMonth = oldestInvestment.getMonth()
+    const startYear = oldestInvestment.getFullYear()
+    
+    for (let i = 0; i < monthsBack; i++) {
+      // Calcular o mês atual do loop
+      const targetDate = new Date(startYear, startMonth + i, 1)
       // Ajustar para o final do mês para incluir investimentos feitos em qualquer dia do mês
       const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
-      const monthKey = months[targetDate.getMonth()]
+      const monthKey = `${months[targetDate.getMonth()]}/${targetDate.getFullYear()}`
       const monthNumber = targetDate.getMonth()
+      const year = targetDate.getFullYear()
       
       let totalValue = 0
       let totalInvestedInPeriod = 0
@@ -83,34 +105,66 @@ export function PerformanceChart() {
       
       // Calcular valor acumulado até este mês para cada investimento
       investments.forEach((investment) => {
-        const investmentDate = new Date(investment.created_at)
+        // Usar payment_date quando disponível, caso contrário usar created_at
+        const investmentDate = new Date(investment.payment_date || investment.created_at)
+        // Normalizar para o primeiro dia do mês de investimento
+        const investmentMonthStart = new Date(investmentDate.getFullYear(), investmentDate.getMonth(), 1)
         
         // Se o investimento foi feito antes ou durante este mês
-        if (investmentDate <= endOfMonth) {
-          const monthsElapsed = Math.max(0, 
-            (endOfMonth.getFullYear() - investmentDate.getFullYear()) * 12 + 
-            (endOfMonth.getMonth() - investmentDate.getMonth())
-          )
-          
+        if (investmentMonthStart <= endOfMonth) {
           const amount = Number(investment.amount)
           const rate = Number(investment.monthly_return_rate) || 0.02
+          const liquidity = investment.profitability_liquidity || "Mensal"
           
-          // Calcular resgates feitos até este mês para este investimento
-          const investmentWithdrawals = withdrawals.filter(w => 
-            w.investment_id === investment.id && 
-            new Date(w.created_at) <= endOfMonth
-          )
-          const totalWithdrawn = investmentWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0)
+          // Calcular meses completos decorridos desde o mês de investimento até o mês atual
+          // Para juros simples mensal, conta desde o mês de depósito (inclusive)
+          let monthsElapsed = (endOfMonth.getFullYear() - investmentMonthStart.getFullYear()) * 12 + 
+                              (endOfMonth.getMonth() - investmentMonthStart.getMonth())
           
-          // Valor disponível = valor original - resgates
-          const availableAmount = Math.max(0, amount - totalWithdrawn)
+          // Garantir que não seja negativo
+          if (monthsElapsed < 0) monthsElapsed = 0
           
-          // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
-          const compoundValue = availableAmount * Math.pow(1 + rate, monthsElapsed)
-          const returns = compoundValue - availableAmount
+          // Para juros simples mensal, sempre considerar pelo menos 1 mês se estamos no mesmo mês ou depois
+          // O retorno mensal é pago no final de cada mês, então conta desde o mês de depósito (inclusive)
+          if (liquidity === "Mensal") {
+            // Sempre adicionar 1 para incluir o mês atual no cálculo acumulativo
+            // Exemplo: depósito em Jan, estamos em Abr = 3 meses de diferença + 1 = 4 meses de retorno acumulado
+            monthsElapsed = monthsElapsed + 1
+          }
           
-          totalValue += compoundValue
-          totalInvestedInPeriod += availableAmount
+          // Para juros simples mensal, o retorno é calculado sobre o valor ORIGINAL (antes de resgates)
+          // pois os retornos são pagos separadamente e não são afetados por resgates posteriores
+          let currentValue: number
+          let returns: number
+          
+          // Para liquidez "Mensal": juros simples (retorno mensal fixo sobre o valor inicial)
+          // Para outras liquidezes: juros compostos
+          if (liquidity === "Mensal") {
+            // JUROS SIMPLES: 
+            // - Valor Atual = Principal disponível (valor original - resgates)
+            // - Retornos = Valor ORIGINAL × taxa × meses completos (acumulados desde o depósito, independente de resgates)
+            const monthlyReturn = amount * rate // Retorno mensal baseado no valor ORIGINAL
+            const totalWithdrawn = withdrawals
+              .filter(w => w.investment_id === investment.id && new Date(w.created_at) <= endOfMonth)
+              .reduce((sum, w) => sum + Number(w.amount), 0)
+            
+            currentValue = Math.max(0, amount - totalWithdrawn) // Valor atual = principal - resgates
+            returns = monthlyReturn * monthsElapsed // Retornos acumulados desde o depósito
+          } else {
+            // JUROS COMPOSTOS: 
+            // - Valor Atual = Principal × (1 + taxa)^tempo (acumula com juros)
+            // - Retornos = Valor Atual - Principal
+            const totalWithdrawn = withdrawals
+              .filter(w => w.investment_id === investment.id && new Date(w.created_at) <= endOfMonth)
+              .reduce((sum, w) => sum + Number(w.amount), 0)
+            
+            const availableAmount = Math.max(0, amount - totalWithdrawn)
+            currentValue = availableAmount * Math.pow(1 + rate, monthsElapsed)
+            returns = currentValue - availableAmount
+          }
+          
+          totalValue += currentValue
+          totalInvestedInPeriod += amount // Sempre usar o valor original investido
           totalReturnsInPeriod += returns
         }
       })
@@ -120,6 +174,7 @@ export function PerformanceChart() {
       
       data.push({
         month: monthKey,
+        year,
         value: totalValue,
         monthNumber,
         invested: totalInvestedInPeriod,
@@ -163,7 +218,7 @@ export function PerformanceChart() {
       // Buscar investimentos ativos do usuário
       const { data: investments, error } = await supabase
         .from("investments")
-        .select("id, amount, monthly_return_rate, created_at, status")
+        .select("id, amount, monthly_return_rate, created_at, payment_date, profitability_liquidity, status")
         .eq("user_id", user.id)
         .eq("status", "active")
 
@@ -184,8 +239,10 @@ export function PerformanceChart() {
       if (!investments || investments.length === 0) {
         // Se não há investimentos, mostrar dados zerados
         const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"]
+        const currentYear = new Date().getFullYear()
         const emptyData = months.map((month, index) => ({
-          month,
+          month: `${month}/${currentYear}`,
+          year: currentYear,
           value: 0,
           monthNumber: index,
           invested: 0,
@@ -306,7 +363,10 @@ export function PerformanceChart() {
             <XAxis 
               dataKey="month" 
               className="text-xs text-white/70"
-              tick={{ fontSize: 12, fill: "rgba(255, 255, 255, 0.7)" }}
+              tick={{ fontSize: 11, fill: "rgba(255, 255, 255, 0.7)" }}
+              angle={-45}
+              textAnchor="end"
+              height={60}
             />
             <YAxis
               className="text-xs text-white/70"
@@ -320,8 +380,10 @@ export function PerformanceChart() {
               }
             />
             <Tooltip
-              formatter={(value: number, name: string) => {
-                const data = performanceData.find(d => d.value === value)
+              formatter={(value: number, name: string, props: any) => {
+                // Usar o payload diretamente do tooltip ao invés de buscar no array
+                const payload = props?.payload
+                const data = payload || performanceData.find(d => d.value === value)
                 if (!data) return [value, name]
                 
                 return [
@@ -348,8 +410,11 @@ export function PerformanceChart() {
                       Crescimento: {data.growth.toFixed(1)}%
                     </div>
                   </div>,
-                  "Valor Total"
+                  "Valor Atual"
                 ]
+              }}
+              labelFormatter={(label) => {
+                return label || ""
               }}
               labelStyle={{ color: "white" }}
               contentStyle={{
@@ -374,7 +439,9 @@ export function PerformanceChart() {
 
       {/* Informações adicionais */}
       <div className="text-xs text-white/70 text-center">
-        <p>Performance baseada em juros compostos • Período: {performanceData.length} meses</p>
+        <p>
+          Performance baseada em {hasOnlySimpleInterest ? "juros simples" : "juros simples e compostos"} • Período: {performanceData.length} meses
+        </p>
       </div>
     </div>
   )

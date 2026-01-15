@@ -38,8 +38,12 @@ interface TransactionHistoryItem {
   amount: number;
   status: string;
   created_at: string;
+  payment_date?: string | null;
   quota_type?: string;
   description?: string;
+  profitability_liquidity?: string | null;
+  commitment_period?: number | null;
+  monthly_return_rate?: number | null;
 }
 
 export function InvestorDashboard() {
@@ -98,7 +102,11 @@ export function InvestorDashboard() {
             amount: Number(investment.amount),
             status: investment.status,
             created_at: investment.created_at,
+            payment_date: investment.payment_date,
             quota_type: investment.quota_type,
+            profitability_liquidity: investment.profitability_liquidity,
+            commitment_period: investment.commitment_period,
+            monthly_return_rate: investment.monthly_return_rate,
             description: `Investimento`,
           });
         });
@@ -145,7 +153,7 @@ export function InvestorDashboard() {
       const { data: investmentsRaw, error: investmentsError } = await supabase
         .from("investments")
         .select(
-          "id, amount, quota_type, monthly_return_rate, payment_date, created_at, status"
+          "id, amount, quota_type, monthly_return_rate, payment_date, created_at, profitability_liquidity, status"
         )
         .eq("user_id", userId)
         .eq("status", "active");
@@ -190,15 +198,20 @@ export function InvestorDashboard() {
       const totalWithdrawals =
         withdrawalsRaw?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
 
-      // Calcular rendimento acumulado de cada investimento usando juros compostos
+      // Calcular rendimento acumulado de cada investimento
+      // Considerando juros simples para "Mensal" e compostos para outras liquidezes
       let totalReturn = 0;
       investmentsRaw.forEach((inv) => {
+        const paymentDate = inv.payment_date
+          ? new Date(inv.payment_date)
+          : new Date(inv.created_at);
         const monthsPassed = Math.floor(
-          (today.getTime() - new Date(inv.created_at).getTime()) /
+          (today.getTime() - paymentDate.getTime()) /
             (1000 * 60 * 60 * 24 * 30)
         );
 
-        const monthlyRate = Number(inv.monthly_return_rate) || 0.02; // 2% padrão
+        const monthlyRate = Number(inv.monthly_return_rate) || 0.02;
+        const liquidity = inv.profitability_liquidity || "Mensal";
         const amount = Number(inv.amount);
 
         // Calcular resgates específicos deste investimento
@@ -215,10 +228,19 @@ export function InvestorDashboard() {
           amount - totalWithdrawnFromInvestment
         );
 
-        // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
-        const compoundValue =
-          availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
-        const investmentReturn = compoundValue - availableAmount;
+        let investmentReturn: number;
+
+        // Para liquidez "Mensal": juros simples (retorno mensal fixo × meses)
+        // Para outras liquidezes: juros compostos
+        if (liquidity === "Mensal") {
+          // JUROS SIMPLES: Retorno acumulado = Valor ORIGINAL × taxa × meses
+          const monthlyReturn = amount * monthlyRate;
+          investmentReturn = monthlyReturn * monthsPassed;
+        } else {
+          // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
+          const compoundValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+          investmentReturn = compoundValue - availableAmount;
+        }
 
         totalReturn += investmentReturn;
       });
@@ -230,6 +252,7 @@ export function InvestorDashboard() {
       investmentsRaw.forEach((inv) => {
         const amount = Number(inv.amount);
         const monthlyRate = Number(inv.monthly_return_rate) || 0.02;
+        const liquidity = inv.profitability_liquidity || "Mensal";
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
           : new Date(inv.created_at);
@@ -251,11 +274,19 @@ export function InvestorDashboard() {
           amount - totalWithdrawnFromInvestment
         );
 
-        // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
-        const compoundValue =
-          availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+        let investmentCurrentValue: number;
+        
+        // Para liquidez "Mensal": juros simples (valor atual = principal, não acumula)
+        // Para outras liquidezes: juros compostos (valor atual = principal × (1 + taxa)^tempo)
+        if (liquidity === "Mensal") {
+          // JUROS SIMPLES: Valor atual = Principal (não acumula retornos)
+          investmentCurrentValue = availableAmount;
+        } else {
+          // JUROS COMPOSTOS: Valor = Principal × (1 + taxa)^tempo
+          investmentCurrentValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+        }
 
-        currentValue += compoundValue;
+        currentValue += investmentCurrentValue;
         totalInvestedAfterWithdrawals += availableAmount;
       });
 
@@ -286,8 +317,50 @@ export function InvestorDashboard() {
           return sum + Math.max(0, amount - totalWithdrawnFromInvestment);
         }, 0);
 
-      // Retorno mensal baseado no valor atual
-      const monthlyReturn = currentValue * 0.02; // 2% sobre valor atual
+      // Retorno mensal calculado usando a taxa específica de cada investimento
+      // Para juros simples mensal: retorno mensal fixo sobre o valor original
+      // Para juros compostos: retorno mensal sobre o valor atual
+      let monthlyReturn = 0;
+      investmentsRaw.forEach((inv) => {
+        const amount = Number(inv.amount);
+        const monthlyRate = Number(inv.monthly_return_rate) || 0.02;
+        const liquidity = inv.profitability_liquidity || "Mensal";
+        const paymentDate = inv.payment_date
+          ? new Date(inv.payment_date)
+          : new Date(inv.created_at);
+        const monthsPassed = Math.floor(
+          (today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+        );
+
+        // Calcular resgates específicos deste investimento
+        const investmentWithdrawals =
+          withdrawalsRaw?.filter((w) => w.investment_id === inv.id) || [];
+        const totalWithdrawnFromInvestment = investmentWithdrawals.reduce(
+          (sum, w) => sum + Number(w.amount),
+          0
+        );
+
+        // Valor disponível = valor original - resgates específicos
+        const availableAmount = Math.max(
+          0,
+          amount - totalWithdrawnFromInvestment
+        );
+
+        let investmentMonthlyReturn: number;
+
+        // Para liquidez "Mensal": juros simples (retorno mensal fixo sobre o valor original)
+        // Para outras liquidezes: juros compostos (retorno mensal sobre o valor atual)
+        if (liquidity === "Mensal") {
+          // JUROS SIMPLES: Retorno mensal = Valor ORIGINAL × taxa mensal (fixo, não muda)
+          investmentMonthlyReturn = amount * monthlyRate;
+        } else {
+          // JUROS COMPOSTOS: Retorno mensal = Valor atual × taxa mensal
+          const compoundValue = availableAmount * Math.pow(1 + monthlyRate, monthsPassed);
+          investmentMonthlyReturn = compoundValue * monthlyRate;
+        }
+
+        monthlyReturn += investmentMonthlyReturn;
+      });
 
       setInvestments({
         totalInvested: totalInvestedAfterWithdrawals,
@@ -429,25 +502,25 @@ export function InvestorDashboard() {
 
         {/* Investment Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
-          <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0 p-6 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #D9D9D9, rgba(0, 63, 40, 0.6))' }}>
-            <CardHeader>
-              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-2xl sm:text-3xl lg:text-[35px] leading-[28px]">
+          <Card className="bg-gradient-to-b from-[#D9D9D9] to-[#003F28] border-0 p-4 relative overflow-hidden" style={{ borderRadius: '15px', background: 'linear-gradient(to bottom, #D9D9D9, rgba(0, 63, 40, 0.6))' }}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-[#003F28] font-urbanist font-extrabold text-xl sm:text-2xl lg:text-2xl leading-[28px]">
                 Histórico de Transações
               </CardTitle>
-              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-base sm:text-lg lg:text-xl leading-9">
+              <CardDescription className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm sm:text-base lg:text-base leading-6">
                 Seus investimentos e resgates no Clube AGRINVEST
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {transactionHistory.length > 0 &&
                 transactionHistory.map((item) => (
                   <div
                     key={item.id}
-                    className="flex flex-col p-4 border border-white/20 rounded-lg space-y-2 bg-white/5"
+                    className="flex flex-col p-3 border border-white/20 rounded-lg space-y-1.5 bg-white/5"
                   >
                     <div className="flex flex-row justify-between items-center w-full">
-                      <div className="flex flex-col gap-1">
-                        <span className="font-semibold text-white">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold text-white text-base">
                           {item.type === "investment"
                             ? "Investimento"
                             : item.type === "withdrawal"
@@ -460,7 +533,7 @@ export function InvestorDashboard() {
                       </div>
                       <div className="text-right">
                         <p
-                          className={`font-bold ${
+                          className={`font-bold text-base ${
                             item.type === "investment"
                               ? "text-green-300"
                               : item.type === "withdrawal"
@@ -487,7 +560,7 @@ export function InvestorDashboard() {
                               ? "secondary"
                               : "destructive"
                           }
-                          className={`text-xs ${
+                          className={`text-xs px-2 py-0.5 ${
                             item.status === "pending"
                               ? "bg-[#D9D9D9] text-[#003F28]"
                               : ""
@@ -504,11 +577,58 @@ export function InvestorDashboard() {
                       </div>
                     </div>
 
-                    <div className="flex flex-row justify-between w-full text-sm text-white/70">
-                      <span>Data:</span>
-                      <span>
-                        {new Date(item.created_at).toLocaleDateString("pt-BR")}
-                      </span>
+                    <div className="flex flex-col gap-1.5 w-full text-sm text-white/70">
+                      <div className="flex flex-row justify-between">
+                        <span>
+                          {item.type === "investment" && item.status === "active" && item.payment_date
+                            ? "Data de pagamento:"
+                            : item.type === "investment"
+                            ? "Data de criação:"
+                            : "Data:"}
+                        </span>
+                        <span>
+                          {item.type === "investment" && item.status === "active" && item.payment_date
+                            ? new Date(item.payment_date).toLocaleDateString("pt-BR")
+                            : new Date(item.created_at).toLocaleDateString("pt-BR")}
+                        </span>
+                      </div>
+                      
+                      {item.type === "investment" && (
+                        <>
+                          {item.profitability_liquidity && (
+                            <div className="flex flex-row justify-between">
+                              <span>Rentabilidade:</span>
+                              <span className="font-semibold">{item.profitability_liquidity}</span>
+                            </div>
+                          )}
+                          
+                          {item.monthly_return_rate && (
+                            <div className="flex flex-row justify-between">
+                              <span>Porcentagem de rentabilidade:</span>
+                              <span className="font-semibold">
+                                {(Number(item.monthly_return_rate) * 100).toFixed(2)}% a.m.
+                              </span>
+                            </div>
+                          )}
+                          
+                          {item.commitment_period && item.payment_date && (
+                            <div className="flex flex-row justify-between">
+                              <span>Data de vencimento:</span>
+                              <span className="font-semibold">
+                                {(() => {
+                                  const startDate = new Date(item.payment_date);
+                                  const maturityDate = new Date(startDate);
+                                  maturityDate.setMonth(maturityDate.getMonth() + item.commitment_period);
+                                  // Formatar apenas mês e ano (MM/AAAA)
+                                  const month = String(maturityDate.getMonth() + 1).padStart(2, '0');
+                                  const year = maturityDate.getFullYear();
+                                  return `${month}/${year}`;
+                                })()}
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
