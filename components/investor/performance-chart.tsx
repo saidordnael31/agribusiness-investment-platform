@@ -22,6 +22,7 @@ interface Investment {
   created_at: string
   payment_date?: string | null
   profitability_liquidity?: string | null
+  commitment_period?: number | null
   status: string
 }
 
@@ -32,6 +33,47 @@ export function PerformanceChart() {
   const [totalReturns, setTotalReturns] = useState(0)
   const [growthRate, setGrowthRate] = useState(0)
   const [hasOnlySimpleInterest, setHasOnlySimpleInterest] = useState(false)
+  const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false)
+
+  // Função para obter a taxa correta baseada nas tabelas dinâmicas
+  const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
+    // Tabela padrão de rentabilidade (investidores em geral)
+    const defaultRates: Record<number, Record<string, number>> = {
+      3: { Mensal: 0.018 }, // 1,8%
+      6: { Mensal: 0.019, Semestral: 0.02 }, // 1,9% | 2,0%
+      12: { Mensal: 0.021, Semestral: 0.022, Anual: 0.025 }, // 2,1% | 2,2% | 2,5%
+      24: { Mensal: 0.023, Semestral: 0.025, Anual: 0.027, Bienal: 0.03 }, // 2,3% | 2,5% | 2,7% | 3,0%
+      36: {
+        Mensal: 0.024,
+        Semestral: 0.026,
+        Anual: 0.03,
+        Bienal: 0.032,
+        Trienal: 0.035,
+      }, // 2,4% | 2,6% | 3,0% | 3,2% | 3,5%
+    };
+
+    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
+    const externalAdvisorRates: Record<number, Record<string, number>> = {
+      3: { Mensal: 0.0135 }, // 1,35%
+      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
+      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
+      24: {
+        Mensal: 0.0165,
+        Semestral: 0.017,
+        Anual: 0.0175,
+        Bienal: 0.018,
+      }, // 1,65% | 1,70% | 1,75% | 1,80%
+      36: {
+        Mensal: 0.0185,
+        Semestral: 0.019,
+        Bienal: 0.0195,
+        Trienal: 0.02,
+      }, // 1,85% | 1,90% | 1,95% | 2,00%
+    };
+
+    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
+    return table[period]?.[liquidity] || 0;
+  };
 
   const generatePerformanceData = (investments: Investment[], withdrawals: any[] = []): PerformanceDataPoint[] => {
     const months = [
@@ -113,8 +155,13 @@ export function PerformanceChart() {
         // Se o investimento foi feito antes ou durante este mês
         if (investmentMonthStart <= endOfMonth) {
           const amount = Number(investment.amount)
-          const rate = Number(investment.monthly_return_rate) || 0.02
           const liquidity = investment.profitability_liquidity || "Mensal"
+          const commitmentPeriod = investment.commitment_period || 12
+          const rate = getRateByPeriodAndLiquidity(
+            commitmentPeriod,
+            liquidity,
+            isExternalAdvisorInvestor
+          ) || Number(investment.monthly_return_rate) || 0.02
           
           // Calcular meses completos decorridos desde o mês de investimento até o mês atual
           // Para juros simples mensal, conta desde o mês de depósito (inclusive)
@@ -215,10 +262,34 @@ export function PerformanceChart() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
+      // Verificar se é investidor de assessor externo
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, parent_id, assessor_id")
+        .eq("id", user.id)
+        .single()
+
+      if (profile) {
+        const advisorId = (profile as any).parent_id || (profile as any).assessor_id
+        if (advisorId) {
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", advisorId)
+            .single()
+
+          if (advisorProfile && advisorProfile.role === "assessor_externo") {
+            setIsExternalAdvisorInvestor(true)
+          } else {
+            setIsExternalAdvisorInvestor(false)
+          }
+        }
+      }
+
       // Buscar investimentos ativos do usuário
       const { data: investments, error } = await supabase
         .from("investments")
-        .select("id, amount, monthly_return_rate, created_at, payment_date, profitability_liquidity, status")
+        .select("id, amount, monthly_return_rate, created_at, payment_date, profitability_liquidity, commitment_period, status")
         .eq("user_id", user.id)
         .eq("status", "active")
 
