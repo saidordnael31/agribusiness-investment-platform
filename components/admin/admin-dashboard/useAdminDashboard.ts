@@ -78,7 +78,9 @@ export function useAdminDashboard() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalActivities, setTotalActivities] = useState(0)
   const [approveModalOpen, setApproveModalOpen] = useState(false)
+  const [adminApproveModalOpen, setAdminApproveModalOpen] = useState(false)
   const [selectedInvestment, setSelectedInvestment] = useState<SelectedInvestment | null>(null)
+  const [selectedActivityType, setSelectedActivityType] = useState<string | null>(null)
 
   const applyDateFilter = (dateStr: string, filters: ActivityFilters): boolean => {
     if (!filters.dateFrom && !filters.dateTo) return true
@@ -500,16 +502,24 @@ export function useAdminDashboard() {
     fetchRecentActivities(1, clearedFilters)
   }
 
-  const processInvestmentAction = async (investmentId: string, action: 'approve' | 'reject') => {
+  const processInvestmentAction = async (investmentId: string, action: 'approve' | 'reject', activityType?: string) => {
     if (action === 'approve') {
       const activity = recentActivities.find(a => a.relatedData?.investmentId === investmentId)
       if (activity) {
-        setSelectedInvestment({
+        const investmentData = {
           id: investmentId,
           amount: activity.relatedData?.amount || 0,
           investorName: activity.description.split(' - ')[0] || 'Investidor'
-        })
-        setApproveModalOpen(true)
+        }
+        setSelectedInvestment(investmentData)
+        setSelectedActivityType(activityType || activity.type)
+        
+        // Se for aprovação pelo admin (active_investment_pending_admin), usar modal específico
+        if (activityType === "active_investment_pending_admin" || activity.type === "active_investment_pending_admin") {
+          setAdminApproveModalOpen(true)
+        } else {
+          setApproveModalOpen(true)
+        }
       }
       return
     }
@@ -550,8 +560,14 @@ export function useAdminDashboard() {
 
   const handleActivityAction = async (activityId: string, action: 'approve' | 'reject') => {
     let realId = activityId.replace(/^pending-inv-/, '')
+    const isAdminApproval = activityId.startsWith('active-pending-admin-')
     realId = realId.replace(/^active-pending-admin-/, '')
-    await processInvestmentAction(realId, action)
+    
+    // Encontrar o tipo da atividade
+    const activity = recentActivities.find(a => a.id === activityId)
+    const activityType = activity?.type || null
+    
+    await processInvestmentAction(realId, action, activityType)
   }
 
   const handleApprovalSuccess = () => {
@@ -567,7 +583,9 @@ export function useAdminDashboard() {
 
   const closeApprovalModal = () => {
     setApproveModalOpen(false)
+    setAdminApproveModalOpen(false)
     setSelectedInvestment(null)
+    setSelectedActivityType(null)
   }
 
   useEffect(() => {
@@ -590,6 +608,7 @@ export function useAdminDashboard() {
     totalPages,
     totalActivities,
     approveModalOpen,
+    adminApproveModalOpen,
     selectedInvestment,
     handleFilterChange,
     handlePageChange,

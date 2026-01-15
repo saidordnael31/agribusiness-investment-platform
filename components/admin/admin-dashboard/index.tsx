@@ -17,6 +17,7 @@ import { HierarchyManager } from "../hierarchy-manager"
 import { RecurrenceCalculator } from "../recurrence-calculator"
 import { NotificationSystem } from "../notification-system"
 import { ApproveInvestmentModal } from "../approve-investment-modal"
+import { AdminApproveInvestmentModal } from "../admin-approve-investment-modal"
 import { InvestmentsManager } from "../investments-manager"
 import AkintecManager from "../akintec-manager"
 import { AdminCommissionsDetail } from "../admin-commissions-detail"
@@ -34,6 +35,7 @@ export function AdminDashboard() {
     totalPages,
     totalActivities,
     approveModalOpen,
+    adminApproveModalOpen,
     selectedInvestment,
     handleFilterChange,
     handlePageChange,
@@ -560,10 +562,22 @@ export function AdminDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Modal de aprovação com upload de comprovante */}
+      {/* Modal de aprovação com upload de comprovante (para investimentos pendentes) */}
       {selectedInvestment && (
         <ApproveInvestmentModal
           isOpen={approveModalOpen}
+          onClose={closeApprovalModal}
+          investmentId={selectedInvestment.id}
+          investmentAmount={selectedInvestment.amount}
+          investorName={selectedInvestment.investorName}
+          onSuccess={handleApprovalSuccess}
+        />
+      )}
+
+      {/* Modal de aprovação pelo admin (mostra comprovante e data existentes) */}
+      {selectedInvestment && (
+        <AdminApproveInvestmentModal
+          isOpen={adminApproveModalOpen}
           onClose={closeApprovalModal}
           investmentId={selectedInvestment.id}
           investmentAmount={selectedInvestment.amount}
