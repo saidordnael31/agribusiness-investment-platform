@@ -1343,11 +1343,36 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
         const profileIds = profiles.map((p) => p.id);
 
-        const { data: investments, error: investmentsError } = await supabase
+        // Buscar investimentos ativos e pendentes (para assessores externos verem todos os investimentos)
+        let investments: any[] = [];
+        const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
           .select("*")
-          .eq("status", "active")
-          .in("user_id", profileIds); // <-- aqui, não .eq()
+          .in("status", ["active", "pending"])
+          .in("user_id", profileIds);
+        
+        if (investmentsError) {
+          console.error("Erro ao buscar investimentos:", investmentsError);
+          console.error("Detalhes do erro:", investmentsError.message);
+          // Se houver erro de RLS, tentar buscar via API route como fallback
+          try {
+            const response = await fetch(`/api/investments?status=all`);
+            if (response.ok) {
+              const apiData = await response.json();
+              if (apiData.success && apiData.data) {
+                // Filtrar apenas investimentos dos investidores deste assessor
+                investments = apiData.data.filter((inv: any) => 
+                  profileIds.includes(inv.user_id) && 
+                  (inv.status === "active" || inv.status === "pending")
+                );
+              }
+            }
+          } catch (apiError) {
+            console.error("Erro ao buscar investimentos via API:", apiError);
+          }
+        } else {
+          investments = investmentsData || [];
+        }
 
         // Junta os dados manualmente
         const profilesWithInvestmentsMapped = profiles.map((profile) => ({
@@ -1365,13 +1390,12 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       const transformedInvestors: Investor[] = (
         profilesWithInvestments || []
       ).map((profile) => {
-        // Considerar apenas investimentos ativos com commitment_period >= 360 dias (D+360)
+        // Considerar todos os investimentos ativos (removido filtro de 360 dias)
         const totalInvested =
           profile.investments?.reduce(
             (sum: number, inv: any) => {
-              // Filtrar apenas investimentos ativos com commitment_period >= 360 dias (12 meses)
-              const commitmentPeriodDays = (inv.commitment_period || 0) * 30;
-              if (inv.status === "active" && commitmentPeriodDays >= 360) {
+              // Filtrar apenas investimentos ativos
+              if (inv.status === "active") {
                 return sum + (inv.amount || 0);
               }
               return sum;
@@ -1396,8 +1420,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         > = {};
 
         profile.investments?.forEach((inv: Investment) => {
-          const commitmentPeriodDays = (inv.commitment_period || 0) * 30;
-          if (inv.status !== "active" || commitmentPeriodDays < 360) {
+          // Considerar todos os investimentos ativos (removido filtro de 360 dias)
+          if (inv.status !== "active") {
             return;
           }
 
