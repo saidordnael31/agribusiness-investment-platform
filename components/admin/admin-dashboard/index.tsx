@@ -23,6 +23,7 @@ import AkintecManager from "../akintec-manager"
 import { AdminCommissionsDetail } from "../admin-commissions-detail"
 import { useAdminDashboard } from "./useAdminDashboard"
 import { AdminContractsManager } from "../admin-contracts-manager"
+import { ClientsWithoutInvestments } from "../clients-without-investments"
 
 export function AdminDashboard() {
   const {
@@ -138,9 +139,10 @@ export function AdminDashboard() {
       {/* Main Content */}
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="overflow-x-auto">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 min-w-max">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 min-w-max">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Visão Geral</TabsTrigger>
             <TabsTrigger value="investments" className="text-xs sm:text-sm">Investimentos</TabsTrigger>
+            <TabsTrigger value="clients-without-investments" className="text-xs sm:text-sm">Clientes sem Investimentos</TabsTrigger>
             <TabsTrigger value="contracts" className="text-xs sm:text-sm">Contratos</TabsTrigger>
             <TabsTrigger value="akintec" className="text-xs sm:text-sm">Akintec</TabsTrigger>
             <TabsTrigger value="hierarchy" className="text-xs sm:text-sm">Hierarquia</TabsTrigger>
@@ -515,6 +517,10 @@ export function AdminDashboard() {
 
         <TabsContent value="investments">
           <InvestmentsManager />
+        </TabsContent>
+
+        <TabsContent value="clients-without-investments">
+          <ClientsWithoutInvestments />
         </TabsContent>
 
         <TabsContent value="contracts">
