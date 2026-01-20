@@ -144,6 +144,19 @@ interface Investor {
       profitability_liquidity?: string | null;
     }>
   >;
+  approvedPaymentDates?: string[]; // Datas de depósito dos investimentos aprovados
+  approvedPercentages?: string[]; // Porcentagens dos investimentos aprovados
+  allInvestments?: Array<{
+    id: string;
+    amount: number;
+    quota_type?: string | null;
+    commitment_period?: number | null;
+    status?: string | null;
+    created_at?: string | null;
+    payment_date?: string | null;
+    profitability_liquidity?: string | null;
+    monthly_return_rate?: number | null;
+  }>; // Todos os investimentos aprovados para filtrar por data ou porcentagem
 }
 
 interface Advisor {
@@ -238,6 +251,14 @@ export function DistributorDashboard() {
   const [selectedLiquidityDetails, setSelectedLiquidityDetails] = useState<{
     investor: Investor;
     liquidity: string;
+  } | null>(null);
+  const [selectedPaymentDate, setSelectedPaymentDate] = useState<{
+    investor: Investor;
+    date: string;
+  } | null>(null);
+  const [selectedPercentage, setSelectedPercentage] = useState<{
+    investor: Investor;
+    percentage: string;
   } | null>(null);
 
   const getNextCommissionPaymentDate = (investment: {
@@ -1416,6 +1437,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             created_at?: string | null;
             payment_date?: string | null;
             profitability_liquidity?: string | null;
+            monthly_return_rate?: number | null;
           }>
         > = {};
 
@@ -1462,10 +1484,74 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             created_at: inv.created_at,
             payment_date: inv.payment_date ?? null,
             profitability_liquidity: inv.profitability_liquidity ?? inv.liquidity ?? null,
+            monthly_return_rate: inv.monthly_return_rate ?? null,
           });
         });
 
         const liquidityOptions = Array.from(liquiditySet);
+
+        // Coletar todas as datas de depósito e porcentagens dos investimentos aprovados (status = "active")
+        const approvedPaymentDates: string[] = [];
+        const approvedPercentages: string[] = [];
+        const allApprovedInvestments: Array<{
+          id: string;
+          amount: number;
+          quota_type?: string | null;
+          commitment_period?: number | null;
+          status?: string | null;
+          created_at?: string | null;
+          payment_date?: string | null;
+          profitability_liquidity?: string | null;
+          monthly_return_rate?: number | null;
+        }> = [];
+        
+        profile.investments?.forEach((inv: Investment) => {
+          if (inv.status === "active" && inv.payment_date) {
+            // Formatar a data para exibição (evitar problemas de fuso horário)
+            // Extrair apenas a parte da data (YYYY-MM-DD) para evitar conversão de timezone
+            const dateStr = inv.payment_date.split('T')[0]; // Remove a parte do tempo se existir
+            const [year, month, day] = dateStr.split('-');
+            const formattedDate = `${day}/${month}/${year}`;
+            
+            // Adicionar apenas se não estiver duplicada
+            if (!approvedPaymentDates.includes(formattedDate)) {
+              approvedPaymentDates.push(formattedDate);
+            }
+            
+            // Coletar porcentagens únicas
+            if (inv.monthly_return_rate !== null && inv.monthly_return_rate !== undefined) {
+              const percentageStr = `${(inv.monthly_return_rate * 100).toFixed(2)}%`;
+              if (!approvedPercentages.includes(percentageStr)) {
+                approvedPercentages.push(percentageStr);
+              }
+            }
+            
+            // Adicionar investimento completo à lista
+            allApprovedInvestments.push({
+              id: inv.id,
+              amount: inv.amount,
+              quota_type: inv.quota_type,
+              commitment_period: inv.commitment_period,
+              status: inv.status,
+              created_at: inv.created_at,
+              payment_date: inv.payment_date,
+              profitability_liquidity: inv.profitability_liquidity ?? inv.liquidity ?? null,
+              monthly_return_rate: inv.monthly_return_rate ?? null,
+            });
+          }
+        });
+        // Ordenar datas do mais recente para o mais antigo
+        approvedPaymentDates.sort((a, b) => {
+          const dateA = new Date(a.split("/").reverse().join("-"));
+          const dateB = new Date(b.split("/").reverse().join("-"));
+          return dateB.getTime() - dateA.getTime();
+        });
+        // Ordenar porcentagens do maior para o menor
+        approvedPercentages.sort((a, b) => {
+          const numA = parseFloat(a.replace('%', ''));
+          const numB = parseFloat(b.replace('%', ''));
+          return numB - numA;
+        });
 
         const cpfFromProfile =
           profile.cnpj ||
@@ -1501,6 +1587,9 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           advisorEmail: advisorInfo?.email ?? null,
           liquidityOptions,
           liquidityDetails,
+          approvedPaymentDates,
+          approvedPercentages,
+          allInvestments: allApprovedInvestments,
         };
       });
 
@@ -3605,13 +3694,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
-                        {user?.role !== "escritorio" && <TableHead>Email</TableHead>}
                         {user?.role === "escritorio" && (
                           <TableHead>Assessor Responsável</TableHead>
                         )}
                         <TableHead>Liquidez</TableHead>
                         <TableHead>Total Investido</TableHead>
-                        <TableHead>Data de Cadastro</TableHead>
+                        <TableHead>Data de Depósito</TableHead>
+                        <TableHead>Porcentagem</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -3619,20 +3708,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                       {filteredInvestors.map((investor) => (
                         <TableRow key={investor.id}>
                           <TableCell className="font-medium">
-                            {user?.role === "escritorio" ? (
-                              <div className="flex flex-col">
-                                <span className="font-medium">{investor.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {investor.email}
-                                </span>
-                              </div>
-                            ) : (
-                              investor.name
-                            )}
+                            <div className="flex flex-col">
+                              <span className="font-medium">{investor.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {investor.email}
+                              </span>
+                            </div>
                           </TableCell>
-                          {user?.role !== "escritorio" && (
-                            <TableCell>{investor.email}</TableCell>
-                          )}
                           {user?.role === "escritorio" && (
                             <TableCell>
                               {investor.advisorName ? (
@@ -3692,8 +3774,59 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                             {formatCurrency(investor.totalInvested)}
                           </TableCell>
                           <TableCell>
-                            {new Date(investor.joinedAt).toLocaleDateString(
-                              "pt-BR"
+                            {investor.approvedPaymentDates && investor.approvedPaymentDates.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {investor.approvedPaymentDates.map((date, index) => (
+                                  <Badge
+                                    key={index}
+                                    variant="outline"
+                                    className="border-transparent bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
+                                    onClick={() =>
+                                      setSelectedPaymentDate({
+                                        investor,
+                                        date,
+                                      })
+                                    }
+                                  >
+                                    {date}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="border-transparent bg-gray-100 text-gray-600"
+                              >
+                                Sem investimentos
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {investor.approvedPercentages && investor.approvedPercentages.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {investor.approvedPercentages.map((percentage, index) => (
+                                  <Badge
+                                    key={index}
+                                    variant="outline"
+                                    className="border-transparent bg-green-100 text-green-800 cursor-pointer hover:bg-green-200"
+                                    onClick={() =>
+                                      setSelectedPercentage({
+                                        investor,
+                                        percentage,
+                                      })
+                                    }
+                                  >
+                                    {percentage}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="border-transparent bg-gray-100 text-gray-600"
+                              >
+                                Sem investimentos
+                              </Badge>
                             )}
                           </TableCell>
                           <TableCell>
@@ -5340,43 +5473,107 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           </DialogContent>
         </Dialog>
 
-        {/* Modal de detalhes de liquidez por investidor */}
+        {/* Modal de detalhes de liquidez, data de depósito ou porcentagem por investidor */}
         <Dialog
-          open={!!selectedLiquidityDetails}
+          open={!!selectedLiquidityDetails || !!selectedPaymentDate || !!selectedPercentage}
           onOpenChange={(open) => {
             if (!open) {
               setSelectedLiquidityDetails(null);
+              setSelectedPaymentDate(null);
+              setSelectedPercentage(null);
             }
           }}
         >
           <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex flex-col gap-1">
-                <span>Detalhes de liquidez</span>
-                {selectedLiquidityDetails && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {selectedLiquidityDetails.investor.name} —{" "}
-                    {selectedLiquidityDetails.liquidity.charAt(0).toUpperCase() +
-                      selectedLiquidityDetails.liquidity.slice(1)}
-                  </span>
-                )}
+                {selectedLiquidityDetails ? (
+                  <>
+                    <span>Detalhes de liquidez</span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {selectedLiquidityDetails.investor.name} —{" "}
+                      {selectedLiquidityDetails.liquidity.charAt(0).toUpperCase() +
+                        selectedLiquidityDetails.liquidity.slice(1)}
+                    </span>
+                  </>
+                ) : selectedPaymentDate ? (
+                  <>
+                    <span>Detalhes de depósito</span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {selectedPaymentDate.investor.name} — {selectedPaymentDate.date}
+                    </span>
+                  </>
+                ) : selectedPercentage ? (
+                  <>
+                    <span>Detalhes de porcentagem</span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {selectedPercentage.investor.name} — {selectedPercentage.percentage}
+                    </span>
+                  </>
+                ) : null}
               </DialogTitle>
               <DialogDescription>
-                Veja os investimentos desse investidor com a liquidez selecionada.
+                {selectedLiquidityDetails
+                  ? "Veja os investimentos desse investidor com a liquidez selecionada."
+                  : selectedPaymentDate
+                  ? "Veja os investimentos desse investidor com a data de depósito selecionada."
+                  : selectedPercentage
+                  ? "Veja os investimentos desse investidor com a porcentagem selecionada."
+                  : ""}
               </DialogDescription>
             </DialogHeader>
 
-            {selectedLiquidityDetails && (
+            {(selectedLiquidityDetails || selectedPaymentDate || selectedPercentage) && (
               <div className="space-y-4">
                 {(() => {
-                  const { investor, liquidity } = selectedLiquidityDetails;
-                  const investments =
-                    investor.liquidityDetails?.[liquidity] ?? [];
+                  let investments: Array<{
+                    id: string;
+                    amount: number;
+                    quota_type?: string | null;
+                    commitment_period?: number | null;
+                    status?: string | null;
+                    created_at?: string | null;
+                    payment_date?: string | null;
+                    profitability_liquidity?: string | null;
+                    monthly_return_rate?: number | null;
+                  }> = [];
+
+                  if (selectedLiquidityDetails) {
+                    const { investor, liquidity } = selectedLiquidityDetails;
+                    investments = investor.liquidityDetails?.[liquidity] ?? [];
+                  } else if (selectedPaymentDate) {
+                    const { investor, date } = selectedPaymentDate;
+                    // Filtrar investimentos pela data de depósito (usando o mesmo método de formatação)
+                    investments =
+                      investor.allInvestments?.filter((inv) => {
+                        if (!inv.payment_date) return false;
+                        // Extrair apenas a parte da data (YYYY-MM-DD) para evitar conversão de timezone
+                        const dateStr = inv.payment_date.split('T')[0];
+                        const [year, month, day] = dateStr.split('-');
+                        const formattedDate = `${day}/${month}/${year}`;
+                        return formattedDate === date;
+                      }) ?? [];
+                  } else if (selectedPercentage) {
+                    const { investor, percentage } = selectedPercentage;
+                    // Filtrar investimentos pela porcentagem
+                    investments =
+                      investor.allInvestments?.filter((inv) => {
+                        if (!inv.monthly_return_rate) return false;
+                        const invPercentage = `${(inv.monthly_return_rate * 100).toFixed(2)}%`;
+                        return invPercentage === percentage;
+                      }) ?? [];
+                  }
 
                   if (!investments.length) {
                     return (
                       <p className="text-sm text-muted-foreground">
-                        Nenhum investimento encontrado para essa liquidez.
+                        {selectedLiquidityDetails
+                          ? "Nenhum investimento encontrado para essa liquidez."
+                          : selectedPaymentDate
+                          ? "Nenhum investimento encontrado para essa data de depósito."
+                          : selectedPercentage
+                          ? "Nenhum investimento encontrado para essa porcentagem."
+                          : "Nenhum investimento encontrado."}
                       </p>
                     );
                   }
