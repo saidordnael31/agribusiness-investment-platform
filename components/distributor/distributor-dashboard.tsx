@@ -199,10 +199,23 @@ interface Contract {
   created_at: string;
   uploaded_by: string;
   investor_id?: string;
+  investment_id?: string | null;
   uploaded_by_profile?: {
     full_name: string;
     email: string;
   };
+  investment?: {
+    id: string;
+    amount: number;
+    payment_date?: string | null;
+    status: string;
+    monthly_return_rate?: number | null;
+    commitment_period?: number | null;
+  } | null;
+  advisor?: {
+    name: string;
+    email?: string | null;
+  } | null;
 }
 
 interface InvestorContractOverview {
@@ -2209,6 +2222,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     setContractsOverviewError(null);
 
     try {
+      const supabase = createClient();
+      
       const results = await Promise.allSettled(
         myInvestors.map(async (investor) => {
           const response = await fetch(`/api/contracts?investorId=${investor.id}`);
@@ -2218,9 +2233,66 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             throw new Error(result.error || "Erro ao buscar contratos do investidor");
           }
 
+          const contracts: Contract[] = Array.isArray(result.data) ? (result.data as Contract[]) : [];
+          
+          // Buscar informações dos investimentos relacionados e assessores
+          const contractsWithInvestments = await Promise.all(
+            contracts.map(async (contract) => {
+              let investmentData = null;
+              let advisorData = null;
+              
+              if (contract.investment_id) {
+                const { data: investment, error: invError } = await supabase
+                  .from("investments")
+                  .select("id, amount, payment_date, status, monthly_return_rate, commitment_period")
+                  .eq("id", contract.investment_id)
+                  .single();
+                
+                if (!invError && investment) {
+                  investmentData = {
+                    id: investment.id,
+                    amount: investment.amount,
+                    payment_date: investment.payment_date,
+                    status: investment.status,
+                    monthly_return_rate: investment.monthly_return_rate,
+                    commitment_period: investment.commitment_period,
+                  };
+                }
+              }
+              
+              // Buscar informações do assessor do investidor
+              const { data: investorProfile } = await supabase
+                .from("profiles")
+                .select("parent_id")
+                .eq("id", investor.id)
+                .single();
+              
+              if (investorProfile?.parent_id) {
+                const { data: advisorProfile } = await supabase
+                  .from("profiles")
+                  .select("full_name, email")
+                  .eq("id", investorProfile.parent_id)
+                  .single();
+                
+                if (advisorProfile) {
+                  advisorData = {
+                    name: advisorProfile.full_name || advisorProfile.email?.split("@")[0] || "Assessor",
+                    email: advisorProfile.email || null,
+                  };
+                }
+              }
+              
+              return {
+                ...contract,
+                investment: investmentData,
+                advisor: advisorData,
+              };
+            })
+          );
+
           return {
             investor,
-            contracts: Array.isArray(result.data) ? (result.data as Contract[]) : [],
+            contracts: contractsWithInvestments,
           };
         })
       );
@@ -3927,8 +3999,10 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                         <TableHeader>
                           <TableRow>
                             <TableHead>Investidor</TableHead>
-                            <TableHead>Contrato</TableHead>
-                            <TableHead>Arquivo</TableHead>
+                            <TableHead>Valor do Aporte</TableHead>
+                            <TableHead>Rentabilidade</TableHead>
+                            <TableHead>Período</TableHead>
+                            <TableHead>Assessor</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Data</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
@@ -3964,21 +4038,50 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                                       )}
                                     </div>
                                   </TableCell>
-                                  <TableCell className="max-w-xs">
-                                    <p className="font-medium">{contract.contract_name}</p>
-                                    {contract.uploaded_by_profile?.full_name && (
-                                      <p className="text-xs text-muted-foreground">
-                                        Enviado por {contract.uploaded_by_profile.full_name}
-                                      </p>
+                                  <TableCell>
+                                    {contract.investment ? (
+                                      <span className="font-medium text-sm">
+                                        {formatCurrency(contract.investment.amount)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">
+                                        Sem ligação
+                                      </span>
                                     )}
                                   </TableCell>
                                   <TableCell>
-                                    <p className="text-sm">{contract.file_name}</p>
-                                    {contract.file_size ? (
-                                      <p className="text-xs text-muted-foreground">
-                                        {(contract.file_size / (1024 * 1024)).toFixed(2)} MB
-                                      </p>
-                                    ) : null}
+                                    {contract.investment?.monthly_return_rate !== null && contract.investment?.monthly_return_rate !== undefined ? (
+                                      <span className="font-medium text-sm text-green-600">
+                                        {(contract.investment.monthly_return_rate * 100).toFixed(2)}% a.m.
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">--</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {contract.investment?.commitment_period ? (
+                                      <span className="font-medium text-sm">
+                                        {contract.investment.commitment_period} {contract.investment.commitment_period === 1 ? 'mês' : 'meses'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">--</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {contract.advisor ? (
+                                      <div className="flex flex-col">
+                                        <span className="font-medium text-sm">
+                                          {contract.advisor.name}
+                                        </span>
+                                        {contract.advisor.email && (
+                                          <span className="text-xs text-muted-foreground">
+                                            {contract.advisor.email}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">--</span>
+                                    )}
                                   </TableCell>
                                   <TableCell>
                                     <Badge variant={statusVariant}>
