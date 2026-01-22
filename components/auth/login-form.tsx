@@ -223,7 +223,7 @@ export function LoginForm() {
               cnpj: identity.cpf_cnpj || null,
               notes: "Cadastro de profile via login",
               hierarchy_level:
-                identity.role === "assessor" ? "advisor" : "office",
+                identity.role === "assessor" || identity.role === "assessor_externo" ? "advisor" : "office",
               is_active: true,
             },
           ])

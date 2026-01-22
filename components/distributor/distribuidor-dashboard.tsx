@@ -231,12 +231,12 @@ export function DistribuidorDashboard() {
 
       const escritorioIds = profiles.map((p) => p.id);
 
-      // SIMPLIFICADO: Buscar assessores usando distributor_id
+      // SIMPLIFICADO: Buscar assessores usando distributor_id (incluindo assessores externos)
       const { data: assessores, error: assessoresError } = await supabase
         .from("profiles")
         .select("id, parent_id, office_id, user_type, role, distributor_id")
         .eq("user_type", "distributor")
-        .eq("role", "assessor")
+        .in("role", ["assessor", "assessor_externo"])
         .eq("distributor_id", distribuidorId);
 
       if (assessoresError) {
@@ -1126,25 +1126,48 @@ export function DistribuidorDashboard() {
       const supabase = createClient();
       const escritorioId = escritorio.id;
 
-      // Buscar assessores do escritório (por office_id ou parent_id)
+      // Obter o ID do distribuidor logado
+      const userStr = localStorage.getItem("user");
+      const distribuidorId = userStr ? JSON.parse(userStr).id : null;
+
+      // Buscar assessores do escritório de múltiplas formas (incluindo assessores externos):
+      // 1. Por office_id
       const { data: assessoresByOffice, error: assessoresByOfficeError } = await supabase
         .from("profiles")
         .select("id, full_name, email, phone, cnpj, created_at")
         .eq("user_type", "distributor")
-        .eq("role", "assessor")
+        .in("role", ["assessor", "assessor_externo"])
         .eq("office_id", escritorioId);
 
+      // 2. Por parent_id
       const { data: assessoresByParent, error: assessoresByParentError } = await supabase
         .from("profiles")
         .select("id, full_name, email, phone, cnpj, created_at")
         .eq("user_type", "distributor")
-        .eq("role", "assessor")
+        .in("role", ["assessor", "assessor_externo"])
         .eq("parent_id", escritorioId);
+
+      // 3. Por distributor_id e office_id (para garantir assessores do distribuidor vinculados ao escritório)
+      let assessoresByDistributor: any[] = [];
+      if (distribuidorId) {
+        const { data: assessoresByDistributorData, error: assessoresByDistributorError } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, phone, cnpj, created_at")
+          .eq("user_type", "distributor")
+          .in("role", ["assessor", "assessor_externo"])
+          .eq("distributor_id", distribuidorId)
+          .eq("office_id", escritorioId);
+
+        if (!assessoresByDistributorError) {
+          assessoresByDistributor = assessoresByDistributorData || [];
+        }
+      }
 
       // Combinar e remover duplicatas
       const allAssessores = [
         ...(assessoresByOffice || []),
-        ...(assessoresByParent || [])
+        ...(assessoresByParent || []),
+        ...assessoresByDistributor
       ];
       const assessores = allAssessores.filter((assessor, index, self) =>
         index === self.findIndex(a => a.id === assessor.id)
@@ -1158,6 +1181,9 @@ export function DistribuidorDashboard() {
           variant: "destructive",
         });
       }
+
+      console.log(`[DISTRIBUIDOR] Assessores encontrados para escritório ${escritorioId}:`, assessores.length);
+      console.log(`[DISTRIBUIDOR] Detalhes dos assessores:`, assessores);
 
       // Buscar investidores do escritório (diretamente ou via assessores)
       const assessorIds = assessores.map((a) => a.id);

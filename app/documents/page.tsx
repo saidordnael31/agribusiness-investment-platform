@@ -53,7 +53,7 @@ export default function DocumentsPage() {
     user?.user_type === "distributor" && user?.role === "gestor";
   const isLeader = user?.user_type === "distributor" && user?.role === "lider";
   const isAdvisor =
-    user?.user_type === "distributor" && user?.role === "assessor";
+    user?.user_type === "distributor" && (user?.role === "assessor" || user?.role === "assessor_externo");
   const isInvestor = user?.user_type === "investor";
 
   const canAccessDistributorDocs =

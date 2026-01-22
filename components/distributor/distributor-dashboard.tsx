@@ -518,7 +518,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   useEffect(() => {
     if (user?.role === "escritorio") {
       setUserType("advisor");
-    } else if (user?.role === "assessor") {
+    } else if (user?.role === "assessor" || user?.role === "assessor_externo") {
       setUserType("investor");
     }
   }, [user]);
@@ -1244,7 +1244,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
   const visibleSteps = getVisibleSteps();
   const isLastStep = currentStep === visibleSteps.length - 1;
-  const showContractsTab = user?.role === "assessor" || user?.role === "escritorio";
+  const showContractsTab = user?.role === "assessor" || user?.role === "assessor_externo" || user?.role === "escritorio";
   const tabsGridCols =
     user?.role === "escritorio" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
   const overviewGridCols = "lg:grid-cols-4";
@@ -1315,7 +1315,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   }, [user]);
 
   useEffect(() => {
-    if (user?.role === "assessor" && userOfficeId) {
+    if ((user?.role === "assessor" || user?.role === "assessor_externo") && userOfficeId) {
       void fetchOfficeAdvisors(userOfficeId);
     }
   }, [user?.role, userOfficeId]);
@@ -1620,18 +1620,21 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       const supabase = createClient();
 
       // Se for escritório, buscar por office_id, senão buscar por parent_id
+      // Sempre filtrar apenas assessores (interno ou externo)
       const query =
         user?.role === "escritorio"
           ? supabase
               .from("profiles")
               .select("*")
               .eq("user_type", "distributor")
+              .in("role", ["assessor", "assessor_externo"])
               .eq("office_id", distributorId)
               .order("created_at", { ascending: false })
           : supabase
               .from("profiles")
               .select("*")
               .eq("user_type", "distributor")
+              .in("role", ["assessor", "assessor_externo"])
               .eq("parent_id", distributorId)
               .order("created_at", { ascending: false });
 
@@ -1833,8 +1836,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           .single();
         
         distributorId = officeProfile?.distributor_id || officeProfile?.parent_id || null;
-      } else if (user?.role === "assessor") {
-        // Se o usuário é assessor, buscar o distributor_id do assessor
+      } else if (user?.role === "assessor" || user?.role === "assessor_externo") {
+        // Se o usuário é assessor (interno ou externo), buscar o distributor_id do assessor
         const { data: assessorProfile } = await supabase
           .from("profiles")
           .select("distributor_id")
@@ -2986,6 +2989,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         .from("profiles")
         .select("*")
         .eq("user_type", "distributor")
+        .in("role", ["assessor", "assessor_externo"])
         .eq("office_id", officeId)
         .order("created_at", { ascending: false });
 
@@ -3087,11 +3091,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     const advisorsForRanking =
       user.role === "escritorio"
         ? myAdvisors
-        : user.role === "assessor"
+        : user.role === "assessor" || user.role === "assessor_externo"
         ? officeAdvisors
         : [];
 
-    if (user.role === "assessor") {
+    if (user.role === "assessor" || user.role === "assessor_externo") {
       if (advisorsForRanking.length === 0) {
         setDistributorData((prev) => ({
           ...prev,
@@ -3403,7 +3407,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             </CardContent>
           </Card>
 
-          {user?.role === "escritorio" || user?.role === "assessor" ? (
+          {user?.role === "escritorio" || user?.role === "assessor" || user?.role === "assessor_externo" ? (
             <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
               <div className="absolute right-0 top-0 opacity-10">
                 <UserCheck className="h-24 w-24" />
@@ -4249,7 +4253,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                   className="max-w-full space-y-6"
                 >
                   {/* Switch para escolher tipo de usuário (apenas para escritório) */}
-                  {user.role === "escritorio" ? null : user.role === "assessor" ? (
+                  {user.role === "escritorio" ? null : user.role === "assessor" || user.role === "assessor_externo" ? (
                     <div className="rounded-xl border border-[#C7F3E1] bg-white/80 p-4">
                       <Label className="mb-0 block text-base font-semibold text-[#064E3B]">
                         Investidor

@@ -141,7 +141,7 @@ export function AdvisorCommissionsDetail() {
           .select("id, full_name")
           .eq("office_id", user.id)
           .eq("user_type", "distributor")
-          .eq("role", "assessor")
+          .in("role", ["assessor", "assessor_externo"])
 
         if (advisors) {
           advisors.forEach(advisor => {

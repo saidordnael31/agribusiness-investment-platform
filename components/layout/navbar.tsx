@@ -206,6 +206,7 @@ export function Navbar() {
     user.user_type === "assessor" ||
     user.role === "escritorio" ||
     user.role === "assessor" ||
+    user.role === "assessor_externo" ||
     user.role === "distribuidor"
   );
   

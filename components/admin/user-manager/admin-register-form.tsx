@@ -249,7 +249,7 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
         .from("profiles")
         .select("id, full_name, office_id, distributor_id")
         .eq("user_type", "distributor")
-        .eq("role", "assessor");
+        .in("role", ["assessor", "assessor_externo"]);
       
       if (error) {
         console.error("Erro ao buscar assessores:", error);
