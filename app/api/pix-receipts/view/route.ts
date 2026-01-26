@@ -50,39 +50,69 @@ export async function GET(request: NextRequest) {
       .single()
 
     const isAdmin = profile?.user_type === 'admin'
+    const isDistributor = profile?.user_type === 'distributor'
     const isOwner = receipt.user_id === user.id
     const isAdvisor =
       profile?.user_type === 'distributor' &&
       (profile?.role === 'assessor' || profile?.role === 'assessor_externo')
     const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
 
-    // Verificar se assessor tem acesso ao investidor
-    let hasAdvisorAccess = false
-    if (isAdvisor) {
-      const { data: investorProfile } = await supabase
-        .from("profiles")
-        .select("parent_id")
-        .eq("id", receipt.user_id)
-        .eq("user_type", "investor")
-        .single()
-      
-      hasAdvisorAccess = investorProfile?.parent_id === user.id
+    // Buscar perfil do usuário que possui o comprovante
+    const { data: receiptOwnerProfile } = await supabase
+      .from("profiles")
+      .select("user_type, role, parent_id, office_id")
+      .eq("id", receipt.user_id)
+      .single()
+
+    let hasAccess = false
+
+    if (isAdmin || isOwner) {
+      hasAccess = true
+    } else if (isDistributor && receiptOwnerProfile) {
+      // Distribuidor pode ver comprovantes de escritórios, assessores e investidores vinculados
+      const isTargetOffice = receiptOwnerProfile.user_type === 'distributor' && receiptOwnerProfile.role === 'escritorio'
+      const isTargetAdvisor = receiptOwnerProfile.user_type === 'distributor' && (receiptOwnerProfile.role === 'assessor' || receiptOwnerProfile.role === 'assessor_externo')
+      const isTargetInvestor = receiptOwnerProfile.user_type === 'investor'
+
+      if (isTargetOffice || isTargetAdvisor) {
+        // Pode ver comprovantes de escritórios e assessores
+        hasAccess = true
+      } else if (isTargetInvestor) {
+        // Investidor: verificar se está vinculado ao distribuidor
+        if (isAdvisor) {
+          hasAccess = receiptOwnerProfile.parent_id === user.id
+        } else if (isOffice) {
+          hasAccess = receiptOwnerProfile.office_id === user.id
+        } else {
+          // Distribuidor de nível superior: verificar se investidor está vinculado a seus escritórios/assessores
+          if (receiptOwnerProfile.office_id) {
+            const { data: officeProfile } = await supabase
+              .from("profiles")
+              .select("id, parent_id")
+              .eq("id", receiptOwnerProfile.office_id)
+              .single()
+            
+            if (officeProfile && (officeProfile.id === user.id || officeProfile.parent_id === user.id)) {
+              hasAccess = true
+            }
+          }
+          
+          if (!hasAccess && receiptOwnerProfile.parent_id) {
+            const { data: advisorProfile } = await supabase
+              .from("profiles")
+              .select("id, office_id")
+              .eq("id", receiptOwnerProfile.parent_id)
+              .single()
+            
+            if (advisorProfile && (advisorProfile.id === user.id || advisorProfile.office_id === user.id)) {
+              hasAccess = true
+            }
+          }
+        }
+      }
     }
 
-    // Verificar se escritório tem acesso ao investidor (via office_id)
-    let hasOfficeAccess = false
-    if (isOffice) {
-      const { data: investorProfile } = await supabase
-        .from("profiles")
-        .select("office_id")
-        .eq("id", receipt.user_id)
-        .eq("user_type", "investor")
-        .single()
-
-      hasOfficeAccess = investorProfile?.office_id === user.id
-    }
-
-    if (!isAdmin && !isOwner && !hasAdvisorAccess && !hasOfficeAccess) {
+    if (!hasAccess) {
       return NextResponse.json(
         { success: false, error: "Acesso negado" },
         { status: 403 }

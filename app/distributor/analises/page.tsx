@@ -6,10 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BarChart3, Loader2, TrendingUp, Users, UserPlus } from "lucide-react"
+import { BarChart3, Loader2, TrendingUp, Users, UserPlus, DollarSign, ChevronLeft, ChevronRight, Eye, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts"
+import { calculateNewCommissionLogic } from "@/lib/commission-calculator"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { UserProfileView } from "@/components/admin/user-profile-view"
 
 interface EscritorioData {
   id: string
@@ -62,7 +66,9 @@ const formatCurrency = (value: number) => {
 export default function AnalisesPage() {
   const [escritorios, setEscritorios] = useState<EscritorioData[]>([])
   const [assessores, setAssessores] = useState<AssessorData[]>([])
+  const [allAssessores, setAllAssessores] = useState<AssessorData[]>([]) // Lista completa de assessores para o select
   const [aporteMensalData, setAporteMensalData] = useState<AporteMensal[]>([])
+  const [comissaoMensalData, setComissaoMensalData] = useState<AporteMensal[]>([])
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [viewMode, setViewMode] = useState<"geral" | "escritorio">("geral")
@@ -70,6 +76,10 @@ export default function AnalisesPage() {
   const [selectedAssessor, setSelectedAssessor] = useState<string>("all")
   const [assessorDetail, setAssessorDetail] = useState<AssessorData | null>(null)
   const [investorsData, setInvestorsData] = useState<InvestorData[]>([])
+  const [comissaoPeriodIndex, setComissaoPeriodIndex] = useState<number>(0) // Índice para navegar nos períodos
+  const [comissaoPeriodMonths, setComissaoPeriodMonths] = useState<number>(12) // Número de meses a exibir (2-12)
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState<string | null>(null)
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
   useEffect(() => {
     const userStr = localStorage.getItem("user")
@@ -138,7 +148,7 @@ export default function AnalisesPage() {
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("user_id, amount, status, payment_date")
+          .select("id, user_id, amount, status, payment_date, commitment_period, profitability_liquidity")
           .eq("status", "active")
           .in("user_id", investorIds)
           .order("payment_date", { ascending: true })
@@ -306,10 +316,118 @@ export default function AnalisesPage() {
       })
 
       setAporteMensalData(aportesCompletos)
+
+      // Buscar e processar comissões
+      await fetchComissoesData(distribuidorId, transformedEscritorios, assessores, investors, investments, investorToEscritorio)
     } catch (error) {
       console.error("Erro ao buscar dados dos escritórios:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchComissoesData = async (
+    distribuidorId: string,
+    escritoriosData: EscritorioData[],
+    assessoresData: any[],
+    investorsData: any[],
+    investments: any[],
+    investorToEscritorio: Record<string, string>
+  ) => {
+    try {
+      if (!investments || investments.length === 0) {
+        setComissaoMensalData([])
+        return
+      }
+
+      // Buscar perfis dos investidores para obter nomes
+      const supabase = createClient()
+      const investorIds = investments.map((inv) => inv.user_id)
+      const { data: investorProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", investorIds)
+
+      const investorProfileMap = new Map(
+        (investorProfiles || []).map((p: any) => [p.id, p])
+      )
+
+      // Processar comissões por mês
+      const comissoesPorMes: Record<string, Record<string, number>> = {}
+
+      // Processar cada investimento e calcular comissões
+      for (const investment of investments) {
+        if (!investment.payment_date && !investment.created_at) continue
+
+        const investorProfile = investorProfileMap.get(investment.user_id)
+        const escritorioName = investorToEscritorio[investment.user_id]
+        if (!escritorioName) continue
+
+        try {
+          // Calcular comissões para o escritório (1%)
+          const paymentDate = investment.payment_date || investment.created_at
+          const dateStr = typeof paymentDate === 'string' ? paymentDate.split('T')[0] : paymentDate
+
+          const commissionCalc = calculateNewCommissionLogic({
+            id: investment.id,
+            user_id: investment.user_id,
+            amount: Number(investment.amount) || 0,
+            payment_date: dateStr,
+            commitment_period: investment.commitment_period || 12,
+            liquidity: investment.profitability_liquidity,
+            investorName: investorProfile?.full_name || "Investidor",
+            officeId: escritoriosData.find(e => e.name === escritorioName)?.id,
+            officeName: escritorioName,
+          })
+
+          // Processar monthlyBreakdown para agrupar por mês
+          if (commissionCalc.monthlyBreakdown) {
+            commissionCalc.monthlyBreakdown.forEach((monthData) => {
+              const mesAno = `${monthData.year}-${String(monthData.monthNumber).padStart(2, "0")}`
+              const mesLabel = `${monthData.month.substring(0, 3)}/${monthData.year}`
+
+              if (!comissoesPorMes[mesAno]) {
+                comissoesPorMes[mesAno] = { mes: mesLabel }
+              }
+
+              if (!comissoesPorMes[mesAno][escritorioName]) {
+                comissoesPorMes[mesAno][escritorioName] = 0
+              }
+
+              // Somar comissão do escritório (1%)
+              comissoesPorMes[mesAno][escritorioName] += Number(monthData.officeCommission) || 0
+            })
+          }
+        } catch (error) {
+          console.error(`Erro ao calcular comissão para investimento ${investment.id}:`, error)
+          continue
+        }
+      }
+
+      // Converter para array e ordenar por data
+      const comissoesArray: AporteMensal[] = Object.keys(comissoesPorMes)
+        .sort()
+        .map((mesAno) => ({
+          mes: comissoesPorMes[mesAno].mes as string,
+          ...Object.fromEntries(
+            Object.entries(comissoesPorMes[mesAno]).filter(([key]) => key !== "mes")
+          ),
+        }))
+
+      // Garantir que todos os escritórios apareçam em todos os meses (com 0 se não houver)
+      const escritorioNames = escritoriosData.map((e) => e.name)
+      const comissoesCompletas = comissoesArray.map((mes) => {
+        const mesCompleto: AporteMensal = { mes: mes.mes }
+        escritorioNames.forEach((nome) => {
+          mesCompleto[nome] = (mes[nome] as number) || 0
+        })
+        return mesCompleto
+      })
+
+      setComissaoMensalData(comissoesCompletas)
+    } catch (error) {
+      console.error("Erro ao buscar dados de comissões:", error)
+      setComissaoMensalData([])
     }
   }
 
@@ -323,6 +441,8 @@ export default function AnalisesPage() {
         fetchAssessoresData(selectedEscritorio)
         setAssessorDetail(null)
         setInvestorsData([])
+        setComissaoMensalData([])
+        setComissaoPeriodIndex(0) // Resetar índice ao trocar de escritório
       }
     } else if (viewMode === "geral" && user?.id) {
       // Recarregar dados dos escritórios quando voltar para visão geral
@@ -330,6 +450,8 @@ export default function AnalisesPage() {
       setSelectedAssessor("all")
       setAssessorDetail(null)
       setInvestorsData([])
+      setComissaoMensalData([])
+      setComissaoPeriodIndex(0) // Resetar índice ao voltar para visão geral
     }
   }, [viewMode, selectedEscritorio, selectedAssessor, user?.id])
 
@@ -353,7 +475,9 @@ export default function AnalisesPage() {
 
       if (!assessoresData || assessoresData.length === 0) {
         setAssessores([])
+        setAllAssessores([])
         setAporteMensalData([])
+        setComissaoMensalData([])
         setLoading(false)
         return
       }
@@ -378,7 +502,7 @@ export default function AnalisesPage() {
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("user_id, amount, status, payment_date")
+          .select("id, user_id, amount, status, payment_date, commitment_period, profitability_liquidity")
           .eq("status", "active")
           .in("user_id", investorIds)
           .order("payment_date", { ascending: true })
@@ -430,6 +554,7 @@ export default function AnalisesPage() {
       })
 
       setAssessores(transformedAssessores)
+      setAllAssessores(transformedAssessores) // Manter lista completa para o select
 
       // Preparar dados para gráfico de linha por assessor
       const aportesPorMes: Record<string, Record<string, number>> = {}
@@ -485,10 +610,118 @@ export default function AnalisesPage() {
       })
 
       setAporteMensalData(aportesCompletos)
+
+      // Buscar comissões por assessor
+      await fetchComissoesPorAssessor(transformedAssessores, investors, investments, investorToAssessor)
     } catch (error) {
       console.error("Erro ao buscar dados dos assessores:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchComissoesPorAssessor = async (
+    assessoresData: AssessorData[],
+    investorsData: any[],
+    investments: any[],
+    investorToAssessor: Record<string, string>
+  ) => {
+    try {
+      if (!investments || investments.length === 0) {
+        setComissaoMensalData([])
+        return
+      }
+
+      const supabase = createClient()
+      const investorIds = investments.map((inv) => inv.user_id)
+      const { data: investorProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", investorIds)
+
+      const investorProfileMap = new Map(
+        (investorProfiles || []).map((p: any) => [p.id, p])
+      )
+
+      // Processar comissões por mês
+      const comissoesPorMes: Record<string, Record<string, number>> = {}
+
+      // Processar cada investimento e calcular comissões
+      for (const investment of investments) {
+        if (!investment.payment_date && !investment.created_at) continue
+
+        const investorProfile = investorProfileMap.get(investment.user_id)
+        const assessorName = investorToAssessor[investment.user_id]
+        if (!assessorName) continue
+
+        try {
+          const paymentDate = investment.payment_date || investment.created_at
+          const dateStr = typeof paymentDate === 'string' ? paymentDate.split('T')[0] : paymentDate
+
+          const assessor = assessoresData.find(a => a.name === assessorName)
+          if (!assessor) continue
+
+          // Calcular comissões para o assessor (3%)
+          const commissionCalc = calculateNewCommissionLogic({
+            id: investment.id,
+            user_id: investment.user_id,
+            amount: Number(investment.amount) || 0,
+            payment_date: dateStr,
+            commitment_period: investment.commitment_period || 12,
+            liquidity: investment.profitability_liquidity,
+            investorName: investorProfile?.full_name || "Investidor",
+            advisorId: assessor.id,
+            advisorName: assessor.name,
+            advisorRole: "assessor",
+            isForAdvisor: true,
+          })
+
+          // Processar monthlyBreakdown para agrupar por mês
+          if (commissionCalc.monthlyBreakdown) {
+            commissionCalc.monthlyBreakdown.forEach((monthData) => {
+              const mesAno = `${monthData.year}-${String(monthData.monthNumber).padStart(2, "0")}`
+              const mesLabel = `${monthData.month.substring(0, 3)}/${monthData.year}`
+
+              if (!comissoesPorMes[mesAno]) {
+                comissoesPorMes[mesAno] = { mes: mesLabel }
+              }
+
+              if (!comissoesPorMes[mesAno][assessorName]) {
+                comissoesPorMes[mesAno][assessorName] = 0
+              }
+
+              // Somar comissão do assessor (3%)
+              comissoesPorMes[mesAno][assessorName] += Number(monthData.advisorCommission) || 0
+            })
+          }
+        } catch (error) {
+          console.error(`Erro ao calcular comissão para investimento ${investment.id}:`, error)
+          continue
+        }
+      }
+
+      const comissoesArray: AporteMensal[] = Object.keys(comissoesPorMes)
+        .sort()
+        .map((mesAno) => ({
+          mes: comissoesPorMes[mesAno].mes as string,
+          ...Object.fromEntries(
+            Object.entries(comissoesPorMes[mesAno]).filter(([key]) => key !== "mes")
+          ),
+        }))
+
+      const assessorNames = assessoresData.map((a) => a.name)
+      const comissoesCompletas = comissoesArray.map((mes) => {
+        const mesCompleto: AporteMensal = { mes: mes.mes }
+        assessorNames.forEach((nome) => {
+          mesCompleto[nome] = (mes[nome] as number) || 0
+        })
+        return mesCompleto
+      })
+
+      setComissaoMensalData(comissoesCompletas)
+    } catch (error) {
+      console.error("Erro ao buscar dados de comissões por assessor:", error)
+      setComissaoMensalData([])
     }
   }
 
@@ -527,7 +760,7 @@ export default function AnalisesPage() {
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("user_id, amount, status, payment_date")
+          .select("id, user_id, amount, status, payment_date, commitment_period, profitability_liquidity")
           .eq("status", "active")
           .in("user_id", investorIds)
           .order("payment_date", { ascending: true })
@@ -564,6 +797,7 @@ export default function AnalisesPage() {
 
       setAssessorDetail(assessorDetailData)
       setAssessores([assessorDetailData]) // Para manter compatibilidade com os gráficos
+      // Não atualizar allAssessores aqui - manter a lista completa para o select
 
       // Preparar dados dos investidores para o gráfico de pizza
       const investorsDetail: InvestorData[] = (investors || []).map((investor) => {
@@ -627,10 +861,104 @@ export default function AnalisesPage() {
       })
 
       setAporteMensalData(aportesCompletos)
+
+      // Buscar comissões por investidor
+      await fetchComissoesPorInvestidor(investorsDetail, investments, investorNameMap)
     } catch (error) {
       console.error("Erro ao buscar dados do assessor:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchComissoesPorInvestidor = async (
+    investorsData: InvestorData[],
+    investments: any[],
+    investorNameMap: Record<string, string>
+  ) => {
+    try {
+      if (!investments || investments.length === 0) {
+        setComissaoMensalData([])
+        return
+      }
+
+      // Processar comissões por mês
+      const comissoesPorMes: Record<string, Record<string, number>> = {}
+
+      // Processar cada investimento e calcular comissões
+      for (const investment of investments) {
+        if (!investment.payment_date && !investment.created_at) continue
+
+        const investorName = investorNameMap[investment.user_id]
+        if (!investorName) continue
+
+        try {
+          const paymentDate = investment.payment_date || investment.created_at
+          const dateStr = typeof paymentDate === 'string' ? paymentDate.split('T')[0] : paymentDate
+
+          // Calcular comissões para o assessor (3%) - assumindo que o assessor é o parent do investidor
+          const commissionCalc = calculateNewCommissionLogic({
+            id: investment.id,
+            user_id: investment.user_id,
+            amount: Number(investment.amount) || 0,
+            payment_date: dateStr,
+            commitment_period: investment.commitment_period || 12,
+            liquidity: investment.profitability_liquidity,
+            investorName: investorName,
+            advisorId: investment.user_id, // Usar user_id temporariamente, será ajustado
+            advisorName: investorName,
+            advisorRole: "assessor",
+            isForAdvisor: true,
+          })
+
+          // Processar monthlyBreakdown para agrupar por mês
+          if (commissionCalc.monthlyBreakdown) {
+            commissionCalc.monthlyBreakdown.forEach((monthData) => {
+              const mesAno = `${monthData.year}-${String(monthData.monthNumber).padStart(2, "0")}`
+              const mesLabel = `${monthData.month.substring(0, 3)}/${monthData.year}`
+
+              if (!comissoesPorMes[mesAno]) {
+                comissoesPorMes[mesAno] = { mes: mesLabel }
+              }
+
+              if (!comissoesPorMes[mesAno][investorName]) {
+                comissoesPorMes[mesAno][investorName] = 0
+              }
+
+              // Somar comissão do assessor (3%) - mas na verdade queremos mostrar a comissão total (assessor + escritório)
+              // Para simplificar, vamos mostrar apenas a comissão do assessor
+              comissoesPorMes[mesAno][investorName] += Number(monthData.advisorCommission) || 0
+            })
+          }
+        } catch (error) {
+          console.error(`Erro ao calcular comissão para investimento ${investment.id}:`, error)
+          continue
+        }
+      }
+
+      const comissoesArray: AporteMensal[] = Object.keys(comissoesPorMes)
+        .sort()
+        .map((mesAno) => ({
+          mes: comissoesPorMes[mesAno].mes as string,
+          ...Object.fromEntries(
+            Object.entries(comissoesPorMes[mesAno]).filter(([key]) => key !== "mes")
+          ),
+        }))
+
+      // Garantir que todos os investidores apareçam em todos os meses
+      const investorNames = investorsData.map((i) => i.name)
+      const comissoesCompletas = comissoesArray.map((mes) => {
+        const mesCompleto: AporteMensal = { mes: mes.mes }
+        investorNames.forEach((nome) => {
+          mesCompleto[nome] = (mes[nome] as number) || 0
+        })
+        return mesCompleto
+      })
+
+      setComissaoMensalData(comissoesCompletas)
+    } catch (error) {
+      console.error("Erro ao buscar dados de comissões por investidor:", error)
+      setComissaoMensalData([])
     }
   }
 
@@ -676,6 +1004,208 @@ export default function AnalisesPage() {
         value: assessor.investorsCount,
         color: COLORS[index % COLORS.length],
       }))
+
+  // Função auxiliar para verificar se há dados válidos (não vazios e com valores > 0)
+  const hasValidData = (data: any[]) => {
+    return data && data.length > 0 && data.some(item => item.value > 0)
+  }
+
+  // Função auxiliar para converter "Jan/2026" ou "jan de 2026" para Date
+  const parseMonthLabel = (mesLabel: string): Date | null => {
+    try {
+      // Formato "Jan/2026"
+      if (mesLabel.includes('/')) {
+        const [mes, ano] = mesLabel.split('/')
+        const monthMap: Record<string, number> = {
+          'jan': 0, 'fev': 1, 'mar': 2, 'abr': 3, 'mai': 4, 'jun': 5,
+          'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11
+        }
+        const monthIndex = monthMap[mes.toLowerCase()]
+        if (monthIndex === undefined || !ano) return null
+        return new Date(parseInt(ano), monthIndex, 1)
+      }
+      
+      // Formato "jan de 2026" (toLocaleDateString)
+      const parts = mesLabel.split(' de ')
+      if (parts.length === 2) {
+        const mes = parts[0].toLowerCase()
+        const ano = parts[1]
+        const monthMap: Record<string, number> = {
+          'jan': 0, 'fev': 1, 'mar': 2, 'abr': 3, 'mai': 4, 'jun': 5,
+          'jul': 6, 'ago': 7, 'set': 8, 'out': 9, 'nov': 10, 'dez': 11
+        }
+        const monthIndex = monthMap[mes]
+        if (monthIndex === undefined || !ano) return null
+        return new Date(parseInt(ano), monthIndex, 1)
+      }
+      
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  // Função para obter dados de comissões a partir do mês atual
+  const getComissaoDataFromCurrentMonth = () => {
+    if (!comissaoMensalData || comissaoMensalData.length === 0) return []
+    
+    const hoje = new Date()
+    const mesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    
+    // Filtrar apenas meses a partir do mês atual (inclusive)
+    const filtered = comissaoMensalData.filter(item => {
+      if (!item.mes) return false
+      const itemDate = parseMonthLabel(item.mes)
+      if (!itemDate) {
+        // Se não conseguir parsear, tentar incluir se parecer um formato válido
+        return item.mes.includes('/') || item.mes.includes(' de ')
+      }
+      return itemDate >= mesAtual
+    })
+    
+    // Se não houver dados a partir do mês atual, retornar todos os dados
+    return filtered.length > 0 ? filtered : comissaoMensalData
+  }
+
+  // Função para obter dados de comissões até o mês atual (para navegação para trás)
+  const getComissaoDataUpToCurrentMonth = () => {
+    if (!comissaoMensalData || comissaoMensalData.length === 0) return []
+    
+    const hoje = new Date()
+    const mesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    
+    // Filtrar apenas meses até o mês atual (exclusive, para não duplicar com "a partir de")
+    const filtered = comissaoMensalData.filter(item => {
+      if (!item.mes) return false
+      const itemDate = parseMonthLabel(item.mes)
+      if (!itemDate) {
+        return false
+      }
+      return itemDate < mesAtual
+    })
+    
+    return filtered
+  }
+
+  // Função para filtrar dados de comissões mostrando apenas o período selecionado a partir do índice atual
+  const getComissaoFilteredData = () => {
+    // Fallback: se não houver dados, retornar array vazio
+    if (!comissaoMensalData || comissaoMensalData.length === 0) return []
+    
+    const hoje = new Date()
+    const mesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    const monthsPerView = comissaoPeriodMonths
+    
+    // Quando índice = 0 (período atual/"Hoje"), mostrar os próximos N meses a partir do mês atual
+    if (comissaoPeriodIndex === 0) {
+      const dataFromCurrent = getComissaoDataFromCurrentMonth()
+      
+      if (dataFromCurrent.length === 0) {
+        // Se não houver dados futuros, usar todos os dados disponíveis
+        return comissaoMensalData.slice(0, monthsPerView)
+      }
+      
+      // Pegar os primeiros N meses a partir do mês atual
+      return dataFromCurrent.slice(0, monthsPerView)
+    }
+    
+    // Para índices positivos, navegar para períodos mais futuros
+    if (comissaoPeriodIndex > 0) {
+      const dataFromCurrent = getComissaoDataFromCurrentMonth()
+      
+      if (dataFromCurrent.length === 0) {
+        return []
+      }
+      
+      const startIndex = comissaoPeriodIndex * monthsPerView
+      const endIndex = startIndex + monthsPerView
+      
+      return dataFromCurrent.slice(startIndex, endIndex)
+    }
+    
+    // Para índices negativos, navegar para períodos mais antigos
+    if (comissaoPeriodIndex < 0) {
+      const dataUpToCurrent = getComissaoDataUpToCurrentMonth()
+      
+      if (dataUpToCurrent.length === 0) {
+        return []
+      }
+      
+      // Índice -1 = últimos N meses antes do mês atual
+      // Índice -2 = N meses antes disso, etc.
+      const absIndex = Math.abs(comissaoPeriodIndex)
+      const totalMonths = dataUpToCurrent.length
+      const startIndex = Math.max(0, totalMonths - (absIndex * monthsPerView) - monthsPerView)
+      const endIndex = Math.max(0, totalMonths - (absIndex * monthsPerView))
+      
+      if (startIndex >= endIndex || endIndex === 0) {
+        return []
+      }
+      
+      return dataUpToCurrent.slice(startIndex, endIndex)
+    }
+    
+    return []
+  }
+
+  // Função para obter o período atual sendo exibido
+  const getComissaoPeriodLabel = () => {
+    if (!comissaoMensalData || comissaoMensalData.length === 0) return ""
+    
+    const filteredData = getComissaoFilteredData()
+    if (filteredData.length === 0) return ""
+    
+    const firstMonth = filteredData[0]?.mes || ""
+    const lastMonth = filteredData[filteredData.length - 1]?.mes || ""
+    
+    return `${firstMonth} - ${lastMonth}`
+  }
+
+  // Função para verificar se pode navegar para trás (períodos mais antigos)
+  const canNavigateComissaoBack = () => {
+    if (!comissaoMensalData || comissaoMensalData.length === 0) return false
+    
+    // Se estiver no índice 0, verificar se há dados antes do mês atual
+    if (comissaoPeriodIndex === 0) {
+      const dataUpToCurrent = getComissaoDataUpToCurrentMonth()
+      return dataUpToCurrent.length > 0
+    }
+    
+    // Se estiver em índice negativo, verificar se há mais períodos antigos
+    if (comissaoPeriodIndex < 0) {
+      const dataUpToCurrent = getComissaoDataUpToCurrentMonth()
+      const monthsPerView = comissaoPeriodMonths
+      const absIndex = Math.abs(comissaoPeriodIndex)
+      const totalMonths = dataUpToCurrent.length
+      const startIndex = Math.max(0, totalMonths - (absIndex * monthsPerView) - monthsPerView)
+      return startIndex > 0
+    }
+    
+    // Se estiver em índice positivo, sempre pode voltar (indo para índice 0 ou negativo)
+    return true
+  }
+
+  // Função para verificar se pode navegar para frente (períodos mais futuros)
+  const canNavigateComissaoForward = () => {
+    if (!comissaoMensalData || comissaoMensalData.length === 0) return false
+    
+    const dataFromCurrent = getComissaoDataFromCurrentMonth()
+    const monthsPerView = comissaoPeriodMonths
+    
+    // Se estiver no índice 0, verificar se há mais meses futuros do que o período selecionado
+    if (comissaoPeriodIndex === 0) {
+      return dataFromCurrent.length > monthsPerView
+    }
+    
+    // Se estiver em índice positivo, verificar se há mais períodos futuros
+    if (comissaoPeriodIndex > 0) {
+      const startIndex = (comissaoPeriodIndex + 1) * monthsPerView
+      return startIndex < dataFromCurrent.length
+    }
+    
+    // Se estiver em índice negativo, pode ir para frente (indo para índice 0 ou positivo)
+    return true
+  }
 
   const CustomTooltip = ({ active, payload, chartType }: any) => {
     if (active && payload && payload.length) {
@@ -765,6 +1295,7 @@ export default function AnalisesPage() {
                       setSelectedEscritorio("")
                       setSelectedAssessor("all")
                       setAssessorDetail(null)
+                      setAllAssessores([])
                     }
                   }}
                   className="data-[state=checked]:bg-[#00BC6E] data-[state=unchecked]:bg-white/20"
@@ -781,6 +1312,7 @@ export default function AnalisesPage() {
                       setSelectedEscritorio(value)
                       setSelectedAssessor("all")
                       setAssessorDetail(null)
+                      setAllAssessores([]) // Limpar lista ao trocar escritório
                     }}
                   >
                     <SelectTrigger className="w-[250px] bg-[#01223F]/80 border-[#00BC6E]/30 text-white hover:bg-[#01223F] hover:border-[#00BC6E]/50">
@@ -818,7 +1350,7 @@ export default function AnalisesPage() {
                         >
                           Todos os assessores
                         </SelectItem>
-                        {assessores.map((assessor) => (
+                        {allAssessores.map((assessor) => (
                           <SelectItem 
                             key={assessor.id} 
                             value={assessor.id}
@@ -855,7 +1387,99 @@ export default function AnalisesPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className={`grid grid-cols-1 ${
+            <>
+              {/* Cards de Resumo quando há escritório ou assessor selecionado */}
+              {((viewMode === "escritorio" && selectedEscritorio) || (selectedAssessor && selectedAssessor !== "all")) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                {/* Card: Total Captado */}
+                <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="text-white/70 text-sm mb-2">Total Captado</p>
+                        <p className="text-3xl font-bold text-white">
+                          {(() => {
+                            if (selectedAssessor && selectedAssessor !== "all" && assessorDetail) {
+                              return formatCurrency(assessorDetail.totalInvested)
+                            } else if (viewMode === "escritorio" && selectedEscritorio) {
+                              const escritorio = escritorios.find(e => e.id === selectedEscritorio)
+                              return formatCurrency(escritorio?.totalInvested || 0)
+                            }
+                            return formatCurrency(0)
+                          })()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-12 w-12 text-white/30" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (selectedAssessor && selectedAssessor !== "all" && assessorDetail) {
+                              setSelectedProfileUserId(assessorDetail.id)
+                              setIsProfileModalOpen(true)
+                            } else if (viewMode === "escritorio" && selectedEscritorio) {
+                              setSelectedProfileUserId(selectedEscritorio)
+                              setIsProfileModalOpen(true)
+                            }
+                          }}
+                          className="text-white hover:bg-white/10 h-8 w-8 p-0"
+                          title="Ver perfil"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Card: Total de Assessores (apenas se não for assessor selecionado) */}
+                {!(selectedAssessor && selectedAssessor !== "all") && (
+                  <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white/70 text-sm mb-2">Total de Assessores</p>
+                          <p className="text-3xl font-bold text-white">
+                            {(() => {
+                              if (viewMode === "escritorio" && selectedEscritorio) {
+                                return assessores.length || 0
+                              }
+                              return 0
+                            })()}
+                          </p>
+                        </div>
+                        <Users className="h-12 w-12 text-white/30" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Card: Total de Investidores */}
+                <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white/70 text-sm mb-2">Total de Investidores</p>
+                        <p className="text-3xl font-bold text-white">
+                          {(() => {
+                            if (selectedAssessor && selectedAssessor !== "all" && assessorDetail) {
+                              return assessorDetail.investorsCount || 0
+                            } else if (viewMode === "escritorio" && selectedEscritorio) {
+                              return assessores.reduce((sum, a) => sum + (a.investorsCount || 0), 0)
+                            }
+                            return 0
+                          })()}
+                        </p>
+                      </div>
+                      <UserPlus className="h-12 w-12 text-white/30" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              )}
+
+              <div className={`grid grid-cols-1 ${
               selectedAssessor && selectedAssessor !== "all" 
                 ? "lg:grid-cols-1" 
                 : viewMode === "escritorio" 
@@ -880,35 +1504,118 @@ export default function AnalisesPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={valorCaptadoData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={CustomLabel}
-                          innerRadius={60}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {valorCaptadoData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip chartType="valor" />} />
-                        <Legend
-                          formatter={(value, entry: any) => {
-                            const data = valorCaptadoData.find((d) => d.name === value)
-                            return `${value} (${formatCurrency(data?.value || 0)})`
-                          }}
-                          wrapperStyle={{ color: "white", fontSize: "12px" }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {hasValidData(valorCaptadoData) ? (
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={valorCaptadoData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={CustomLabel}
+                            innerRadius={60}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                            onClick={(data: any) => {
+                              // Encontrar o ID do usuário baseado no nome
+                              if (selectedAssessor && selectedAssessor !== "all") {
+                                // Se for investidor, buscar pelo nome
+                                const investor = investorsData.find(inv => inv.name === data.name)
+                                if (investor) {
+                                  setSelectedProfileUserId(investor.id)
+                                  setIsProfileModalOpen(true)
+                                }
+                              } else if (viewMode === "escritorio") {
+                                // Se for assessor, buscar pelo nome
+                                const assessor = assessores.find(a => a.name === data.name)
+                                if (assessor) {
+                                  setSelectedProfileUserId(assessor.id)
+                                  setIsProfileModalOpen(true)
+                                }
+                              } else {
+                                // Se for escritório, buscar pelo nome
+                                const escritorio = escritorios.find(e => e.name === data.name)
+                                if (escritorio) {
+                                  setSelectedProfileUserId(escritorio.id)
+                                  setIsProfileModalOpen(true)
+                                }
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {valorCaptadoData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip chartType="valor" />} />
+                          <Legend
+                            formatter={(value, entry: any) => {
+                              const data = valorCaptadoData.find((d) => d.name === value)
+                              return `${value} (${formatCurrency(data?.value || 0)})`
+                            }}
+                            wrapperStyle={{ color: "white", fontSize: "12px", cursor: "pointer" }}
+                            onClick={(e: any) => {
+                              const name = e.value || e.payload?.value
+                              if (!name) {
+                                console.warn('⚠️ [WARNING] Nome não encontrado no evento:', e)
+                                return
+                              }
+                              
+                              console.log('🔍 [DEBUG] Clique na legenda:', { name, selectedAssessor, viewMode })
+                              
+                              if (selectedAssessor && selectedAssessor !== "all") {
+                                // Se for investidor, buscar pelo nome
+                                const investor = investorsData.find(inv => inv.name === name)
+                                console.log('🔍 [DEBUG] Investidor encontrado:', investor)
+                                if (investor) {
+                                  setSelectedProfileUserId(investor.id)
+                                  setIsProfileModalOpen(true)
+                                } else {
+                                  console.warn('⚠️ [WARNING] Investidor não encontrado:', name, 'Lista:', investorsData.map(i => i.name))
+                                }
+                              } else if (viewMode === "escritorio") {
+                                // Se for assessor, buscar pelo nome
+                                const assessor = assessores.find(a => a.name === name)
+                                console.log('🔍 [DEBUG] Assessor encontrado:', assessor)
+                                if (assessor) {
+                                  setSelectedProfileUserId(assessor.id)
+                                  setIsProfileModalOpen(true)
+                                } else {
+                                  console.warn('⚠️ [WARNING] Assessor não encontrado:', name, 'Lista:', assessores.map(a => a.name))
+                                }
+                              } else {
+                                // Se for escritório, buscar pelo nome
+                                const escritorio = escritorios.find(e => e.name === name)
+                                console.log('🔍 [DEBUG] Escritório encontrado:', escritorio)
+                                if (escritorio) {
+                                  setSelectedProfileUserId(escritorio.id)
+                                  setIsProfileModalOpen(true)
+                                } else {
+                                  console.warn('⚠️ [WARNING] Escritório não encontrado:', name, 'Lista:', escritorios.map(e => e.name))
+                                }
+                              }
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-[300px] w-full flex items-center justify-center">
+                      <div className="text-center text-white/50">
+                        <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                        <p className="text-lg font-medium">Não há dados disponíveis</p>
+                        <p className="text-sm mt-2">
+                          {selectedAssessor && selectedAssessor !== "all"
+                            ? "Não há investimentos registrados para este assessor"
+                            : viewMode === "geral"
+                              ? "Não há investimentos registrados para os escritórios"
+                              : "Não há investimentos registrados para os assessores"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -925,35 +1632,56 @@ export default function AnalisesPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={assessoresData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={CustomLabel}
-                            innerRadius={60}
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {assessoresData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip chartType="assessores" />} />
-                          <Legend
-                            formatter={(value, entry: any) => {
-                              const data = assessoresData.find((d) => d.name === value)
-                              return `${value} (${data?.value || 0})`
-                            }}
-                            wrapperStyle={{ color: "white", fontSize: "12px" }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {hasValidData(assessoresData) ? (
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={assessoresData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={CustomLabel}
+                              innerRadius={60}
+                              outerRadius={100}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {assessoresData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip chartType="assessores" />} />
+                            <Legend
+                              formatter={(value, entry: any) => {
+                                const data = assessoresData.find((d) => d.name === value)
+                                return `${value} (${data?.value || 0})`
+                              }}
+                              wrapperStyle={{ color: "white", fontSize: "12px", cursor: "pointer" }}
+                              onClick={(e: any) => {
+                                const name = e.value || e.payload?.value
+                                if (!name) return
+                                
+                                // Buscar escritório pelo nome
+                                const escritorio = escritorios.find(e => e.name === name)
+                                if (escritorio) {
+                                  setSelectedProfileUserId(escritorio.id)
+                                  setIsProfileModalOpen(true)
+                                }
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="h-[300px] w-full flex items-center justify-center">
+                        <div className="text-center text-white/50">
+                          <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                          <p className="text-lg font-medium">Não há dados disponíveis</p>
+                          <p className="text-sm mt-2">Não há assessores cadastrados nos escritórios</p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -971,35 +1699,69 @@ export default function AnalisesPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                        <Pie
-                          data={investidoresData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={CustomLabel}
-                          innerRadius={60}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                            {investidoresData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip chartType="investidores" />} />
-                          <Legend
-                            formatter={(value, entry: any) => {
-                              const data = investidoresData.find((d) => d.name === value)
-                              return `${value} (${data?.value || 0})`
-                            }}
-                            wrapperStyle={{ color: "white", fontSize: "12px" }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {hasValidData(investidoresData) ? (
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                          <Pie
+                            data={investidoresData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={CustomLabel}
+                            innerRadius={60}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                              {investidoresData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip chartType="investidores" />} />
+                            <Legend
+                              formatter={(value, entry: any) => {
+                                const data = investidoresData.find((d) => d.name === value)
+                                return `${value} (${data?.value || 0})`
+                              }}
+                              wrapperStyle={{ color: "white", fontSize: "12px", cursor: "pointer" }}
+                              onClick={(e: any) => {
+                                const name = e.value || e.payload?.value
+                                if (!name) return
+                                
+                                if (viewMode === "escritorio") {
+                                  // Se for assessor, buscar pelo nome
+                                  const assessor = assessores.find(a => a.name === name)
+                                  if (assessor) {
+                                    setSelectedProfileUserId(assessor.id)
+                                    setIsProfileModalOpen(true)
+                                  }
+                                } else {
+                                  // Se for escritório, buscar pelo nome
+                                  const escritorio = escritorios.find(e => e.name === name)
+                                  if (escritorio) {
+                                    setSelectedProfileUserId(escritorio.id)
+                                    setIsProfileModalOpen(true)
+                                  }
+                                }
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="h-[300px] w-full flex items-center justify-center">
+                        <div className="text-center text-white/50">
+                          <UserPlus className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                          <p className="text-lg font-medium">Não há dados disponíveis</p>
+                          <p className="text-sm mt-2">
+                            {viewMode === "geral"
+                              ? "Não há investidores cadastrados nos escritórios"
+                              : "Não há investidores cadastrados para os assessores"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1008,8 +1770,7 @@ export default function AnalisesPage() {
 
           {/* Gráfico de Linha: Aportes ao Longo do Tempo */}
           {((viewMode === "geral" && escritorios.length > 0) ||
-            (viewMode === "escritorio" && (assessores.length > 0 || (selectedAssessor && selectedAssessor !== "all")))) &&
-          aporteMensalData.length > 0 && (
+            (viewMode === "escritorio" && (assessores.length > 0 || (selectedAssessor && selectedAssessor !== "all")))) && (
             <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -1025,103 +1786,470 @@ export default function AnalisesPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[400px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={aporteMensalData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-white/20" />
-                      <XAxis
-                        dataKey="mes"
-                        className="text-xs text-white/70"
-                        angle={-45}
-                        textAnchor="end"
-                        height={80}
-                      />
-                      <YAxis
-                        className="text-xs text-white/70"
-                        tickFormatter={(value) =>
-                          new Intl.NumberFormat("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                            notation: "compact",
-                          }).format(value)
-                        }
-                      />
-                      <Tooltip
-                        shared={false}
-                        cursor={{ fill: 'rgba(0, 188, 110, 0.1)' }}
-                        content={({ active, payload, label }) => {
-                          if (active && payload && payload.length) {
-                            // Com shared={false}, o payload deve conter apenas a barra específica sendo hovered
-                            const barPayload = payload[0]
-                            
-                            if (barPayload && barPayload.value !== null && barPayload.value !== undefined && Number(barPayload.value) !== 0) {
-                              return (
-                                <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-                                  <p className="font-semibold text-gray-900 mb-1">{label}</p>
-                                  <p className="text-sm text-gray-600">
-                                    <span
-                                      style={{
-                                        display: "inline-block",
-                                        width: 12,
-                                        height: 12,
-                                        backgroundColor: barPayload.color || barPayload.fill || COLORS[0],
-                                        marginRight: 6,
-                                        borderRadius: 2,
-                                      }}
-                                    />
-                                    {barPayload.name || barPayload.dataKey}: {formatCurrency(Number(barPayload.value))}
-                                  </p>
-                                </div>
-                              )
-                            }
+                {aporteMensalData.length > 0 && aporteMensalData.some(mes => {
+                  // Verificar se há pelo menos um mês com algum valor > 0
+                  return Object.keys(mes).some(key => key !== 'mes' && Number(mes[key]) > 0)
+                }) ? (
+                  <div className="h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={aporteMensalData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-white/20" />
+                        <XAxis
+                          dataKey="mes"
+                          className="text-xs text-white/70"
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          className="text-xs text-white/70"
+                          tickFormatter={(value) =>
+                            new Intl.NumberFormat("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                              notation: "compact",
+                            }).format(value)
                           }
-                          return null
-                        }}
-                        labelStyle={{ color: "#01223F", fontWeight: 600 }}
-                        contentStyle={{
-                          backgroundColor: "rgba(255,255,255,0.98)",
-                          border: "1px solid rgba(15,23,42,0.12)",
-                          borderRadius: "8px",
-                          boxShadow: "0 10px 25px rgba(15,23,42,0.25)",
-                          color: "#01223F",
-                        }}
-                      />
-                      <Legend
-                        wrapperStyle={{ color: "white", fontSize: "12px", paddingTop: "20px" }}
-                      />
-                       {selectedAssessor && selectedAssessor !== "all"
-                         ? investorsData.map((investor, index) => (
-                             <Bar
-                               key={investor.id}
-                               dataKey={investor.name}
-                               fill={COLORS[index % COLORS.length]}
-                               radius={[4, 4, 0, 0]}
-                             />
-                           ))
-                         : viewMode === "geral"
-                         ? escritorios.map((escritorio, index) => (
-                             <Bar
-                               key={escritorio.id}
-                               dataKey={escritorio.name}
-                               fill={COLORS[index % COLORS.length]}
-                               radius={[4, 4, 0, 0]}
-                             />
-                           ))
-                         : assessores.map((assessor, index) => (
-                             <Bar
-                               key={assessor.id}
-                               dataKey={assessor.name}
-                               fill={COLORS[index % COLORS.length]}
-                               radius={[4, 4, 0, 0]}
-                             />
-                           ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                        />
+                        <Tooltip
+                          shared={false}
+                          cursor={{ fill: 'rgba(0, 188, 110, 0.1)' }}
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              // Com shared={false}, o payload deve conter apenas a barra específica sendo hovered
+                              const barPayload = payload[0]
+                              
+                              if (barPayload && barPayload.value !== null && barPayload.value !== undefined && Number(barPayload.value) !== 0) {
+                                return (
+                                  <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+                                    <p className="font-semibold text-gray-900 mb-1">{label}</p>
+                                    <p className="text-sm text-gray-600">
+                                      <span
+                                        style={{
+                                          display: "inline-block",
+                                          width: 12,
+                                          height: 12,
+                                          backgroundColor: barPayload.color || barPayload.fill || COLORS[0],
+                                          marginRight: 6,
+                                          borderRadius: 2,
+                                        }}
+                                      />
+                                      {barPayload.name || barPayload.dataKey}: {formatCurrency(Number(barPayload.value))}
+                                    </p>
+                                  </div>
+                                )
+                              }
+                            }
+                            return null
+                          }}
+                          labelStyle={{ color: "#01223F", fontWeight: 600 }}
+                          contentStyle={{
+                            backgroundColor: "rgba(255,255,255,0.98)",
+                            border: "1px solid rgba(15,23,42,0.12)",
+                            borderRadius: "8px",
+                            boxShadow: "0 10px 25px rgba(15,23,42,0.25)",
+                            color: "#01223F",
+                          }}
+                        />
+                        <Legend
+                          wrapperStyle={{ color: "white", fontSize: "12px", paddingTop: "20px", cursor: "pointer" }}
+                          onClick={(e: any) => {
+                            const name = e.value || e.payload?.value || e.payload?.dataKey
+                            if (!name) return
+                            
+                            if (selectedAssessor && selectedAssessor !== "all") {
+                              // Se for investidor, buscar pelo nome
+                              const investor = investorsData.find(inv => inv.name === name)
+                              if (investor) {
+                                setSelectedProfileUserId(investor.id)
+                                setIsProfileModalOpen(true)
+                              }
+                            } else if (viewMode === "escritorio") {
+                              // Se for assessor, buscar pelo nome
+                              const assessor = assessores.find(a => a.name === name)
+                              if (assessor) {
+                                setSelectedProfileUserId(assessor.id)
+                                setIsProfileModalOpen(true)
+                              }
+                            } else {
+                              // Se for escritório, buscar pelo nome
+                              const escritorio = escritorios.find(e => e.name === name)
+                              if (escritorio) {
+                                setSelectedProfileUserId(escritorio.id)
+                                setIsProfileModalOpen(true)
+                              }
+                            }
+                          }}
+                        />
+                         {selectedAssessor && selectedAssessor !== "all"
+                           ? investorsData.map((investor, index) => (
+                               <Bar
+                                 key={investor.id}
+                                 dataKey={investor.name}
+                                 fill={COLORS[index % COLORS.length]}
+                                 radius={[4, 4, 0, 0]}
+                               />
+                             ))
+                           : viewMode === "geral"
+                           ? escritorios.map((escritorio, index) => (
+                               <Bar
+                                 key={escritorio.id}
+                                 dataKey={escritorio.name}
+                                 fill={COLORS[index % COLORS.length]}
+                                 radius={[4, 4, 0, 0]}
+                               />
+                             ))
+                           : assessores.map((assessor, index) => (
+                               <Bar
+                                 key={assessor.id}
+                                 dataKey={assessor.name}
+                                 fill={COLORS[index % COLORS.length]}
+                                 radius={[4, 4, 0, 0]}
+                               />
+                             ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-[400px] w-full flex items-center justify-center">
+                    <div className="text-center text-white/50">
+                      <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">Não há dados disponíveis</p>
+                      <p className="text-sm mt-2">
+                        {selectedAssessor && selectedAssessor !== "all"
+                          ? "Não há movimentação de aportes registrada para este assessor"
+                          : viewMode === "geral"
+                            ? "Não há movimentação de aportes registrada para os escritórios"
+                            : "Não há movimentação de aportes registrada para os assessores"}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
+
+          {/* Gráfico de Linha: Comissões ao Longo do Tempo */}
+          {((viewMode === "geral" && escritorios.length > 0) ||
+            (viewMode === "escritorio" && (assessores.length > 0 || (selectedAssessor && selectedAssessor !== "all")))) && (
+            <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5" />
+                      <CardTitle className="text-white">Comissões ao Longo do Tempo</CardTitle>
+                    </div>
+                    <CardDescription className="text-white/70 mt-1">
+                      {selectedAssessor && selectedAssessor !== "all"
+                        ? "Comparação de comissões mensais por investidor"
+                        : viewMode === "geral"
+                          ? "Comparação de comissões mensais por escritório"
+                          : "Comparação de comissões mensais por assessor"}
+                    </CardDescription>
+                  </div>
+                  {(() => {
+                    const dataFromCurrent = getComissaoDataFromCurrentMonth()
+                    const dataUpToCurrent = getComissaoDataUpToCurrentMonth()
+                    const totalData = comissaoMensalData.length
+                    const hasEnoughData = totalData > comissaoPeriodMonths || dataFromCurrent.length > comissaoPeriodMonths || dataUpToCurrent.length > 0
+                    
+                    if (!hasEnoughData) return null
+                    
+                    return (
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="period-select" className="text-sm text-white/70">
+                            Período:
+                          </Label>
+                          <Select
+                            value={String(comissaoPeriodMonths)}
+                            onValueChange={(value) => {
+                              const newMonths = parseInt(value, 10)
+                              if (!isNaN(newMonths) && newMonths >= 2 && newMonths <= 12) {
+                                setComissaoPeriodMonths(newMonths)
+                                setComissaoPeriodIndex(0) // Resetar para o período atual ao mudar o número de meses
+                              }
+                            }}
+                          >
+                            <SelectTrigger 
+                              id="period-select"
+                              className="w-[120px] h-8 bg-[#01223F]/80 border-[#01223F] text-white text-sm"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#01223F] border-[#01223F] text-white">
+                              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((months) => (
+                                <SelectItem 
+                                  key={months} 
+                                  value={String(months)}
+                                  className="hover:bg-[#003562] focus:bg-[#003562]"
+                                >
+                                  {months} {months === 1 ? 'mês' : 'meses'}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="text-sm text-white/70">
+                          {getComissaoPeriodLabel()}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              // Navegar para períodos mais antigos (diminuir índice)
+                              if (comissaoPeriodIndex === 0) {
+                                // Se estiver em 0, ir para -1 (períodos antes do mês atual)
+                                setComissaoPeriodIndex(-1)
+                              } else if (comissaoPeriodIndex > 0) {
+                                // Se estiver em índice positivo, diminuir até chegar em 0
+                                setComissaoPeriodIndex(comissaoPeriodIndex - 1)
+                              } else {
+                                // Se estiver em índice negativo, diminuir (mais antigo)
+                                setComissaoPeriodIndex(comissaoPeriodIndex - 1)
+                              }
+                            }}
+                            disabled={!canNavigateComissaoBack()}
+                            className={`p-1.5 rounded-md transition-colors ${
+                              canNavigateComissaoBack()
+                                ? "bg-[#01223F]/80 hover:bg-[#003562] text-white cursor-pointer"
+                                : "bg-[#01223F]/40 text-white/30 cursor-not-allowed"
+                            }`}
+                            title="Período anterior"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              // Navegar para períodos mais futuros (aumentar índice)
+                              if (comissaoPeriodIndex === 0) {
+                                // Se estiver em 0, ir para 1 (períodos futuros)
+                                setComissaoPeriodIndex(1)
+                              } else if (comissaoPeriodIndex < 0) {
+                                // Se estiver em índice negativo, aumentar até chegar em 0
+                                setComissaoPeriodIndex(comissaoPeriodIndex + 1)
+                              } else {
+                                // Se estiver em índice positivo, aumentar (mais futuro)
+                                setComissaoPeriodIndex(comissaoPeriodIndex + 1)
+                              }
+                            }}
+                            disabled={!canNavigateComissaoForward()}
+                            className={`p-1.5 rounded-md transition-colors ${
+                              canNavigateComissaoForward()
+                                ? "bg-[#01223F]/80 hover:bg-[#003562] text-white cursor-pointer"
+                                : "bg-[#01223F]/40 text-white/30 cursor-not-allowed"
+                            }`}
+                            title="Próximo período"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setComissaoPeriodIndex(0)}
+                            className="px-3 py-1.5 text-xs bg-[#01223F]/80 hover:bg-[#003562] text-white rounded-md transition-colors"
+                            title="Voltar para o período atual (próximos 12 meses a partir do mês atual)"
+                          >
+                            Hoje
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  let filteredData = getComissaoFilteredData()
+                  
+                  // Fallback: se filteredData estiver vazio mas houver dados originais, usar os últimos 12 meses
+                  if (filteredData.length === 0 && comissaoMensalData.length > 0) {
+                    filteredData = comissaoMensalData.slice(-12)
+                  }
+                  
+                  const hasData = filteredData.length > 0 && filteredData.some(mes => {
+                    // Verificar se há pelo menos um mês com algum valor > 0
+                    return Object.keys(mes).some(key => key !== 'mes' && Number(mes[key]) > 0)
+                  })
+                  
+                  return hasData ? (
+                    <div className="h-[400px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={filteredData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-white/20" />
+                        <XAxis
+                          dataKey="mes"
+                          className="text-xs text-white/70"
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          className="text-xs text-white/70"
+                          tickFormatter={(value) =>
+                            new Intl.NumberFormat("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                              notation: "compact",
+                            }).format(value)
+                          }
+                        />
+                        <Tooltip
+                          shared={false}
+                          cursor={{ fill: 'rgba(0, 188, 110, 0.1)' }}
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              // Com shared={false}, o payload deve conter apenas a barra específica sendo hovered
+                              const barPayload = payload[0]
+                              
+                              if (barPayload && barPayload.value !== null && barPayload.value !== undefined && Number(barPayload.value) !== 0) {
+                                return (
+                                  <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+                                    <p className="font-semibold text-gray-900 mb-1">{label}</p>
+                                    <p className="text-sm text-gray-600">
+                                      <span
+                                        style={{
+                                          display: "inline-block",
+                                          width: 12,
+                                          height: 12,
+                                          backgroundColor: barPayload.color || barPayload.fill || COLORS[0],
+                                          marginRight: 6,
+                                          borderRadius: 2,
+                                        }}
+                                      />
+                                      {barPayload.name || barPayload.dataKey}: {formatCurrency(Number(barPayload.value))}
+                                    </p>
+                                  </div>
+                                )
+                              }
+                            }
+                            return null
+                          }}
+                          labelStyle={{ color: "#01223F", fontWeight: 600 }}
+                          contentStyle={{
+                            backgroundColor: "rgba(255,255,255,0.98)",
+                            border: "1px solid rgba(15,23,42,0.12)",
+                            borderRadius: "8px",
+                            boxShadow: "0 10px 25px rgba(15,23,42,0.25)",
+                            color: "#01223F",
+                          }}
+                        />
+                        <Legend
+                          wrapperStyle={{ color: "white", fontSize: "12px", paddingTop: "20px", cursor: "pointer" }}
+                          onClick={(e: any) => {
+                            const name = e.value || e.payload?.value || e.payload?.dataKey
+                            if (!name) return
+                            
+                            if (selectedAssessor && selectedAssessor !== "all") {
+                              // Se for investidor, buscar pelo nome
+                              const investor = investorsData.find(inv => inv.name === name)
+                              if (investor) {
+                                setSelectedProfileUserId(investor.id)
+                                setIsProfileModalOpen(true)
+                              }
+                            } else if (viewMode === "escritorio") {
+                              // Se for assessor, buscar pelo nome
+                              const assessor = assessores.find(a => a.name === name)
+                              if (assessor) {
+                                setSelectedProfileUserId(assessor.id)
+                                setIsProfileModalOpen(true)
+                              }
+                            } else {
+                              // Se for escritório, buscar pelo nome
+                              const escritorio = escritorios.find(e => e.name === name)
+                              if (escritorio) {
+                                setSelectedProfileUserId(escritorio.id)
+                                setIsProfileModalOpen(true)
+                              }
+                            }
+                          }}
+                        />
+                        {selectedAssessor && selectedAssessor !== "all"
+                          ? investorsData.map((investor, index) => (
+                              <Bar
+                                key={investor.id}
+                                dataKey={investor.name}
+                                fill={COLORS[index % COLORS.length]}
+                                radius={[4, 4, 0, 0]}
+                              />
+                            ))
+                          : viewMode === "geral"
+                          ? escritorios.map((escritorio, index) => (
+                              <Bar
+                                key={escritorio.id}
+                                dataKey={escritorio.name}
+                                fill={COLORS[index % COLORS.length]}
+                                radius={[4, 4, 0, 0]}
+                              />
+                            ))
+                          : assessores.map((assessor, index) => (
+                              <Bar
+                                key={assessor.id}
+                                dataKey={assessor.name}
+                                fill={COLORS[index % COLORS.length]}
+                                radius={[4, 4, 0, 0]}
+                              />
+                            ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-[400px] w-full flex items-center justify-center">
+                      <div className="text-center text-white/50">
+                        <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                        <p className="text-lg font-medium">Não há dados disponíveis</p>
+                        <p className="text-sm mt-2">
+                          {selectedAssessor && selectedAssessor !== "all"
+                            ? "Não há movimentação de comissões registrada para este assessor"
+                            : viewMode === "geral"
+                              ? "Não há movimentação de comissões registrada para os escritórios"
+                              : "Não há movimentação de comissões registrada para os assessores"}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+          )}
+            </>
+          )}
         </div>
+
+        {/* Modal de Perfil */}
+        <Dialog open={isProfileModalOpen} onOpenChange={(open) => {
+          setIsProfileModalOpen(open)
+          if (!open) {
+            // Resetar o userId quando o modal é fechado
+            setSelectedProfileUserId(null)
+          }
+        }}>
+          <DialogContent className="!max-w-[95vw] sm:!max-w-[90vw] md:!max-w-7xl lg:!max-w-[90vw] w-[95vw] max-h-[90vh] overflow-hidden bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white p-0" style={{ maxWidth: '90vw' }}>
+            <div className="overflow-y-auto max-h-[90vh]">
+              <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/10">
+                <DialogTitle className="text-white text-2xl font-bold flex items-center gap-2">
+                  <Users className="h-6 w-6" />
+                  Perfil do Usuário
+                </DialogTitle>
+              </DialogHeader>
+              <div className="px-6 py-4">
+                {selectedProfileUserId ? (
+                  <UserProfileView
+                    key={selectedProfileUserId}
+                    userId={selectedProfileUserId}
+                    onEdit={() => {}}
+                    onClose={() => {
+                      setIsProfileModalOpen(false)
+                      setSelectedProfileUserId(null)
+                    }}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-white/70">
+                    <p>Carregando perfil...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DistributorLayout>
     </ProtectedRoute>
   )

@@ -53,9 +53,10 @@ export async function GET(request: NextRequest) {
 
     // Verificar se é admin
     const isAdmin = profile?.user_type === 'admin';
+    const isDistributor = profile?.user_type === 'distributor';
     
     // Verificar se é assessor e se o investidor é seu cliente
-    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor';
+    const isAdvisor = profile?.user_type === 'distributor' && (profile?.role === 'assessor' || profile?.role === 'assessor_externo');
     const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio';
     
     // Verificar se o investidor pertence ao assessor/escritório
@@ -66,11 +67,11 @@ export async function GET(request: NextRequest) {
     } else if (user.id === contract.investor_id) {
       // Investidor pode baixar seus próprios contratos
       hasPermission = true;
-    } else if (isAdvisor || isOffice) {
-      // Buscar o perfil do investidor para verificar se pertence ao assessor/escritório
+    } else if (isDistributor) {
+      // Buscar o perfil do investidor para verificar relacionamento
       const { data: investorProfile } = await supabase
         .from("profiles")
-        .select("parent_id, office_id")
+        .select("parent_id, office_id, distributor_id")
         .eq("id", contract.investor_id)
         .single()
       
@@ -82,6 +83,33 @@ export async function GET(request: NextRequest) {
       } else if (isOffice) {
         // Escritório pode baixar contratos de investidores do seu office_id
         hasPermission = investorProfile?.office_id === user.id;
+      } else {
+        // Distribuidor de nível superior: verificar se investidor está vinculado
+        if (investorProfile?.distributor_id === user.id) {
+          hasPermission = true;
+        } else if (investorProfile?.office_id) {
+          const { data: officeProfile } = await supabase
+            .from("profiles")
+            .select("id, parent_id")
+            .eq("id", investorProfile.office_id)
+            .single()
+          
+          if (officeProfile && (officeProfile.id === user.id || officeProfile.parent_id === user.id)) {
+            hasPermission = true;
+          }
+        }
+        
+        if (!hasPermission && investorProfile?.parent_id) {
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("id, office_id")
+            .eq("id", investorProfile.parent_id)
+            .single()
+          
+          if (advisorProfile && (advisorProfile.id === user.id || advisorProfile.office_id === user.id)) {
+            hasPermission = true;
+          }
+        }
       }
     }
 

@@ -197,13 +197,13 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved':
-        return 'text-green-600 bg-green-100'
+        return 'text-green-400 bg-green-500/20 border border-green-500/30'
       case 'pending':
-        return 'text-yellow-600 bg-yellow-100'
+        return 'text-yellow-400 bg-yellow-500/20 border border-yellow-500/30'
       case 'rejected':
-        return 'text-red-600 bg-red-100'
+        return 'text-red-400 bg-red-500/20 border border-red-500/30'
       default:
-        return 'text-gray-600 bg-gray-100'
+        return 'text-white/70 bg-white/5 border border-white/10'
     }
   }
 
@@ -222,9 +222,9 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+        <DialogHeader className="border-b border-white/10 pb-4">
+          <DialogTitle className="flex items-center gap-2 text-white">
             {isImage() ? (
               <FileImage className="w-5 h-5" />
             ) : (
@@ -232,23 +232,23 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
             )}
             {receipt.file_name}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-white/70">
             Comprovante PIX - {formatFileSize(receipt.file_size)} - {formatDate(receipt.created_at)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Informações do arquivo */}
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg">
             <div className="flex items-center gap-3">
               {isImage() ? (
-                <FileImage className="w-8 h-8 text-blue-500" />
+                <FileImage className="w-8 h-8 text-blue-400" />
               ) : (
-                <FileText className="w-8 h-8 text-red-500" />
+                <FileText className="w-8 h-8 text-red-400" />
               )}
               <div>
-                <p className="font-medium">{receipt.file_name}</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="font-medium text-white">{receipt.file_name}</p>
+                <p className="text-sm text-white/70">
                   {formatFileSize(receipt.file_size)} • {formatDate(receipt.created_at)}
                 </p>
               </div>
@@ -265,7 +265,7 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
             <Button
               onClick={handleViewReceipt}
               disabled={isLoading}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
             >
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -278,7 +278,7 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
               variant="outline"
               onClick={handleDownload}
               disabled={!fileUrl}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
             >
               <Download className="w-4 h-4" />
               Baixar
@@ -287,7 +287,7 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
               <Button
                 variant="outline"
                 onClick={handleOpenInNewTab}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
               >
                 <ExternalLink className="w-4 h-4" />
                 Abrir em nova aba
@@ -297,8 +297,8 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
 
           {/* Mensagem de erro */}
           {error && (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-              <p className="text-sm text-destructive">{error}</p>
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
 
@@ -306,15 +306,15 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-                <p className="text-muted-foreground">Carregando comprovante...</p>
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-white" />
+                <p className="text-white/70">Carregando comprovante...</p>
               </div>
             </div>
           )}
 
           {/* Verificar PDF primeiro para evitar conflitos */}
           {fileUrl && !isLoading && isPDF() && !pdfLoadError && (
-            <div className="border rounded-lg overflow-hidden bg-gray-50 relative">
+            <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5 relative">
               {useGoogleViewer ? (
                 // Usar Google Docs Viewer como fallback
                 <iframe
@@ -362,21 +362,28 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
           )}
 
           {fileUrl && !isLoading && isPDF() && pdfLoadError && (
-            <div className="border rounded-lg overflow-hidden bg-gray-50">
+            <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5">
               <div className="flex flex-col items-center justify-center p-8 h-[70vh] min-h-[500px]">
-                <FileText className="w-16 h-16 mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground mb-2 text-center font-medium">
+                <FileText className="w-16 h-16 mb-4 text-white/30" />
+                <p className="text-white/70 mb-2 text-center font-medium">
                   Não foi possível exibir o PDF diretamente no navegador.
                 </p>
-                <p className="text-sm text-muted-foreground mb-6 text-center">
+                <p className="text-sm text-white/50 mb-6 text-center">
                   Isso pode acontecer devido a configurações de segurança do navegador.
                 </p>
                 <div className="flex gap-2">
-                  <Button onClick={handleOpenInNewTab} className="flex items-center gap-2">
+                  <Button 
+                    onClick={handleOpenInNewTab} 
+                    className="flex items-center gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  >
                     <ExternalLink className="w-4 h-4" />
                     Abrir em nova aba
                   </Button>
-                  <Button onClick={handleDownload} variant="outline" className="flex items-center gap-2">
+                  <Button 
+                    onClick={handleDownload} 
+                    variant="outline" 
+                    className="flex items-center gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  >
                     <Download className="w-4 h-4" />
                     Baixar PDF
                   </Button>
@@ -384,7 +391,7 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
                     <Button 
                       onClick={() => setUseGoogleViewer(true)} 
                       variant="outline" 
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
                     >
                       <Eye className="w-4 h-4" />
                       Tentar com Google Viewer
@@ -396,7 +403,7 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
           )}
 
           {fileUrl && !isLoading && isImage() && (
-            <div className="border rounded-lg overflow-hidden bg-gray-50">
+            <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5">
               <img
                 src={fileUrl}
                 alt={receipt.file_name}
@@ -415,13 +422,17 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
           )}
 
           {fileUrl && !isLoading && !isImage() && !isPDF() && (
-            <div className="border rounded-lg overflow-hidden bg-gray-50 p-8">
+            <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5 p-8">
               <div className="text-center">
-                <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground mb-4">
+                <FileText className="w-16 h-16 mx-auto mb-4 text-white/30" />
+                <p className="text-white/70 mb-4">
                   Tipo de arquivo não suportado para visualização inline
                 </p>
-                <Button onClick={handleOpenInNewTab} variant="outline">
+                <Button 
+                  onClick={handleOpenInNewTab} 
+                  variant="outline"
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                >
                   <ExternalLink className="w-4 h-4 mr-2" />
                   Abrir em nova aba
                 </Button>
@@ -431,7 +442,7 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
 
           {/* Mensagem quando não há arquivo carregado */}
           {!fileUrl && !isLoading && !error && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-white/70">
               <Eye className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p>Clique em "Recarregar" para carregar o comprovante</p>
             </div>

@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     const isAdmin = profile?.user_type === 'admin'
+    const isDistributor = profile?.user_type === 'distributor'
     const isAdvisor =
       profile?.user_type === 'distributor' &&
       (profile?.role === 'assessor' || profile?.role === 'assessor_externo')
@@ -41,53 +42,122 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('created_at', { ascending: false })
 
-    // Definir filtros baseados no tipo de usuário
-    if (isAdmin) {
-      // Admin pode ver todos os comprovantes
-      if (userId) {
-        query = query.eq('user_id', userId)
-      }
-    } else if (isAdvisor) {
-      // Assessor pode ver comprovantes dos seus investidores
-      const { data: investorIds } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("parent_id", user.id)
-        .eq("user_type", "investor")
-      
-      if (investorIds && investorIds.length > 0) {
-        const ids = investorIds.map(inv => inv.id)
-        query = query.in('user_id', ids)
-      } else {
-        // Se não tem investidores, retorna array vazio
-        query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
-      }
-    } else if (isOffice) {
-      // Escritório pode ver comprovantes dos investidores vinculados ao seu office_id
-      const { data: officeInvestors } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_type", "investor")
-        .eq("office_id", user.id)
+    // Se transactionId é fornecido, verificar permissão para aquele investimento específico
+    if (transactionId) {
+      // Buscar o investimento para verificar permissões
+      const { data: investment } = await supabase
+        .from("investments")
+        .select("id, user_id")
+        .eq("id", transactionId)
+        .single()
 
-      if (officeInvestors && officeInvestors.length > 0) {
-        const ids = officeInvestors.map(inv => inv.id)
-        query = query.in('user_id', ids)
+      if (!investment) {
+        // Investimento não encontrado, retornar vazio
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000')
       } else {
-        // Se não tem investidores vinculados, força retorno vazio
-        query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
+        // Verificar se o usuário tem permissão para ver este investimento
+        let hasPermission = false
+
+        if (isAdmin) {
+          hasPermission = true
+        } else if (user.id === investment.user_id) {
+          // Dono do investimento
+          hasPermission = true
+        } else if (isDistributor) {
+          // Buscar perfil do investidor
+          const { data: investorProfile } = await supabase
+            .from("profiles")
+            .select("parent_id, office_id")
+            .eq("id", investment.user_id)
+            .single()
+
+          if (isAdvisor) {
+            hasPermission = investorProfile?.parent_id === user.id
+          } else if (isOffice) {
+            hasPermission = investorProfile?.office_id === user.id
+          } else {
+            // Distribuidor de nível superior: verificar se investidor está vinculado
+            if (investorProfile?.office_id) {
+              const { data: officeProfile } = await supabase
+                .from("profiles")
+                .select("id, parent_id")
+                .eq("id", investorProfile.office_id)
+                .single()
+              
+              if (officeProfile && (officeProfile.id === user.id || officeProfile.parent_id === user.id)) {
+                hasPermission = true
+              }
+            }
+            
+            if (!hasPermission && investorProfile?.parent_id) {
+              const { data: advisorProfile } = await supabase
+                .from("profiles")
+                .select("id, office_id")
+                .eq("id", investorProfile.parent_id)
+                .single()
+              
+              if (advisorProfile && (advisorProfile.id === user.id || advisorProfile.office_id === user.id)) {
+                hasPermission = true
+              }
+            }
+          }
+        }
+
+        if (hasPermission) {
+          // Filtrar apenas comprovantes deste investimento
+          query = query.eq('transaction_id', transactionId)
+        } else {
+          // Sem permissão, retornar vazio
+          query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+        }
       }
     } else {
-      // Usuário comum só pode ver seus próprios comprovantes
-      query = query.eq('user_id', user.id)
+      // Sem transactionId, aplicar filtros normais por user_id
+      // Definir filtros baseados no tipo de usuário
+      if (isAdmin || (isDistributor && userId)) {
+        // Admin pode ver todos os comprovantes
+        // Distribuidor pode ver comprovantes de um usuário específico quando userId é fornecido
+        if (userId) {
+          query = query.eq('user_id', userId)
+        }
+      } else if (isAdvisor) {
+        // Assessor pode ver comprovantes dos seus investidores
+        const { data: investorIds } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("parent_id", user.id)
+          .eq("user_type", "investor")
+        
+        if (investorIds && investorIds.length > 0) {
+          const ids = investorIds.map(inv => inv.id)
+          query = query.in('user_id', ids)
+        } else {
+          // Se não tem investidores, retorna array vazio
+          query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
+        }
+      } else if (isOffice) {
+        // Escritório pode ver comprovantes dos investidores vinculados ao seu office_id
+        const { data: officeInvestors } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_type", "investor")
+          .eq("office_id", user.id)
+
+        if (officeInvestors && officeInvestors.length > 0) {
+          const ids = officeInvestors.map(inv => inv.id)
+          query = query.in('user_id', ids)
+        } else {
+          // Se não tem investidores vinculados, força retorno vazio
+          query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
+        }
+      } else {
+        // Usuário comum só pode ver seus próprios comprovantes
+        query = query.eq('user_id', user.id)
+      }
     }
 
     if (status !== 'all') {
       query = query.eq('status', status)
-    }
-
-    if (transactionId) {
-      query = query.eq('transaction_id', transactionId)
     }
 
     const { data: receipts, error } = await query

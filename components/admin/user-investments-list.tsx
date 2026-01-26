@@ -33,6 +33,7 @@ interface Investment {
   amount: number
   monthly_return_rate: number
   commitment_period: number | null
+  profitability_liquidity?: string | null
   status: string
   created_at: string
   updated_at: string
@@ -86,6 +87,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
   const [selectedReceipt, setSelectedReceipt] = useState<PixReceipt | null>(null)
   const [receiptToDelete, setReceiptToDelete] = useState<PixReceipt | null>(null)
   const [investmentReceipts, setInvestmentReceipts] = useState<Record<string, PixReceipt[]>>({})
+  const [isLoadingReceipts, setIsLoadingReceipts] = useState<Record<string, boolean>>({})
   const [receiptViewerOpen, setReceiptViewerOpen] = useState(false)
   const [receiptToView, setReceiptToView] = useState<PixReceipt | null>(null)
 
@@ -179,6 +181,13 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
   const fetchReceiptsForInvestments = async () => {
     try {
       const receiptsMap: Record<string, PixReceipt[]> = {}
+      const loadingMap: Record<string, boolean> = {}
+      
+      // Inicializar estado de loading para todos os investimentos
+      investments.forEach(investment => {
+        loadingMap[investment.id] = true
+      })
+      setIsLoadingReceipts(loadingMap)
       
       // Buscar comprovantes para cada investimento
       for (const investment of investments) {
@@ -194,12 +203,19 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
         } catch (error) {
           console.error(`Erro ao buscar comprovantes para investimento ${investment.id}:`, error)
           receiptsMap[investment.id] = []
+        } finally {
+          // Marcar como carregado para este investimento
+          loadingMap[investment.id] = false
+          setIsLoadingReceipts({ ...loadingMap })
         }
       }
       
       setInvestmentReceipts(receiptsMap)
+      // Garantir que todos os loadings sejam false ao final
+      setIsLoadingReceipts({})
     } catch (error) {
       console.error('Erro ao buscar comprovantes dos investimentos:', error)
+      setIsLoadingReceipts({})
     }
   }
 
@@ -207,10 +223,29 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
     return investments.reduce((total, investment) => total + Number(investment.amount), 0)
   }
 
+  const calculateMonthlyReturnForInvestment = (investment: Investment) => {
+    const amount = Number(investment.amount)
+    const rate = Number(investment.monthly_return_rate)
+    const liquidity = investment.profitability_liquidity || 'Mensal'
+    
+    // Para liquidez "Mensal": juros simples (retorno mensal fixo sobre o valor original)
+    // Para outras liquidezes: juros compostos (retorno mensal sobre o valor atual)
+    // No contexto de exibição, sempre mostramos baseado no valor original do investimento
+    // pois não temos informações sobre resgates neste componente
+    if (liquidity === 'Mensal') {
+      // JUROS SIMPLES: Retorno mensal = Valor ORIGINAL × taxa mensal
+      return amount * rate
+    } else {
+      // JUROS COMPOSTOS: Retorno mensal = Valor ORIGINAL × taxa mensal
+      // (mesmo cálculo para exibição, pois não temos o valor atual com resgates)
+      return amount * rate
+    }
+  }
+
   const calculateMonthlyReturn = () => {
     return investments.reduce((total, investment) => {
       if (investment.status === 'active') {
-        return total + (Number(investment.amount) * Number(investment.monthly_return_rate))
+        return total + calculateMonthlyReturnForInvestment(investment)
       }
       return total
     }, 0)
@@ -345,69 +380,80 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
     <div className="space-y-6">
       {/* Header com estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="bg-gradient-to-br from-[#01223F]/80 to-[#003562]/80 border-[#01223F] text-white shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Investido</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-sm font-medium text-white/70 mb-2">Total Investido</p>
+                <p className="text-2xl font-bold text-white">
                   {formatCurrency(calculateTotalInvested())}
                 </p>
               </div>
-              <DollarSign className="w-8 h-8 text-green-600" />
+              <div className="p-2 bg-green-500/20 rounded-lg">
+                <DollarSign className="w-8 h-8 text-green-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-[#01223F]/80 to-[#003562]/80 border-[#01223F] text-white shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Rendimento Mensal</p>
-                <p className="text-2xl font-bold text-blue-600">
+                <p className="text-sm font-medium text-white/70 mb-2">Rendimento Mensal</p>
+                <p className="text-2xl font-bold text-white">
                   {formatCurrency(calculateMonthlyReturn())}
                 </p>
               </div>
-              <TrendingUp className="w-8 h-8 text-blue-600" />
+              <div className="p-2 bg-blue-500/20 rounded-lg">
+                <TrendingUp className="w-8 h-8 text-blue-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-[#01223F]/80 to-[#003562]/80 border-[#01223F] text-white shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total de Investimentos</p>
-                <p className="text-2xl font-bold text-purple-600">
+                <p className="text-sm font-medium text-white/70 mb-2">Total de Investimentos</p>
+                <p className="text-2xl font-bold text-white">
                   {investments.length}
                 </p>
               </div>
-              <Calendar className="w-8 h-8 text-purple-600" />
+              <div className="p-2 bg-purple-500/20 rounded-lg">
+                <Calendar className="w-8 h-8 text-purple-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Lista de investimentos */}
-      <Card>
-        <CardHeader>
+      <Card className="bg-gradient-to-br from-[#01223F]/80 to-[#003562]/80 border-[#01223F] text-white shadow-lg">
+        <CardHeader className="border-b border-white/10 pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-white">
               <TrendingUp className="w-5 h-5" />
               Investimentos de {userName}
             </CardTitle>
-            <Button onClick={fetchInvestments} variant="outline" size="sm">
+            <Button 
+              onClick={fetchInvestments} 
+              variant="outline" 
+              size="sm"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+            >
               <RefreshCw className="w-4 h-4 mr-2" />
               Atualizar
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {investments.length === 0 ? (
             <div className="text-center py-8">
-              <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Nenhum investimento encontrado</h3>
-              <p className="text-muted-foreground">
+              <TrendingUp className="w-12 h-12 text-white/30 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2 text-white">Nenhum investimento encontrado</h3>
+              <p className="text-white/70">
                 Este usuário ainda não possui investimentos registrados.
               </p>
             </div>
@@ -416,7 +462,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
               {investments.map((investment) => (
                 <div
                   key={investment.id}
-                  className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                  className="bg-white/5 border border-white/10 rounded-lg p-4 hover:bg-white/10 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -426,12 +472,12 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                           {STATUS_LABELS[investment.status] || investment.status}
                         </div>
                       </Badge>
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="border-white/20 text-white/90 bg-white/5">
                         {QUOTA_TYPE_LABELS[investment.quota_type] || investment.quota_type}
                       </Badge>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-green-600">
+                      <p className="text-2xl font-bold text-green-400">
                         {formatCurrency(Number(investment.amount))}
                       </p>
                     </div>
@@ -439,38 +485,38 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Taxa de Retorno Mensal</p>
-                      <p className="font-medium text-blue-600">
+                      <p className="text-white/70 mb-1">Taxa de Retorno Mensal</p>
+                      <p className="font-medium text-blue-400">
                         {formatPercentage(Number(investment.monthly_return_rate))}
                       </p>
                     </div>
 
                     {investment.commitment_period && (
                       <div>
-                        <p className="text-muted-foreground">Período de Compromisso</p>
-                        <p className="font-medium">
+                        <p className="text-white/70 mb-1">Período de Compromisso</p>
+                        <p className="font-medium text-white">
                           {investment.commitment_period} meses
                         </p>
                       </div>
                     )}
 
                     <div>
-                      <p className="text-muted-foreground">Data</p>
-                      <p className="font-medium">
+                      <p className="text-white/70 mb-1">Data</p>
+                      <p className="font-medium text-white">
                         {investment.payment_date 
                           ? formatDate(investment.payment_date)
-                          : <span className="text-muted-foreground">Não depositado</span>
+                          : <span className="text-white/50">Não depositado</span>
                         }
                       </p>
                     </div>
                   </div>
 
                   {investment.status === 'active' && (
-                    <div className="mt-3 pt-3 border-t">
+                    <div className="mt-3 pt-3 border-t border-white/10">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm text-muted-foreground">Rendimento Mensal Estimado</p>
-                        <p className="font-medium text-green-600">
-                          {formatCurrency(Number(investment.amount) * Number(investment.monthly_return_rate))}
+                        <p className="text-sm text-white/70">Rendimento Mensal Estimado</p>
+                        <p className="font-medium text-green-400">
+                          {formatCurrency(calculateMonthlyReturnForInvestment(investment))}
                         </p>
                       </div>
                     </div>
@@ -479,21 +525,31 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
 
 
                   {/* Comprovantes Enviados */}
-                  {investmentReceipts[investment.id] && investmentReceipts[investment.id].length > 0 && (
-                    <div className="mt-3 pt-3 border-t">
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <p className="text-sm font-medium text-white/70 mb-2">Comprovantes PIX:</p>
+                    
+                    {/* Estado de loading */}
+                    {isLoadingReceipts[investment.id] && (
+                      <div className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/10">
+                        <Loader2 className="w-4 h-4 animate-spin text-white/70" />
+                        <span className="text-sm text-white/70">Carregando comprovantes...</span>
+                      </div>
+                    )}
+                    
+                    {/* Comprovantes carregados */}
+                    {!isLoadingReceipts[investment.id] && investmentReceipts[investment.id] && investmentReceipts[investment.id].length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-muted-foreground">Comprovantes PIX:</p>
                         {investmentReceipts[investment.id].map((receipt) => (
                           <div
                             key={receipt.id}
-                            className="flex items-center justify-between p-2 bg-muted/50 rounded-lg"
+                            className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/10"
                           >
                             <div className="flex items-center gap-2">
                               {getFileIcon(receipt.file_type)}
                               <div>
-                                <p className="text-sm font-medium">Comprovante PIX</p>
+                                <p className="text-sm font-medium text-white">Comprovante PIX</p>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">
+                                  <span className="text-xs text-white/50">
                                     {formatFileSize(receipt.file_size)}
                                   </span>
                                 </div>
@@ -504,7 +560,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                                 variant="outline"
                                 size="sm"
                                 onClick={() => viewReceipt(receipt)}
-                                className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+                                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                               >
                                 <Eye className="w-3 h-3 mr-1" />
                                 Visualizar
@@ -513,7 +569,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => confirmDeleteReceipt(receipt)}
-                                className="text-red-600 hover:text-red-700"
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -521,28 +577,26 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Mensagem quando não há comprovantes */}
-                  {investmentReceipts[investment.id] && investmentReceipts[investment.id].length === 0 && (
-                    <div className="mt-3 pt-3 border-t">
-                      <p className="text-sm text-muted-foreground">Nenhum comprovante PIX enviado para este investimento.</p>
-                    </div>
-                  )}
+                    {/* Mensagem quando não há comprovantes (após carregar) */}
+                    {!isLoadingReceipts[investment.id] && (!investmentReceipts[investment.id] || investmentReceipts[investment.id].length === 0) && (
+                      <p className="text-sm text-white/50">Nenhum comprovante PIX enviado para este investimento.</p>
+                    )}
+                  </div>
 
                   {/* Botões de Ação */}
-                  <div className="mt-3 pt-3 border-t">
+                  <div className="mt-3 pt-3 border-t border-white/10">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm text-muted-foreground">Ações:</p>
+                        <p className="text-sm text-white/70">Ações:</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleUploadClick(investment)}
-                          className="text-blue-600 hover:text-blue-700"
+                          className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                         >
                           <Upload className="w-4 h-4 mr-1" />
                           Upload PIX
@@ -559,36 +613,36 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
 
       {/* Modal de Upload de Comprovante */}
       <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Upload de Comprovante PIX</DialogTitle>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+          <DialogHeader className="border-b border-white/10 pb-4">
+            <DialogTitle className="text-white">Upload de Comprovante PIX</DialogTitle>
           </DialogHeader>
           
           {selectedInvestment && (
             <div className="space-y-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-2">Investimento Selecionado</h4>
+              <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
+                <h4 className="font-medium text-white mb-2">Investimento Selecionado</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Valor:</p>
-                    <p className="font-medium">{formatCurrency(Number(selectedInvestment.amount))}</p>
+                    <p className="text-white/70 mb-1">Valor:</p>
+                    <p className="font-medium text-white">{formatCurrency(Number(selectedInvestment.amount))}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Tipo:</p>
-                    <p className="font-medium">{QUOTA_TYPE_LABELS[selectedInvestment.quota_type]}</p>
+                    <p className="text-white/70 mb-1">Tipo:</p>
+                    <p className="font-medium text-white">{QUOTA_TYPE_LABELS[selectedInvestment.quota_type]}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Status:</p>
+                    <p className="text-white/70 mb-1">Status:</p>
                     <Badge className={STATUS_COLORS[selectedInvestment.status]}>
                       {STATUS_LABELS[selectedInvestment.status]}
                     </Badge>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Data:</p>
-                    <p className="font-medium">
+                    <p className="text-white/70 mb-1">Data:</p>
+                    <p className="font-medium text-white">
                       {selectedInvestment.payment_date 
                         ? formatDate(selectedInvestment.payment_date)
-                        : <span className="text-muted-foreground">Não depositado</span>
+                        : <span className="text-white/50">Não depositado</span>
                       }
                     </p>
                   </div>
@@ -607,35 +661,35 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
 
       {/* Modal de Visualização de Comprovante */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Visualizar Comprovante PIX</DialogTitle>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+          <DialogHeader className="border-b border-white/10 pb-4">
+            <DialogTitle className="text-white">Visualizar Comprovante PIX</DialogTitle>
           </DialogHeader>
           
           {selectedReceipt && (
             <div className="space-y-4">
               {/* Informações do Comprovante */}
-              <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Arquivo:</p>
-                    <p className="font-medium">{selectedReceipt.file_name}</p>
+                    <p className="text-white/70 mb-1">Arquivo:</p>
+                    <p className="font-medium text-white">{selectedReceipt.file_name}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Tamanho:</p>
-                    <p className="font-medium">{formatFileSize(selectedReceipt.file_size)}</p>
+                    <p className="text-white/70 mb-1">Tamanho:</p>
+                    <p className="font-medium text-white">{formatFileSize(selectedReceipt.file_size)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Data de Upload:</p>
-                    <p className="font-medium">{formatDate(selectedReceipt.created_at)}</p>
+                    <p className="text-white/70 mb-1">Data de Upload:</p>
+                    <p className="font-medium text-white">{formatDate(selectedReceipt.created_at)}</p>
                   </div>
                 </div>
               </div>
 
               {/* Visualizador de Arquivo */}
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5">
                 {selectedReceipt.file_type?.startsWith('image/') ? (
-                  <div className="flex justify-center bg-gray-100 p-4">
+                  <div className="flex justify-center bg-white/5 p-4">
                     <img
                       src={selectedReceipt.signed_url}
                       alt={selectedReceipt.file_name}
@@ -665,12 +719,13 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                     />
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center p-8 bg-gray-100">
-                    <FileText className="w-16 h-16 text-gray-400 mb-4" />
-                    <p className="text-gray-600 mb-4">Visualização não disponível para este tipo de arquivo</p>
+                  <div className="flex flex-col items-center justify-center p-8 bg-white/5">
+                    <FileText className="w-16 h-16 text-white/30 mb-4" />
+                    <p className="text-white/70 mb-4">Visualização não disponível para este tipo de arquivo</p>
                     <Button
                       onClick={() => window.open(selectedReceipt.signed_url, '_blank')}
                       variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Baixar Arquivo
@@ -684,11 +739,15 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                 <Button
                   variant="outline"
                   onClick={() => window.open(selectedReceipt.signed_url, '_blank')}
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Baixar
                 </Button>
-                <Button onClick={() => setShowViewModal(false)}>
+                <Button 
+                  onClick={() => setShowViewModal(false)}
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                >
                   Fechar
                 </Button>
               </div>
@@ -699,24 +758,24 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
 
       {/* Modal de Confirmação de Exclusão */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirmar Exclusão</DialogTitle>
+        <DialogContent className="max-w-md bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
+          <DialogHeader className="border-b border-white/10 pb-4">
+            <DialogTitle className="text-white">Confirmar Exclusão</DialogTitle>
           </DialogHeader>
           
           {receiptToDelete && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <Trash2 className="w-6 h-6 text-red-600" />
+                <div className="p-2 bg-red-500/20 rounded-full">
+                  <Trash2 className="w-6 h-6 text-red-400" />
                 </div>
                 <div>
-                  <p className="font-medium">Deletar Comprovante</p>
-                  <p className="text-sm text-muted-foreground">{receiptToDelete.file_name}</p>
+                  <p className="font-medium text-white">Deletar Comprovante</p>
+                  <p className="text-sm text-white/70">{receiptToDelete.file_name}</p>
                 </div>
               </div>
               
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-white/70">
                 Esta ação não pode ser desfeita. O comprovante será permanentemente removido.
               </p>
 
@@ -728,6 +787,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                     setReceiptToDelete(null)
                   }}
                   disabled={isDeleting}
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                 >
                   Cancelar
                 </Button>
@@ -735,6 +795,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                   variant="destructive"
                   onClick={deleteReceipt}
                   disabled={isDeleting}
+                  className="bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30"
                 >
                   {isDeleting ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />

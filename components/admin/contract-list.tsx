@@ -51,16 +51,21 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
   const fetchContracts = async () => {
     try {
       setLoading(true)
+      console.log('🔍 [ContractList] Buscando contratos para investorId:', investorId)
       const response = await fetch(`/api/contracts?investorId=${investorId}`)
       const result = await response.json()
 
+      console.log('🔍 [ContractList] Resposta da API:', { success: result.success, dataLength: result.data?.length, error: result.error })
+
       if (result.success) {
-        setContracts(result.data)
+        console.log('✅ [ContractList] Contratos encontrados:', result.data?.length || 0)
+        setContracts(result.data || [])
       } else {
+        console.error('❌ [ContractList] Erro na resposta:', result.error)
         throw new Error(result.error || "Erro ao buscar contratos")
       }
     } catch (error) {
-      console.error("Fetch contracts error:", error)
+      console.error("❌ [ContractList] Fetch contracts error:", error)
       toast({
         title: "Erro ao carregar contratos",
         description: error instanceof Error ? error.message : "Erro desconhecido",
@@ -160,17 +165,17 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
 
   const getFileTypeIcon = (fileType: string) => {
     if (fileType === 'application/pdf') {
-      return <FileText className="h-5 w-5 text-red-500" />
+      return <FileText className="h-5 w-5 text-red-400" />
     }
-    return <FileText className="h-5 w-5 text-blue-500" />
+    return <FileText className="h-5 w-5 text-blue-400" />
   }
 
   if (loading) {
     return (
-      <Card>
+      <Card className="bg-gradient-to-br from-[#01223F]/80 to-[#003562]/80 border-[#01223F] text-white">
         <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin mr-2" />
-          <span>Carregando contratos...</span>
+          <Loader2 className="h-6 w-6 animate-spin mr-2 text-white" />
+          <span className="text-white">Carregando contratos...</span>
         </CardContent>
       </Card>
     )
@@ -178,32 +183,32 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
 
   return (
     <>
-    <Card>
+    <Card className="bg-gradient-to-br from-[#01223F]/80 to-[#003562]/80 border-[#01223F] text-white">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-white">
           <FileText className="h-5 w-5" />
           Contratos de {investorName}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {contracts.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhum contrato encontrado</p>
-            <p className="text-sm">Faça upload do primeiro contrato usando o formulário acima</p>
+          <div className="text-center py-8 text-white/70">
+            <FileText className="h-12 w-12 mx-auto mb-4 opacity-50 text-white/50" />
+            <p className="text-white/70">Nenhum contrato encontrado</p>
+            <p className="text-sm text-white/50">Faça upload do primeiro contrato usando o formulário acima</p>
           </div>
         ) : (
           <div className="space-y-4">
             {contracts.map((contract) => (
               <div
                 key={contract.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                className="flex items-center justify-between p-4 border border-white/10 rounded-lg hover:bg-white/5 transition-colors bg-white/5"
               >
                 <div className="flex items-center gap-3 flex-1">
                   {getFileTypeIcon(contract.file_type)}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{contract.contract_name}</p>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <p className="font-medium truncate text-white">{contract.contract_name}</p>
+                    <div className="flex items-center gap-4 text-sm text-white/70">
                       <span>{contract.file_name}</span>
                       <span>•</span>
                       <span>{formatFileSize(contract.file_size)}</span>
@@ -213,14 +218,20 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
                         {formatDate(contract.created_at)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                    <div className="flex items-center gap-1 text-xs text-white/50 mt-1">
                       <User className="h-3 w-3" />
                       Enviado por {contract.uploaded_by_profile.full_name || contract.uploaded_by_profile.email}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={contract.status === 'active' ? 'default' : 'secondary'}>
+                  <Badge 
+                    variant={contract.status === 'active' ? 'default' : 'secondary'}
+                    className={contract.status === 'active' 
+                      ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+                      : 'bg-white/10 text-white/70 border-white/20'
+                    }
+                  >
                     {contract.status === 'active' ? 'Ativo' : contract.status}
                   </Badge>
                   <Button
@@ -228,6 +239,7 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
                     size="sm"
                     onClick={() => handleView(contract)}
                     title="Visualizar"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                   >
                     <Eye className="h-4 w-4" />
                   </Button>
@@ -236,6 +248,7 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
                     size="sm"
                     onClick={() => handleDownload(contract)}
                     title="Baixar"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                   >
                     <Download className="h-4 w-4" />
                   </Button>
@@ -245,6 +258,7 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
                         variant="outline"
                         size="sm"
                         disabled={deletingId === contract.id}
+                        className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                       >
                         {deletingId === contract.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -253,16 +267,16 @@ export function ContractList({ investorId, investorName, onContractDeleted }: Co
                         )}
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
+                    <AlertDialogContent className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="text-white">Confirmar exclusão</AlertDialogTitle>
+                        <AlertDialogDescription className="text-white/70">
                           Tem certeza que deseja deletar o contrato "{contract.contract_name}"? 
                           Esta ação não pode ser desfeita.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogCancel className="bg-white/10 border-white/20 text-white hover:bg-white/20">Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => handleDelete(contract.id)}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

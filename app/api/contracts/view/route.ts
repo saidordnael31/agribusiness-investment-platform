@@ -49,13 +49,15 @@ export async function GET(request: NextRequest) {
       .single()
 
     console.log("🔍 [DEBUG] Perfil do usuário logado:", profile);
+    console.log("🔍 [DEBUG] User ID (auth.uid()):", user.id);
     console.log("🔍 [DEBUG] Contract investor_id:", contract.investor_id);
 
     // Verificar se é admin
     const isAdmin = profile?.user_type === 'admin';
+    const isDistributor = profile?.user_type === 'distributor';
     
     // Verificar se é assessor e se o investidor é seu cliente
-    const isAdvisor = profile?.user_type === 'distributor' && profile?.role === 'assessor';
+    const isAdvisor = profile?.user_type === 'distributor' && (profile?.role === 'assessor' || profile?.role === 'assessor_externo');
     const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio';
     
     // Verificar se o investidor pertence ao assessor/escritório
@@ -66,15 +68,20 @@ export async function GET(request: NextRequest) {
     } else if (user.id === contract.investor_id) {
       // Investidor pode ver seus próprios contratos
       hasPermission = true;
-    } else if (isAdvisor || isOffice) {
-      // Buscar o perfil do investidor para verificar se pertence ao assessor/escritório
+    } else if (isDistributor) {
+      // Buscar o perfil do investidor para verificar relacionamento
       const { data: investorProfile } = await supabase
         .from("profiles")
-        .select("parent_id, office_id")
+        .select("parent_id, office_id, distributor_id")
         .eq("id", contract.investor_id)
         .single()
       
       console.log("🔍 [DEBUG] Perfil do investidor:", investorProfile);
+      console.log("🔍 [DEBUG] Comparação distributor_id:", {
+        investor_distributor_id: investorProfile?.distributor_id,
+        logged_user_id: user.id,
+        match: investorProfile?.distributor_id === user.id
+      });
       
       if (isAdvisor) {
         // Assessor pode ver contratos de seus próprios investidores
@@ -82,6 +89,33 @@ export async function GET(request: NextRequest) {
       } else if (isOffice) {
         // Escritório pode ver contratos de investidores do seu office_id
         hasPermission = investorProfile?.office_id === user.id;
+      } else {
+        // Distribuidor de nível superior: verificar se investidor está vinculado
+        if (investorProfile?.distributor_id === user.id) {
+          hasPermission = true;
+        } else if (investorProfile?.office_id) {
+          const { data: officeProfile } = await supabase
+            .from("profiles")
+            .select("id, parent_id")
+            .eq("id", investorProfile.office_id)
+            .single()
+          
+          if (officeProfile && (officeProfile.id === user.id || officeProfile.parent_id === user.id)) {
+            hasPermission = true;
+          }
+        }
+        
+        if (!hasPermission && investorProfile?.parent_id) {
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("id, office_id")
+            .eq("id", investorProfile.parent_id)
+            .single()
+          
+          if (advisorProfile && (advisorProfile.id === user.id || advisorProfile.office_id === user.id)) {
+            hasPermission = true;
+          }
+        }
       }
     }
 
@@ -121,6 +155,8 @@ export async function GET(request: NextRequest) {
     
     const filePath = pathParts.slice(bucketIndex + 1).join('/')
     console.log("🔍 [DEBUG] Extracted file path:", filePath);
+    console.log("🔍 [DEBUG] User ID para verificação de storage:", user.id);
+    console.log("🔍 [DEBUG] Contract file_url para comparação:", contract.file_url);
 
     // Verificar se o arquivo existe no storage
     console.log("🔍 [DEBUG] Verificando se arquivo existe no storage...");
@@ -146,16 +182,25 @@ export async function GET(request: NextRequest) {
 
     if (signedUrlError) {
       console.error("Signed URL error:", signedUrlError);
+      console.error("Signed URL error details:", JSON.stringify(signedUrlError, null, 2));
       
-      // Tratamento específico para arquivo não encontrado
-      if (signedUrlError.statusCode === '404' || signedUrlError.message.includes('Object not found')) {
-        console.log("🔍 [DEBUG] Tentando usar URL pública como fallback...");
+      // Tratamento específico para arquivo não encontrado ou erro de permissão
+      if (signedUrlError.statusCode === '404' || 
+          signedUrlError.message?.includes('Object not found') ||
+          signedUrlError.message?.includes('Bucket not found') ||
+          signedUrlError.message?.includes('row-level security') ||
+          signedUrlError.message?.includes('policy')) {
+        console.log("🔍 [DEBUG] Erro de permissão ou bucket não encontrado, tentando usar URL pública como fallback...");
         // Usar URL pública como fallback
         viewUrl = contract.file_url;
         useSignedUrl = false;
       } else {
         return NextResponse.json(
-          { success: false, error: "Erro ao gerar link de visualização" },
+          { 
+            success: false, 
+            error: "Erro ao gerar link de visualização",
+            details: signedUrlError.message || "Erro desconhecido"
+          },
           { status: 500 }
         )
       }
