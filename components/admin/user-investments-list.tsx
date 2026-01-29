@@ -483,7 +483,7 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <p className="text-white/70 mb-1">Taxa de Retorno Mensal</p>
                       <p className="font-medium text-blue-400">
@@ -496,6 +496,15 @@ export function UserInvestmentsList({ userId, userName }: UserInvestmentsListPro
                         <p className="text-white/70 mb-1">Período de Compromisso</p>
                         <p className="font-medium text-white">
                           {investment.commitment_period} meses
+                        </p>
+                      </div>
+                    )}
+
+                    {investment.profitability_liquidity && (
+                      <div>
+                        <p className="text-white/70 mb-1">Liquidez</p>
+                        <p className="font-medium text-white capitalize">
+                          {investment.profitability_liquidity}
                         </p>
                       </div>
                     )}
