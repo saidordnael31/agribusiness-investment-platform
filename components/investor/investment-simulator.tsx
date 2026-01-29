@@ -21,6 +21,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Calculator, Gift, TrendingUp } from "lucide-react";
 import { Disclaimers } from "@/components/compliance/disclaimers";
+import { getRateByPeriodAndLiquidity as getRateFromDB, getRentabilityConfig, type RentabilityConfig } from "@/lib/rentability-utils";
+import { useUserType } from "@/hooks/useUserType";
+import { getUserTypeHierarchy, getUserTypeFromId } from "@/lib/user-type-utils";
+import { createClient } from "@/lib/supabase/client";
 
 interface Bonification {
   id: string;
@@ -34,7 +38,7 @@ interface Bonification {
 }
 
 export function InvestmentSimulator({ title }: { title?: string }) {
-  const [user, setUser] = useState<null>(null);
+  const [user, setUser] = useState<any>(null);
   const [amount, setAmount] = useState("5000");
   const [commitmentPeriod, setCommitmentPeriod] = useState("");
   const [liquidity, setLiquidity] = useState("");
@@ -46,6 +50,18 @@ export function InvestmentSimulator({ title }: { title?: string }) {
     totalBonusRate: number;
     bonusReturn: number;
   } | null>(null);
+  
+  // Usar hook para obter user_type_id do usuário logado
+  const { user_type_id: loggedUserTypeId } = useUserType(user?.id);
+  
+  // Buscar user_type_id do investidor através das relações
+  const [investorUserTypeId, setInvestorUserTypeId] = useState<number | null>(null);
+  
+  // Cache de taxas
+  const [rateCache, setRateCache] = useState<Record<string, number>>({});
+  
+  // Configuração de rentabilidade do investidor
+  const [rentabilityConfig, setRentabilityConfig] = useState<RentabilityConfig | null>(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -54,96 +70,298 @@ export function InvestmentSimulator({ title }: { title?: string }) {
     }
   }, []);
 
-  // Função para obter a taxa baseada no prazo e liquidez
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
-    // Tabela padrão (investidores em geral)
-    const defaultRates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        mensal: 0.018, // 1,8%
-      },
-      "6": {
-        mensal: 0.019, // 1,9%
-        semestral: 0.02, // 2,0%
-      },
-      "12": {
-        mensal: 0.021, // 2,1%
-        semestral: 0.022, // 2,2%
-        anual: 0.025, // 2,5%
-      },
-      "24": {
-        mensal: 0.023, // 2,3%
-        semestral: 0.025, // 2,5%
-        anual: 0.027, // 2,7%
-        bienal: 0.03, // 3,0%
-      },
-      "36": {
-        mensal: 0.024, // 2,4%
-        semestral: 0.026, // 2,6%
-        anual: 0.03, // 3,0%
-        bienal: 0.032, // 3,2%
-        trienal: 0.035, // 3,5%
-      },
+  // Buscar user_type_id do investidor através das relações do user_type logado
+  useEffect(() => {
+    const findInvestorUserTypeId = async () => {
+      if (!loggedUserTypeId) return;
+
+      try {
+        // Limpar cache quando o user_type_id mudar para evitar valores antigos
+        setRateCache({});
+        
+        // Buscar hierarquia (filhos) do user_type logado
+        const childUserTypeIds = await getUserTypeHierarchy(loggedUserTypeId);
+        
+        if (childUserTypeIds.length === 0) {
+          console.warn("[InvestmentSimulator] Nenhum filho encontrado para user_type:", loggedUserTypeId);
+          // Se não tiver filhos, pode ser que seja um investidor simulando para si mesmo
+          // Nesse caso, usar o próprio user_type_id
+          setInvestorUserTypeId(loggedUserTypeId);
+          return;
+        }
+
+        // Buscar qual dos filhos é o investidor
+        const supabase = createClient();
+        const { data: childUserTypes } = await supabase
+          .from("user_types")
+          .select("id, user_type, name")
+          .in("id", childUserTypeIds);
+
+        if (!childUserTypes || childUserTypes.length === 0) {
+          console.warn("[InvestmentSimulator] Não foi possível buscar tipos filhos");
+          setInvestorUserTypeId(loggedUserTypeId);
+          return;
+        }
+
+        // Procurar pelo tipo "investor" ou "investidor"
+        const investorType = childUserTypes.find(
+          (ut) => ut.user_type === "investor"
+        );
+
+        if (investorType) {
+          console.log("[InvestmentSimulator] Investor user_type_id encontrado:", investorType.id);
+          setInvestorUserTypeId(investorType.id);
+        } else {
+          // Se não encontrar investidor específico, usar o primeiro filho disponível
+          console.warn("[InvestmentSimulator] Tipo investidor não encontrado, usando primeiro filho:", childUserTypes[0]);
+          setInvestorUserTypeId(childUserTypes[0].id);
+        }
+      } catch (error) {
+        console.error("[InvestmentSimulator] Erro ao buscar user_type_id do investidor:", error);
+        // Fallback: usar o próprio user_type_id
+        setInvestorUserTypeId(loggedUserTypeId);
+      }
     };
 
-    // Tabela especial para investidores de assessores externos
-    // Mapeando D+90/180/360/720/1080 para 3/6/12/24/36 meses
-    const externalAdvisorRates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        mensal: 0.0135, // 1,35%
-      },
-      "6": {
-        mensal: 0.014,  // 1,40%
-        semestral: 0.0145, // 1,45%
-      },
-      "12": {
-        mensal: 0.015,  // 1,50%
-        semestral: 0.0155, // 1,55%
-        anual: 0.016, // 1,60%
-      },
-      "24": {
-        mensal: 0.0165, // 1,65%
-        semestral: 0.017, // 1,70%
-        anual: 0.0175, // 1,75%
-        bienal: 0.018, // 1,80%
-      },
-      "36": {
-        mensal: 0.0185, // 1,85%
-        semestral: 0.019, // 1,90%
-        bienal: 0.0195, // 1,95%
-        trienal: 0.02, // 2,00%
-      },
+    findInvestorUserTypeId();
+  }, [loggedUserTypeId]);
+
+  // Buscar configuração de rentabilidade quando investorUserTypeId mudar
+  useEffect(() => {
+    const fetchRentabilityConfig = async () => {
+      if (!investorUserTypeId) {
+        setRentabilityConfig(null);
+        return;
+      }
+
+      try {
+        // Buscar user_type para obter rentability_id
+        const userType = await getUserTypeFromId(investorUserTypeId);
+        if (!userType || !userType.rentability_id) {
+          console.warn("[InvestmentSimulator] User type sem rentability_id");
+          setRentabilityConfig(null);
+          return;
+        }
+
+        // Buscar configuração de rentabilidade
+        const config = await getRentabilityConfig(userType.rentability_id);
+        setRentabilityConfig(config);
+        console.log("[InvestmentSimulator] Configuração de rentabilidade carregada:", config);
+      } catch (error) {
+        console.error("[InvestmentSimulator] Erro ao buscar configuração de rentabilidade:", error);
+        setRentabilityConfig(null);
+      }
     };
 
-    const currentUser: any = user;
-    const isExternalAdvisor =
-      currentUser && (currentUser.role === "assessor_externo" || currentUser.user_type === "assessor_externo");
+    fetchRentabilityConfig();
+  }, [investorUserTypeId]);
 
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
-    return table[period.toString()]?.[liquidity] || 0;
+  // Pré-carregar taxa quando commitmentPeriod ou liquidity mudarem
+  useEffect(() => {
+    if (!investorUserTypeId || !commitmentPeriod || !liquidity) return;
+    
+    // Normalizar liquidez para garantir compatibilidade
+    const normalizedLiquidity = liquidity.charAt(0).toUpperCase() + liquidity.slice(1).toLowerCase();
+    const cacheKey = `${commitmentPeriod}-${normalizedLiquidity}`;
+    if (rateCache[cacheKey] !== undefined) {
+      // Se já está no cache, disparar cálculo automático
+      const investmentAmount = Number.parseFloat(amount);
+      if (investmentAmount && rateCache[cacheKey] > 0) {
+        const period = Number.parseInt(commitmentPeriod);
+        const finalAmount = investmentAmount * Math.pow(1 + rateCache[cacheKey], period);
+        const totalReturn = finalAmount - investmentAmount;
+        const monthlyReturn = investmentAmount * rateCache[cacheKey];
+        setResults({
+          monthlyReturn,
+          totalReturn,
+          finalAmount,
+          baseBonifications: [],
+          totalBonusRate: 0,
+          bonusReturn: 0,
+        });
+      }
+      return;
+    }
+    
+    getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity).then((rate) => {
+      if (rate > 0) {
+        // Usar a chave normalizada no cache
+        setRateCache((prev) => ({ ...prev, [cacheKey]: rate }));
+        
+        // Disparar cálculo automático após carregar a taxa
+        const investmentAmount = Number.parseFloat(amount);
+        if (investmentAmount) {
+          const period = Number.parseInt(commitmentPeriod);
+          const finalAmount = investmentAmount * Math.pow(1 + rate, period);
+          const totalReturn = finalAmount - investmentAmount;
+          const monthlyReturn = investmentAmount * rate;
+          setResults({
+            monthlyReturn,
+            totalReturn,
+            finalAmount,
+            baseBonifications: [],
+            totalBonusRate: 0,
+            bonusReturn: 0,
+          });
+        }
+      }
+    }).catch((error) => {
+      console.warn("[InvestmentSimulator] Erro ao pré-carregar taxa:", error);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitmentPeriod, liquidity, investorUserTypeId, amount]);
+
+  // Calcular retornos automaticamente quando a taxa estiver disponível
+  useEffect(() => {
+    const autoCalculate = async () => {
+      const investmentAmount = Number.parseFloat(amount);
+      const period = Number.parseInt(commitmentPeriod);
+      const selectedLiquidity = liquidity;
+
+      // Verificar se todos os campos necessários estão preenchidos
+      if (!investmentAmount || !period || !selectedLiquidity || !investorUserTypeId) {
+        setResults(null);
+        return;
+      }
+
+      // Normalizar liquidez para verificar no cache
+      const normalizedLiquidity = selectedLiquidity.charAt(0).toUpperCase() + selectedLiquidity.slice(1).toLowerCase();
+      const cacheKey = `${period}-${normalizedLiquidity}`;
+      
+      // Verificar se a taxa está no cache
+      const cachedRate = rateCache[cacheKey];
+      if (cachedRate === undefined || cachedRate === 0) {
+        // Se não estiver no cache, tentar buscar
+        const rate = await getRateByPeriodAndLiquidity(period, selectedLiquidity);
+        if (rate === 0) {
+          setResults(null);
+          return;
+        }
+        // A taxa será adicionada ao cache pela função getRateByPeriodAndLiquidity
+        // Mas precisamos calcular agora
+        const finalAmount = investmentAmount * Math.pow(1 + rate, period);
+        const totalReturn = finalAmount - investmentAmount;
+        const monthlyReturn = investmentAmount * rate;
+
+        setResults({
+          monthlyReturn,
+          totalReturn,
+          finalAmount,
+          baseBonifications: [],
+          totalBonusRate: 0,
+          bonusReturn: 0,
+        });
+        return;
+      }
+
+      // Se a taxa estiver no cache, calcular diretamente
+      const finalAmount = investmentAmount * Math.pow(1 + cachedRate, period);
+      const totalReturn = finalAmount - investmentAmount;
+      const monthlyReturn = investmentAmount * cachedRate;
+
+      setResults({
+        monthlyReturn,
+        totalReturn,
+        finalAmount,
+        baseBonifications: [],
+        totalBonusRate: 0,
+        bonusReturn: 0,
+      });
+    };
+
+    autoCalculate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, commitmentPeriod, liquidity, investorUserTypeId]);
+
+  // Função para obter rentabilidade usando user_type_id do INVESTIDOR (filho) -> rentability_id -> função get
+  const getRateByPeriodAndLiquidity = async (period: number, liquidity: string): Promise<number> => {
+    // Normalizar liquidez para garantir compatibilidade (primeira letra maiúscula)
+    const normalizedLiquidity = liquidity.charAt(0).toUpperCase() + liquidity.slice(1).toLowerCase();
+    const cacheKey = `${period}-${normalizedLiquidity}`;
+    
+    // Verificar cache primeiro
+    if (rateCache[cacheKey] !== undefined) {
+      const cachedRate = rateCache[cacheKey];
+      console.log(`[InvestmentSimulator] Taxa do cache para ${period} meses, ${normalizedLiquidity}:`, cachedRate, `(${(cachedRate * 100).toFixed(2)}%)`);
+      return cachedRate;
+    }
+    
+    // Usar user_type_id do investidor (filho), não do usuário logado
+    if (!investorUserTypeId) {
+      console.error("[InvestmentSimulator] investorUserTypeId não disponível");
+      return 0;
+    }
+
+    try {
+      // Usar função centralizada que busca: investor_user_type_id -> user_types.rentability_id -> get_rentability_config
+      // Isso garante que estamos usando a rentabilidade do investidor, não do assessor/escritório
+      // A função getRateFromDB retorna em DECIMAL (ex: 0.0145 para 1.45%)
+      const rate = await getRateFromDB(investorUserTypeId, period, normalizedLiquidity);
+      console.log(`[InvestmentSimulator] Taxa obtida do banco para ${period} meses, ${normalizedLiquidity}:`, rate, `(${(rate * 100).toFixed(2)}%)`);
+      
+      // Garantir que a taxa está em formato decimal (não porcentagem)
+      // Se a taxa for maior que 1, provavelmente está em porcentagem e precisa ser convertida
+      const finalRate = rate > 1 ? rate / 100 : rate;
+      
+      if (finalRate > 0) {
+        setRateCache((prev) => ({ ...prev, [cacheKey]: finalRate }));
+        return finalRate;
+      }
+      
+      console.warn("[InvestmentSimulator] Taxa não encontrada para período", period, "e liquidez", normalizedLiquidity);
+      return 0;
+    } catch (error) {
+      console.error("[InvestmentSimulator] Erro ao buscar rentabilidade:", error);
+      return 0;
+    }
   };
 
-  // Função para obter opções de liquidez disponíveis baseadas no prazo
+  // Função para obter opções de liquidez disponíveis baseadas no prazo e na configuração de rentabilidade
   const getAvailableLiquidityOptions = (period: number): string[] => {
-    const options: { [key: string]: string[] } = {
-      "3": ["mensal"],
-      "6": ["mensal", "semestral"],
-      "12": ["mensal", "semestral", "anual"],
-      "24": ["mensal", "semestral", "anual", "bienal"],
-      "36": ["mensal", "semestral", "anual", "bienal", "trienal"],
-    };
+    // Se não tiver configuração de rentabilidade, retornar array vazio
+    if (!rentabilityConfig || !rentabilityConfig.periods) {
+      return [];
+    }
 
-    return options[period.toString()] || [];
+    // Encontrar período correspondente
+    const periodConfig = rentabilityConfig.periods.find((p) => p.months === period);
+    if (!periodConfig || !periodConfig.rates) {
+      return [];
+    }
+
+    // Mapear as chaves de rates disponíveis para nomes de liquidez
+    const availableLiquidity: string[] = [];
+    
+    // Mapeamento reverso: rate key -> nome de liquidez
+    if (periodConfig.rates.monthly !== undefined && periodConfig.rates.monthly !== null) {
+      availableLiquidity.push("mensal");
+    }
+    if (periodConfig.rates.semiannual !== undefined && periodConfig.rates.semiannual !== null) {
+      availableLiquidity.push("semestral");
+    }
+    if (periodConfig.rates.annual !== undefined && periodConfig.rates.annual !== null) {
+      availableLiquidity.push("anual");
+    }
+    if (periodConfig.rates.biennial !== undefined && periodConfig.rates.biennial !== null) {
+      availableLiquidity.push("bienal");
+    }
+    if (periodConfig.rates.triennial !== undefined && periodConfig.rates.triennial !== null) {
+      availableLiquidity.push("trienal");
+    }
+
+    return availableLiquidity;
   };
 
-  const calculateReturns = () => {
+  const calculateReturns = async () => {
     const investmentAmount = Number.parseFloat(amount);
     const period = Number.parseInt(commitmentPeriod);
     const selectedLiquidity = liquidity;
 
     if (!investmentAmount || !period || !selectedLiquidity) return;
 
-    // Obter a taxa baseada no prazo e liquidez selecionados
-    const monthlyRate = getRateByPeriodAndLiquidity(period, selectedLiquidity);
+    // Obter a taxa baseada no prazo e liquidez selecionados (assíncrono)
+    // A função getRateByPeriodAndLiquidity já retorna em decimal (0.0155 para 1.55%)
+    const monthlyRate = await getRateByPeriodAndLiquidity(period, selectedLiquidity);
 
     if (monthlyRate === 0) return;
 
@@ -168,7 +386,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
 
   if (isDistributorVersion) {
     return (
-      <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg relative overflow-hidden">
+      <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg relative overflow-hidden h-full">
         {/* Calculator Icon Background */}
         <div className="absolute right-0 top-0 bottom-0 opacity-10 flex items-center justify-center overflow-hidden pointer-events-none z-0">
           <Calculator className="h-[90%] w-auto text-white" style={{ transform: 'translateX(20%)' }} />
@@ -184,35 +402,37 @@ export function InvestmentSimulator({ title }: { title?: string }) {
         </CardHeader>
         
         <CardContent className="space-y-6 relative z-10">
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="amount" className="text-white">
-                Valor do Investimento
-              </Label>
-              <Input
-                id="amount"
-                type="number"
-                placeholder="5000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                min="5000"
-                className="bg-[#D9D9D9]/45 border-gray-300 text-[#003F28]"
-              />
-              <p className="text-xs text-white/70">
-                Mínimo: R$ 5.000,00
-              </p>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="amount" className="text-white">
+              Valor do Investimento
+            </Label>
+            <Input
+              id="amount"
+              type="number"
+              placeholder="5000"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              min="5000"
+              className="bg-[#D9D9D9]/45 border-gray-300 text-[#003F28]"
+            />
+            <p className="text-xs text-white/70">
+              Mínimo: R$ 5.000,00
+            </p>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="commitment" className="text-white">
-                  Prazo
-                </Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="commitment" className="text-white">
+                Prazo
+              </Label>
                 <Select
                   value={commitmentPeriod}
                   onValueChange={(value) => {
                     setCommitmentPeriod(value);
-                    setLiquidity(""); // Reset liquidez quando mudar o prazo
+                    // Reset liquidez quando mudar o prazo
+                    setLiquidity("");
+                    // Limpar resultados quando mudar o prazo
+                    setResults(null);
                   }}
                 >
                   <SelectTrigger className="bg-[#D9D9D9]/45 border-gray-300 text-[#003F28]">
@@ -226,12 +446,12 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                     <SelectItem value="36">36 meses</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="liquidity" className="text-white">
-                  Liquidez da Rentabilidade
-                </Label>
+            <div className="space-y-2">
+              <Label htmlFor="liquidity" className="text-white">
+                Liquidez da Rentabilidade
+              </Label>
                 <Select 
                   value={liquidity} 
                   onValueChange={setLiquidity}
@@ -241,24 +461,25 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                     <SelectValue placeholder="Selecione a liquidez" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option.charAt(0).toUpperCase() + option.slice(1)}
-                      </SelectItem>
-                    ))}
+                    {commitmentPeriod ? (
+                      (() => {
+                        const availableOptions = getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod));
+                        if (availableOptions.length > 0) {
+                          return availableOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option.charAt(0).toUpperCase() + option.slice(1)}
+                            </SelectItem>
+                          ));
+                        } else {
+                          // Se não houver opções, não renderizar nenhum item
+                          return null;
+                        }
+                      })()
+                    ) : null}
                   </SelectContent>
                 </Select>
-              </div>
             </div>
           </div>
-
-          <Button 
-            onClick={calculateReturns} 
-            className="w-full bg-[#01223F] hover:bg-[#01223F]/80 text-white"
-          >
-            <Calculator className="h-4 w-4 mr-2" />
-            Calcular Retornos
-          </Button>
 
           {results && (
             <div className="space-y-4">
@@ -271,7 +492,12 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                   Prazo: {commitmentPeriod} meses | Liquidez: {liquidity.charAt(0).toUpperCase() + liquidity.slice(1)}
                 </p>
                 <p className="text-lg font-bold text-[#00BC6E]">
-                  {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                  {(() => {
+                    const normalizedLiquidity = liquidity.charAt(0).toUpperCase() + liquidity.slice(1).toLowerCase();
+                    const cachedRate = rateCache[`${commitmentPeriod}-${normalizedLiquidity}`] || 0;
+                    // A taxa já está em decimal, multiplicar por 100 para exibir como porcentagem
+                    return (cachedRate * 100).toFixed(2);
+                  })()}% a.m.
                 </p>
               </div>
 
@@ -387,25 +613,26 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                   <SelectValue placeholder="Selecione a liquidez" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option.charAt(0).toUpperCase() + option.slice(1)}
-                    </SelectItem>
-                  ))}
+                  {commitmentPeriod ? (
+                    (() => {
+                      const availableOptions = getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod));
+                      if (availableOptions.length > 0) {
+                        return availableOptions.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option.charAt(0).toUpperCase() + option.slice(1)}
+                          </SelectItem>
+                        ));
+                      } else {
+                        // Se não houver opções, não renderizar nenhum item
+                        return null;
+                      }
+                    })()
+                  ) : null}
                 </SelectContent>
               </Select>
             </div>
           </div>
         </div>
-
-        <Button 
-          onClick={calculateReturns} 
-          className="bg-[#003562] hover:bg-[#003562]/80 text-white font-ibm-plex-sans font-bold text-lg py-3"
-          style={{ width: '511px' }}
-        >
-          <Calculator className="h-4 w-4 mr-2" />
-          Calcular Retornos
-        </Button>
 
         {results && (
           <div className="space-y-6">
@@ -418,7 +645,12 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                 Prazo: {commitmentPeriod} meses | Liquidez: {liquidity.charAt(0).toUpperCase() + liquidity.slice(1)}
               </p>
               <p className="text-lg font-bold text-[#00FF88]">
-                {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                {(() => {
+                  const normalizedLiquidity = liquidity.charAt(0).toUpperCase() + liquidity.slice(1).toLowerCase();
+                  const cachedRate = rateCache[`${commitmentPeriod}-${normalizedLiquidity}`] || 0;
+                  // A taxa já está em decimal, multiplicar por 100 para exibir como porcentagem
+                  return (cachedRate * 100).toFixed(1);
+                })()}% a.m.
               </p>
             </div>
 

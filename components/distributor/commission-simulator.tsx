@@ -6,62 +6,58 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Calculator } from "lucide-react"
-import { calculateRoleCommission } from "@/lib/commission-calculator"
+import { useUserType } from "@/hooks/useUserType"
+import { getCommissionRate } from "@/lib/commission-utils"
 
 export function CommissionSimulator() {
   const [capturedAmount, setCapturedAmount] = useState("")
-  const [user, setUser] = useState<any>(null)
   const [results, setResults] = useState<{
     monthlyCommission: number
     annualCommission: number
+    commissionRate: number
   } | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const { user_type_id, user_type, display_name } = useUserType()
 
-  useEffect(() => {
-    const userStr = localStorage.getItem("user")
-    if (userStr) {
-      const userData = JSON.parse(userStr)
-      setUser(userData)
-    }
-  }, [])
-
-  const calculateCommissions = () => {
+  const calculateCommissions = async () => {
     const amount = Number.parseFloat(capturedAmount)
-    if (!amount) return
-
-    const isExternalAdvisor = user?.role === "assessor_externo"
-
-    if (isExternalAdvisor) {
-      // Assessor externo: 2% ao mês
-      const monthlyCommission = amount * 0.02
-      const annualCommission = monthlyCommission * 12
-      setResults({
-        monthlyCommission,
-        annualCommission,
-      })
+    if (!amount || !user_type_id) {
+      console.warn("[CommissionSimulator] Valor ou user_type_id não disponível")
       return
     }
 
-    // Determinar role baseado no tipo de usuário (interno)
-    const userRole = user?.role === "investidor"
-      ? "investidor"
-      : user?.role === "escritorio"
-      ? "escritorio"
-      : "assessor"
+    setIsLoading(true)
+    try {
+      // Buscar taxa de comissão do banco (sempre usa período de 12 meses e liquidez mensal para comissões)
+      const commissionRate = await getCommissionRate(user_type_id, 12, "Mensal")
+      
+      if (commissionRate === 0) {
+        console.warn("[CommissionSimulator] Taxa de comissão não encontrada")
+        setIsLoading(false)
+        return
+      }
 
-    // Calcular comissão baseada no role do usuário (sem bônus)
-    const roleCalculation = calculateRoleCommission(amount, userRole, 12)
+      // Calcular comissão mensal e anual
+      // commissionRate já vem em decimal (ex: 0.02 para 2%)
+      const monthlyCommission = amount * commissionRate
+      const annualCommission = monthlyCommission * 12
 
-    setResults({
-      monthlyCommission: roleCalculation.monthlyCommission,
-      annualCommission: roleCalculation.totalCommission,
-    })
+      setResults({
+        monthlyCommission,
+        annualCommission,
+        commissionRate, // Taxa em decimal para exibição
+      })
+    } catch (error) {
+      console.error("[CommissionSimulator] Erro ao calcular comissões:", error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
-    <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
+    <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg h-full">
       <CardHeader className="pb-4">
-        <CardTitle className="text-[#003F28] text-xl font-bold flex items-center gap-2">
-          <Calculator className="h-5 w-5" />
+        <CardTitle className="text-[#003F28] text-xl font-bold mb-2">
           Simulador de Comissões
         </CardTitle>
         <CardDescription className="text-gray-600 text-sm mt-1">
@@ -85,23 +81,18 @@ export function CommissionSimulator() {
 
         <Button 
           onClick={calculateCommissions} 
-          className="w-full bg-[#01223F] hover:bg-[#01223F]/80 text-white"
+          disabled={isLoading || !user_type_id}
+          className="w-full bg-[#01223F] hover:bg-[#01223F]/80 text-white disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Calculator className="h-4 w-4 mr-2" />
-          Calcular Comissões
+          {isLoading ? "Calculando..." : "Calcular Comissões"}
         </Button>
 
         {results && (
           <div className="space-y-4">
             <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border border-gray-300">
               <p className="text-sm text-gray-600">
-                {user?.role === "assessor" || user?.role === "assessor_externo"
-                  ? "Comissão Mensal (Assessor)"
-                  : user?.role === "escritorio"
-                  ? "Comissão Mensal (Escritório)"
-                  : user?.role === "investidor"
-                  ? "Comissão Mensal (Investidor)"
-                  : "Comissão Mensal"}
+                Comissão Mensal {display_name ? `(${display_name})` : ""}
               </p>
               <div className="mt-1 text-2xl font-bold text-[#00BC6E]">
                 {new Intl.NumberFormat("pt-BR", {
@@ -110,14 +101,7 @@ export function CommissionSimulator() {
                 }).format(results.monthlyCommission)}
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                Equivalente a{" "}
-                {user?.role === "investidor"
-                  ? "2% a.m."
-                  : user?.role === "escritorio"
-                  ? "1% a.m."
-                  : user?.role === "assessor_externo"
-                  ? "2% a.m."
-                  : "3% a.m."}
+                Equivalente a {(results.commissionRate * 100).toFixed(2)}% a.m.
               </p>
             </div>
 
@@ -138,20 +122,13 @@ export function CommissionSimulator() {
         <div className="bg-[#D9D9D9]/45 p-4 rounded-lg border border-gray-300">
           <h4 className="font-semibold mb-2 text-[#003F28]">Estrutura de Comissões:</h4>
           <div className="text-sm text-gray-600">
-            {user?.role === "investidor" ? (
-              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Investidor):</span> 2% ao mês sobre valor investido</p>
-            ) : user?.role === "escritorio" ? (
-              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Escritório):</span> 1% ao mês sobre valor investido</p>
-            ) : user?.role === "assessor" ? (
-              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Assessor):</span> 3% ao mês sobre valor investido</p>
-            ) : user?.role === "assessor_externo" ? (
-              <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Assessor):</span> 2% ao mês sobre valor investido</p>
+            {results ? (
+              <p>
+                • <span className="font-medium text-[#003F28]">Sua Comissão {display_name ? `(${display_name})` : ""}:</span>{" "}
+                {(results.commissionRate * 100).toFixed(2)}% ao mês sobre valor investido
+              </p>
             ) : (
-              <div className="space-y-1">
-                <p>• <span className="font-medium text-[#003F28]">Investidor:</span> 2% ao mês sobre valor investido</p>
-                <p>• <span className="font-medium text-[#003F28]">Escritório:</span> 1% ao mês sobre valor investido</p>
-                <p>• <span className="font-medium text-[#003F28]">Assessor:</span> 3% ao mês sobre valor investido</p>
-              </div>
+              <p className="text-gray-500">Calcule as comissões para ver sua estrutura</p>
             )}
           </div>
         </div>

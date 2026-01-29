@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { checkIsAdmin, checkIsAdvisor, checkIsDistributor } from "@/lib/permission-utils"
 
 export const dynamic = "force-dynamic"
 
@@ -41,23 +42,32 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Verificar permissões
+    // Verificar permissões usando APENAS user_type_id
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type, role, parent_id, office_id")
+      .select("user_type_id, parent_id, office_id")
       .eq("id", user.id)
       .single()
 
     console.log("🔍 [DEBUG] Perfil do usuário logado (download):", profile);
     console.log("🔍 [DEBUG] Contract investor_id (download):", contract.investor_id);
 
-    // Verificar se é admin
-    const isAdmin = profile?.user_type === 'admin';
-    const isDistributor = profile?.user_type === 'distributor';
+    if (!profile || !profile.user_type_id) {
+      return NextResponse.json(
+        { success: false, error: "Perfil sem user_type_id configurado" },
+        { status: 403 }
+      )
+    }
+
+    // Verificar tipos usando sistema dinâmico
+    const isAdmin = await checkIsAdmin(supabase, user.id);
+    const isDistributor = await checkIsDistributor(supabase, user.id);
+    const isAdvisor = await checkIsAdvisor(supabase, user.id);
     
-    // Verificar se é assessor e se o investidor é seu cliente
-    const isAdvisor = profile?.user_type === 'distributor' && (profile?.role === 'assessor' || profile?.role === 'assessor_externo');
-    const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio';
+    // Buscar user_type para verificar se é office
+    const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+    const userTypeData = await getUserTypeFromId(profile.user_type_id);
+    const isOffice = userTypeData?.user_type === 'office' || userTypeData?.name === 'office';
     
     // Verificar se o investidor pertence ao assessor/escritório
     let hasPermission = false;

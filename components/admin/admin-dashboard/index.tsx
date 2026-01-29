@@ -24,6 +24,7 @@ import { AdminCommissionsDetail } from "../admin-commissions-detail"
 import { useAdminDashboard } from "./useAdminDashboard"
 import { AdminContractsManager } from "../admin-contracts-manager"
 import { ClientsWithoutInvestments } from "../clients-without-investments"
+import { useUserType } from "@/hooks/useUserType"
 
 export function AdminDashboard() {
   const {
@@ -47,7 +48,25 @@ export function AdminDashboard() {
     formatCurrency,
   } = useAdminDashboard()
 
-  if (!user || user.user_type !== "admin") {
+  const { user_type: userTypeData, display_name, isLoading: isLoadingUserType } = useUserType(user?.id)
+
+  // Verificar se o usuário é admin usando user_type do hook
+  if (!user || isLoadingUserType) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="text-center py-8">
+            <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">Carregando...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Verificar se o user_type é "admin" usando APENAS o campo user_type da tabela user_types
+  const userTypeToCheck = userTypeData?.user_type
+  if (userTypeToCheck !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md">
@@ -82,7 +101,7 @@ export function AdminDashboard() {
           </div>
           <Badge variant="secondary" className="flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            Administrador
+            {display_name || userTypeData?.display_name || "Administrador"}
           </Badge>
         </div>
       </div>

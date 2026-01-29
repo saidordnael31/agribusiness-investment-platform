@@ -1,5 +1,7 @@
+import { getCommissionRate } from "./commission-utils"
+
 /**
- * Sistema de cálculo de comissões baseado em roles
+ * Sistema de cálculo de comissões baseado em rentabilidades do banco
  * 
  * REGRAS DE COMISSIONAMENTO:
  * - Pagamento sempre no quinto dia útil do mês
@@ -10,13 +12,16 @@
  *   Se não passaram 60 dias, a comissão no corte atual é zero (mas pode entrar em cortes futuros)
  * - Valor proporcional da comissão calculado para 30 dias corridos (apenas investidores)
  * - Pagamento no 5º dia útil do mês seguinte ao término do período
+ * 
+ * IMPORTANTE: Todas as taxas de comissão vêm do banco via user_type_id -> rentability_id
+ * NÃO há valores hardcoded - tudo é buscado dinamicamente
  */
 
 export interface CommissionRates {
-  investidor: number;    // 2%
-  escritorio: number;  // 1%
-  assessor: number;    // 3%
-  distribuidor: number; // 1%
+  investidor: number
+  escritorio: number
+  assessor: number
+  distribuidor: number
 }
 
 export type LiquidityOption = "mensal" | "semestral" | "anual" | "bienal" | "trienal";
@@ -124,11 +129,18 @@ export function getRedemptionWindow(commitmentPeriod: number): { months: number;
   };
 }
 
+/**
+ * DEPRECATED: Não usar mais COMMISSION_RATES hardcoded
+ * Use getCommissionRate() de lib/commission-utils.ts para buscar do banco
+ * 
+ * Mantido apenas para compatibilidade durante migração
+ * TODO: Remover após migração completa
+ */
 export const COMMISSION_RATES: CommissionRates = {
-  investidor: 0.02,    // 2%
-  escritorio: 0.01,  // 1%
-  assessor: 0.03,    // 3%
-  distribuidor: 0.01, // 1%
+  investidor: 0.02,    // DEPRECATED - usar getCommissionRate()
+  escritorio: 0.01,  // DEPRECATED - usar getCommissionRate()
+  assessor: 0.03,    // DEPRECATED - usar getCommissionRate()
+  distribuidor: 0.01, // DEPRECATED - usar getCommissionRate()
 };
 
 export interface CommissionCalculation {
@@ -148,13 +160,17 @@ export interface CommissionBreakdown {
 }
 
 /**
+ * DEPRECATED: Use calculateNewCommissionLogic() que busca taxas do banco
+ * 
  * Calcula comissão baseada no role do usuário
+ * Esta função ainda usa COMMISSION_RATES hardcoded - não usar mais
  */
 export function calculateRoleCommission(
   amount: number,
   userRole: keyof CommissionRates,
   months: number = 12
 ): CommissionCalculation {
+  console.warn("[DEPRECATED] calculateRoleCommission usa valores hardcoded. Use calculateNewCommissionLogic() com user_type_id")
   const roleRate = COMMISSION_RATES[userRole];
   const roleName = getRoleDisplayName(userRole);
   
@@ -174,10 +190,17 @@ export function calculateRoleCommission(
 /**
  * Calcula divisão de comissões entre todos os roles
  */
+/**
+ * DEPRECATED: Esta função usa valores hardcoded
+ * Para calcular comissões, use calculateNewCommissionLogic() que busca do banco
+ * 
+ * Calcula divisão de comissões entre todos os roles
+ */
 export function calculateCommissionBreakdown(
   amount: number,
   months: number = 12
 ): CommissionBreakdown {
+  console.warn("[DEPRECATED] calculateCommissionBreakdown usa valores hardcoded. Use calculateNewCommissionLogic() com user_type_id")
   const investidorCommission = amount * COMMISSION_RATES.investidor * months;
   const escritorioCommission = amount * COMMISSION_RATES.escritorio * months;
   const assessorCommission = amount * COMMISSION_RATES.assessor * months;
@@ -489,6 +512,9 @@ export interface NewCommissionCalculation {
   advisorCommission: number;
   officeCommission: number;
   investorCommission: number;
+  advisorRate?: number; // Taxa real do assessor (em decimal, ex: 0.03 para 3%)
+  officeRate?: number; // Taxa real do escritório (em decimal, ex: 0.01 para 1%)
+  investorRate?: number; // Taxa real do investidor (em decimal)
   advisorId?: string;
   advisorName?: string;
   officeId?: string;
@@ -511,7 +537,7 @@ export interface NewCommissionCalculation {
  * - ASSESSORES/DISTRIBUIDORES e ESCRITÓRIOS: Sem D+60, cálculo proporcional aos dias entre entrada e dia 20
  * - INVESTIDORES: D+60 para início do período de comissionamento + 30 dias corridos
  */
-export function calculateNewCommissionLogic(
+export async function calculateNewCommissionLogic(
   investment: {
     id: string;
     user_id: string;
@@ -523,11 +549,14 @@ export function calculateNewCommissionLogic(
     advisorId?: string;
     advisorName?: string;
     advisorRole?: string;
+    advisorUserTypeId?: number | null; // user_type_id do assessor
     officeId?: string;
     officeName?: string;
+    officeUserTypeId?: number | null; // user_type_id do escritório
+    investorUserTypeId?: number | null; // user_type_id do investidor
     isForAdvisor?: boolean; // Flag para identificar se é cálculo para assessor
   }
-): NewCommissionCalculation {
+): Promise<NewCommissionCalculation> {
   // Converter payment_date para Date, tratando diferentes formatos
   // IMPORTANTE: Usar UTC para evitar problemas de timezone
   let paymentDate: Date;
@@ -598,6 +627,62 @@ export function calculateNewCommissionLogic(
     else liquidityOption = "mensal";
   }
   const liquidityCycleMonths = getLiquidityCycleMonths(liquidityOption);
+  
+  // Buscar taxas de comissão do banco via user_type_id -> rentability_id
+  // Se não tiver user_type_id fornecido, tentar buscar do perfil
+  const { createClient } = await import("@/lib/supabase/client")
+  const supabase = createClient()
+  
+  // Buscar user_type_id dos perfis se não foram fornecidos
+  let advisorUserTypeId = investment.advisorUserTypeId
+  let officeUserTypeId = investment.officeUserTypeId
+  let investorUserTypeId = investment.investorUserTypeId
+  
+  if (!advisorUserTypeId && investment.advisorId) {
+    const { data: advisorProfile } = await supabase
+      .from("profiles")
+      .select("user_type_id")
+      .eq("id", investment.advisorId)
+      .single()
+    advisorUserTypeId = advisorProfile?.user_type_id || null
+  }
+  
+  if (!officeUserTypeId && investment.officeId) {
+    const { data: officeProfile } = await supabase
+      .from("profiles")
+      .select("user_type_id")
+      .eq("id", investment.officeId)
+      .single()
+    officeUserTypeId = officeProfile?.user_type_id || null
+  }
+  
+  if (!investorUserTypeId && investment.user_id) {
+    const { data: investorProfile } = await supabase
+      .from("profiles")
+      .select("user_type_id")
+      .eq("id", investment.user_id)
+      .single()
+    investorUserTypeId = investorProfile?.user_type_id || null
+  }
+  
+  // Normalizar liquidez do investimento
+  const normalizedLiquidity = investment.liquidity 
+    ? investment.liquidity.toLowerCase() === "mensal" ? "Mensal"
+      : investment.liquidity.toLowerCase() === "semestral" || investment.liquidity.toLowerCase() === "semiannual" ? "Semestral"
+      : investment.liquidity.toLowerCase() === "anual" || investment.liquidity.toLowerCase() === "annual" ? "Anual"
+      : investment.liquidity.toLowerCase() === "bienal" || investment.liquidity.toLowerCase() === "biennial" ? "Bienal"
+      : investment.liquidity.toLowerCase() === "trienal" || investment.liquidity.toLowerCase() === "triennial" ? "Trienal"
+      : "Mensal" // Fallback
+    : "Mensal" // Fallback
+  
+  // Buscar taxas de comissão do banco
+  // Para assessor e escritório: sempre usar liquidez mensal (comissões são sempre mensais)
+  // Para investidor: usar a liquidez real do investimento para calcular a rentabilidade correta
+  const [advisorRate, officeRate, investorRate] = await Promise.all([
+    getCommissionRate(advisorUserTypeId, commitmentPeriod, "Mensal"),
+    getCommissionRate(officeUserTypeId, commitmentPeriod, "Mensal"),
+    getCommissionRate(investorUserTypeId, commitmentPeriod, normalizedLiquidity),
+  ])
   
   let cutoffPeriod: { year: number; month: number; cutoffDate: Date };
   let commissionPeriod: { startDate: Date; endDate: Date };
@@ -735,12 +820,19 @@ export function calculateNewCommissionLogic(
       ) + 1; // +1 para incluir o dia do corte
       const daysDiff = Math.max(0, rawDaysDiff);
       
-      // Taxa do assessor: 3% padrão, 2% para assessor_externo
-      const advisorBaseRate =
-        investment.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor;
-      // Taxa diária do assessor
+      // Taxa do assessor vem do banco (rentabilidade do assessor)
+      // Se for assessor_externo, buscar seu próprio user_type_id e rentabilidade
+      let advisorBaseRate = advisorRate
+      if (investment.advisorRole === "assessor_externo" && investment.advisorUserTypeId) {
+        // Buscar rentabilidade específica do assessor externo
+        advisorBaseRate = await getCommissionRate(investment.advisorUserTypeId, commitmentPeriod, "Mensal")
+      }
+      // Armazenar a taxa real usada para o assessor
+      const finalAdvisorRate = advisorBaseRate
+      
+      // Taxa diária do assessor e escritório (baseadas nas rentabilidades do banco)
       const dailyRateAdvisor = advisorBaseRate / 30;
-      const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
+      const dailyRateOffice = officeRate / 30;
       
     // Comissão proporcional: taxa diária * dias acumulados
       const proportionalRateAdvisor = dailyRateAdvisor * daysDiff;
@@ -773,7 +865,7 @@ export function calculateNewCommissionLogic(
       const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
       const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
       
-      investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+      investorCommission = calculateProportionalCommission(investment.amount, investorRate, daysInPeriod);
     } else {
       // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
       investorCommission = 0;
@@ -795,8 +887,8 @@ export function calculateNewCommissionLogic(
     // Calcular comissão mensal completa para cada mês futuro
     // Comissão mensal = valor * taxa mensal (assessorBaseRate para assessor, 1% para escritório, 2% para investidor)
     const monthlyAdvisorCommission = investment.amount * advisorBaseRate;
-    const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
-    const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+    const monthlyOfficeCommission = investment.amount * officeRate;
+    const monthlyInvestorCommission = investment.amount * investorRate;
       
       // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
       // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
@@ -905,10 +997,10 @@ export function calculateNewCommissionLogic(
       const rawDaysDiff = Math.floor((cutoffDateMidnight.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       const daysDiff = Math.max(0, rawDaysDiff);
     
-    // Taxa diária
-    const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
-    const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
-    const dailyRateInvestor = COMMISSION_RATES.investidor / 30;
+    // Taxa diária (baseadas nas rentabilidades do banco)
+    const dailyRateAdvisor = advisorRate / 30;
+    const dailyRateOffice = officeRate / 30;
+    const dailyRateInvestor = investorRate / 30;
     
     // Comissão proporcional: taxa diária * dias acumulados
     const proportionalRateAdvisor = dailyRateAdvisor * daysDiff;
@@ -942,7 +1034,7 @@ export function calculateNewCommissionLogic(
       const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
       const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
       
-      investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+      investorCommission = calculateProportionalCommission(investment.amount, investorRate, daysInPeriod);
     } else {
       // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
       investorCommission = 0;
@@ -952,10 +1044,10 @@ export function calculateNewCommissionLogic(
     paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
     
     // Calcular comissão mensal completa para cada mês futuro
-    // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório, 2% para investidor)
-    const monthlyAdvisorCommission = investment.amount * COMMISSION_RATES.assessor;
-    const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
-    const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+    // Comissão mensal = valor * taxa mensal (vem do banco via rentabilidade)
+    const monthlyAdvisorCommission = investment.amount * advisorRate;
+    const monthlyOfficeCommission = investment.amount * officeRate;
+    const monthlyInvestorCommission = investment.amount * investorRate;
     
     // Período de comissionamento: do dia da entrada até o corte atual (para cálculo)
     commissionPeriod = {
@@ -1033,13 +1125,24 @@ export function calculateNewCommissionLogic(
       
     // Descrição simplificada focada apenas na comissão do escritório
     const roleName = investment.officeName || 'Escritório';
-    const roleRate = COMMISSION_RATES.escritorio;
+    const roleRate = officeRate;
     
     description = `Comissão de ${roleName} calculada sobre investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
       `Taxa de comissão: ${(roleRate * 100).toFixed(0)}% ao mês. ` +
       `A comissão é calculada proporcionalmente aos dias desde a entrada do investimento até o próximo corte (dia 20). ` +
       `A partir do segundo mês, a comissão será fixa de ${(roleRate * 100).toFixed(0)}% ao mês. ` +
       `Pagamento mensal no 5º dia útil de cada mês durante ${commitmentPeriod} meses.`;
+  }
+  
+  // Determinar qual taxa usar para retornar (assessor ou escritório)
+  // Se for assessor, usar a taxa do assessor; se for escritório, não retornar advisorRate
+  let finalAdvisorRate: number | undefined
+  if (isForAdvisor) {
+    if (investment.advisorRole === "assessor_externo" && investment.advisorUserTypeId) {
+      finalAdvisorRate = await getCommissionRate(investment.advisorUserTypeId, commitmentPeriod, "Mensal")
+    } else {
+      finalAdvisorRate = advisorRate
+    }
   }
   
   return {
@@ -1054,6 +1157,9 @@ export function calculateNewCommissionLogic(
     advisorCommission,
     officeCommission,
     investorCommission,
+    advisorRate: finalAdvisorRate,
+    officeRate: officeRate,
+    investorRate: investorRate,
     advisorId: investment.advisorId,
     advisorName: investment.advisorName,
     officeId: investment.officeId,

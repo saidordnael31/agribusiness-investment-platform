@@ -13,11 +13,11 @@
   --popover-foreground: oklch(0.556 0.014 258.338); /* #475569 - Text color in popovers for readability */
   --primary: oklch(0.398 0.076 200.975); /* #164e63 - Use for call-to-action buttons */
   --primary-foreground: oklch(1 0 0); /* #ffffff - Text color for buttons */
-  --secondary: oklch(0.627 0.265 303.9); /* #8b5cf6 - Use for secondary buttons or highlights */
+  --secondary: oklch(0.7 0.15 160); /* #00BC6E - Use for secondary buttons or highlights */
   --secondary-foreground: oklch(1 0 0); /* #ffffff - Text color for secondary elements */
   --muted: oklch(0.985 0.002 247.858); /* #f9fafb - Background for muted elements */
   --muted-foreground: oklch(0.556 0.014 258.338); /* #475569 - Text for muted elements */
-  --accent: oklch(0.627 0.265 303.9); /* #8b5cf6 - Highlight important information */
+  --accent: oklch(0.7 0.15 160); /* #00BC6E - Highlight important information */
   --accent-foreground: oklch(1 0 0); /* #ffffff - Text color for accents */
   --destructive: oklch(0.577 0.245 27.325); /* #e53e3e - Color for error messages */
   --destructive-foreground: oklch(1 0 0); /* #ffffff - Text color for error messages */
@@ -27,14 +27,14 @@
   --chart-1: oklch(0.269 0.015 255.605); /* #1f2937 - Primary chart color */
   --chart-2: oklch(0.398 0.016 254.139); /* #4b5563 - Secondary chart color */
   --chart-3: oklch(0.59 0.121 200.975); /* #0891b2 - Tertiary chart color */
-  --chart-4: oklch(0.627 0.265 303.9); /* #8b5cf6 - Quaternary chart color */
+  --chart-4: oklch(0.7 0.15 160); /* #00BC6E - Quaternary chart color */
   --chart-5: oklch(0.984 0.013 180.695); /* #ecfeff - Quintary chart color */
   --radius: 0.5rem; /* Corner rounding for buttons and cards */
   --sidebar: oklch(1 0 0); /* #ffffff - Sidebar background */
   --sidebar-foreground: oklch(0.556 0.014 258.338); /* #475569 - Sidebar text color */
   --sidebar-primary: oklch(0.398 0.076 200.975); /* #164e63 - Primary color for sidebar elements */
   --sidebar-primary-foreground: oklch(1 0 0); /* #ffffff - Text color for sidebar primary */
-  --sidebar-accent: oklch(0.627 0.265 303.9); /* #8b5cf6 - Accent color for sidebar elements */
+  --sidebar-accent: oklch(0.7 0.15 160); /* #00BC6E - Accent color for sidebar elements */
   --sidebar-accent-foreground: oklch(1 0 0); /* #ffffff - Text color for sidebar accents */
   --sidebar-border: oklch(0.922 0.013 220.0); /* #e2e8f0 - Border color for sidebar */
   --sidebar-ring: oklch(0.398 0.076 200.975 / 0.5); /* rgba(22, 78, 99, 0.5) - Ring color for sidebar focus */
@@ -63,7 +63,7 @@
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-4: oklch(0.7 0.15 160);
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);

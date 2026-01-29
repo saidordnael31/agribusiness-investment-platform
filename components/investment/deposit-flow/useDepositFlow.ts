@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
+import { getRateByPeriodAndLiquidity as getRateFromDB } from "@/lib/rentability-utils";
+import { useUserType } from "@/hooks/useUserType";
 
 export interface Investment {
   id: string;
@@ -37,6 +39,9 @@ export function useDepositFlow() {
   const [allInvestmentsReturn, setAllInvestmentsReturn] = useState(0);
   const [allInvestmentsValue, setAllInvestmentsValue] = useState(0);
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
+  
+  // Usar hook para obter user_type_id
+  const { user_type_id } = useUserType(user?.id);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -114,6 +119,9 @@ export function useDepositFlow() {
 
     const supabase = createClient();
 
+    // Obter taxa de rentabilidade dinamicamente
+    const monthlyRate = await getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity);
+    
     const { data: investmentData, error: investmentError } = await supabase.rpc(
       "create_investment_for_user",
       {
@@ -121,7 +129,7 @@ export function useDepositFlow() {
         p_amount: Number(depositAmount),
         p_status: "pending",
         p_quota_type: "senior",
-        p_monthly_return_rate: getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity),
+        p_monthly_return_rate: monthlyRate,
         p_commitment_period: Number(commitmentPeriod),
         p_profitability_liquidity: liquidity,
       }
@@ -211,67 +219,26 @@ export function useDepositFlow() {
     return newTotal * rate;
   };
 
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
-    // Tabela padrão de rentabilidade (investidores em geral)
-    const defaultRates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        "Mensal": 0.018, // 1,8%
-      },
-      "6": {
-        "Mensal": 0.019, // 1,9%
-        "Semestral": 0.02, // 2,0%
-      },
-      "12": {
-        "Mensal": 0.021, // 2,1%
-        "Semestral": 0.022, // 2,2%
-        "Anual": 0.025, // 2,5%
-      },
-      "24": {
-        "Mensal": 0.023, // 2,3%
-        "Semestral": 0.025, // 2,5%
-        "Anual": 0.027, // 2,7%
-        "Bienal": 0.03, // 3,0%
-      },
-      "36": {
-        "Mensal": 0.024, // 2,4%
-        "Semestral": 0.026, // 2,6%
-        "Anual": 0.03, // 3,0%
-        "Bienal": 0.032, // 3,2%
-        "Trienal": 0.035, // 3,5%
-      },
-    };
+  // Função para obter rentabilidade usando APENAS user_type_id -> rentability_id -> função get
+  const getRateByPeriodAndLiquidity = async (period: number, liquidity: string): Promise<number> => {
+    if (!user_type_id) {
+      console.error("[useDepositFlow] user_type_id não disponível");
+      return 0;
+    }
 
-    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
-    const externalAdvisorRates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        "Mensal": 0.0135, // 1,35%
-      },
-      "6": {
-        "Mensal": 0.014, // 1,40%
-        "Semestral": 0.0145, // 1,45%
-      },
-      "12": {
-        "Mensal": 0.015, // 1,50%
-        "Semestral": 0.0155, // 1,55%
-        "Anual": 0.016, // 1,60%
-      },
-      "24": {
-        "Mensal": 0.0165, // 1,65%
-        "Semestral": 0.017, // 1,70%
-        "Anual": 0.0175, // 1,75%
-        "Bienal": 0.018, // 1,80%
-      },
-      "36": {
-        "Mensal": 0.0185, // 1,85%
-        "Semestral": 0.019, // 1,90%
-        "Bienal": 0.0195, // 1,95%
-        "Trienal": 0.02, // 2,00%
-      },
-    };
-
-    const table = isExternalAdvisorInvestor ? externalAdvisorRates : defaultRates;
-
-    return table[period.toString()]?.[liquidity] || 0;
+    try {
+      // Usar função centralizada que busca: user_type_id -> user_types.rentability_id -> get_rentability_config
+      const rate = await getRateFromDB(user_type_id, period, liquidity);
+      if (rate > 0) {
+        return rate;
+      }
+      
+      console.warn("[useDepositFlow] Taxa não encontrada para período", period, "e liquidez", liquidity);
+      return 0;
+    } catch (error) {
+      console.error("[useDepositFlow] Erro ao buscar rentabilidade:", error);
+      return 0;
+    }
   };
 
   const getAvailableLiquidityOptions = (period: number): string[] => {
@@ -306,6 +273,30 @@ export function useDepositFlow() {
 
   const canContinue = depositAmount && Number(depositAmount) >= 5000 && commitmentPeriod && liquidity;
 
+  // Cache de taxas carregadas para uso síncrono
+  const [rateCache, setRateCache] = useState<Record<string, number>>({});
+  
+  // Carregar taxa quando commitmentPeriod ou liquidity mudarem
+  useEffect(() => {
+    if (commitmentPeriod && liquidity && user_type_id) {
+      const cacheKey = `${commitmentPeriod}-${liquidity}`;
+      if (!rateCache[cacheKey]) {
+        getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity).then((rate) => {
+          setRateCache((prev) => ({ ...prev, [cacheKey]: rate }));
+        }).catch((error) => {
+          console.warn("[useDepositFlow] Erro ao carregar taxa:", error);
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitmentPeriod, liquidity, user_type_id]);
+  
+  // Wrapper síncrono com cache para compatibilidade com código existente
+  const getRateByPeriodAndLiquiditySync = (period: number, liquidity: string): number => {
+    const cacheKey = `${period}-${liquidity}`;
+    return rateCache[cacheKey] || 0;
+  };
+
   return {
     user,
     step,
@@ -330,7 +321,8 @@ export function useDepositFlow() {
     copyPixCode,
     formatCurrency,
     calculateNewReturn,
-    getRateByPeriodAndLiquidity,
+    getRateByPeriodAndLiquidity: getRateByPeriodAndLiquiditySync, // Versão síncrona para compatibilidade
+    getRateByPeriodAndLiquidityAsync: getRateByPeriodAndLiquidity, // Versão assíncrona para novos usos
     getAvailableLiquidityOptions,
     handleCommitmentPeriodChange,
     handleCloseQRModal,

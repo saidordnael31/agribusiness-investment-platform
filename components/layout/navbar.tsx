@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useUserType } from "@/hooks/useUserType";
 
 interface UserData {
   id: string;
@@ -56,6 +57,18 @@ export function Navbar() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const pathname = usePathname();
   const { toast } = useToast();
+  
+  // Usar hook para obter informações do tipo de usuário
+  const { user_type_id, display_name, user_type: userTypeFromDB, isLoading: isLoadingUserType } = useUserType(user?.id);
+  
+  // Helper para verificar tipos usando user_type_id
+  // Verifica se o user_type (campo da tabela user_types) corresponde ao tipo solicitado
+  // IMPORTANTE: Usa apenas o campo user_type, não o name (slug)
+  const isUserType = (type: string): boolean => {
+    if (!userTypeFromDB || isLoadingUserType) return false;
+    // Comparar apenas pelo campo user_type (ex: "admin")
+    return userTypeFromDB.user_type === type;
+  };
 
   // Função para carregar usuário do localStorage
   const loadUser = () => {
@@ -153,44 +166,38 @@ export function Navbar() {
   const getUserTypeLabel = () => {
     if (!user) return "";
     
-    // Usar role se disponível, senão usar user_type como fallback
-    const role = user.role || user.user_type;
-    
-    // Formatar role para exibição
-    switch (role) {
-      case "investor":
-      case "investidor":
-        return "Investidor";
-      case "assessor":
-      case "assessor_externo":
-        return "Assessor";
-      case "escritorio":
-        return "Escritório";
-      case "distributor":
-      case "distribuidor":
-        return "Distribuidor";
-      case "admin":
-        return "Admin";
-      case "gestor":
-        return "Gestor";
-      case "lider":
-        return "Líder";
-      default:
-        // Capitalizar primeira letra se não houver match
-        return role.charAt(0).toUpperCase() + role.slice(1);
+    // Usar display_name da tabela user_types
+    if (display_name) {
+      return display_name;
     }
+    
+    // Fallback para display_name do userTypeFromDB
+    if (userTypeFromDB?.display_name) {
+      return userTypeFromDB.display_name;
+    }
+    
+    // Se não tiver display_name, retornar vazio (não deve acontecer se user_type_id estiver correto)
+    return "";
   };
 
   const getDashboardRoute = () => {
     if (!user) return "/";
-    switch (user.user_type) {
+    
+    // Usar APENAS o campo user_type da tabela user_types, não o name (slug)
+    const typeToCheck = userTypeFromDB?.user_type;
+    
+    if (!typeToCheck) {
+      return "/";
+    }
+    
+    switch (typeToCheck) {
       case "investor":
         return "/investor";
       case "admin":
         return "/admin";
       case "distributor":
       case "advisor":
-      case "assessor":
+      case "office":
       default:
         return "/distributor";
     }
@@ -200,18 +207,15 @@ export function Navbar() {
   const isPasswordResetPage = pathname === '/resetPassword' || pathname === '/newPassword';
   
   // Verificar se é distribuidor, assessor ou escritório
-  const isDistributorUser = user && (
-    user.user_type === "distributor" || 
-    user.user_type === "advisor" || 
-    user.user_type === "assessor" ||
-    user.role === "escritorio" ||
-    user.role === "assessor" ||
-    user.role === "assessor_externo" ||
-    user.role === "distribuidor"
+  // Verificar se é distribuidor usando user_type_id
+  const isDistributorUser = user && user_type_id && (
+    isUserType("distributor") || 
+    isUserType("advisor") || 
+    isUserType("office")
   );
   
   // Cor da navbar: #01223F para distribuidores/assessores/escritórios/investidores, #003F28 para outros
-  const navbarBgColor = (isDistributorUser || user?.user_type === "investor") ? 'bg-[#01223F]' : 'bg-[#003F28]';
+  const navbarBgColor = (isDistributorUser || isUserType("investor")) ? 'bg-[#01223F]' : 'bg-[#003F28]';
   
   return (
     <header 
@@ -231,7 +235,7 @@ export function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          {user && (
+          {user && !isLoadingUserType && (
             <NavigationMenu className="hidden md:flex">
               <NavigationMenuList>
                 <NavigationMenuItem>
@@ -251,7 +255,7 @@ export function Navbar() {
                 </NavigationMenuItem>
 
 
-                {user.user_type === "investor" && (
+                {isUserType("investor") && (
                   <>
                     <NavigationMenuItem>
                       <Link href="/deposit" legacyBehavior passHref>
@@ -289,10 +293,9 @@ export function Navbar() {
                   </>
                 )}
 
-                {(user.user_type === "distributor" ||
-                  user.user_type === "admin" ||
-                  user.user_type === "advisor" ||
-                  user.user_type === "assessor") && (
+                {(isUserType("distributor") ||
+                  isUserType("advisor") ||
+                  isUserType("office")) && (
                   <>
                     <NavigationMenuItem>
                       <Link href="/calculator" legacyBehavior passHref>
@@ -311,22 +314,24 @@ export function Navbar() {
                       </Link>
                     </NavigationMenuItem>
 
-                    <NavigationMenuItem>
-                      <Link href="/distributor/analises" legacyBehavior passHref>
-                        <NavigationMenuLink
-                          className={cn(
-                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
-                            "w-[138px] h-[41px] rounded-[11px]",
-                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
-                            isActive("/distributor/analises") 
-                              ? "bg-[#00BC6E] text-[#003F28]" 
-                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
-                          )}
-                        >
-                          Análises
-                        </NavigationMenuLink>
-                      </Link>
-                    </NavigationMenuItem>
+                    {isUserType("distributor") && (
+                      <NavigationMenuItem>
+                        <Link href="/distributor/analises" legacyBehavior passHref>
+                          <NavigationMenuLink
+                            className={cn(
+                              "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                              "w-[138px] h-[41px] rounded-[11px]",
+                              "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                              isActive("/distributor/analises") 
+                                ? "bg-[#00BC6E] text-[#003F28]" 
+                                : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
+                            )}
+                          >
+                            Análises
+                          </NavigationMenuLink>
+                        </Link>
+                      </NavigationMenuItem>
+                    )}
 
                     {/* <NavigationMenuItem>
                       <Link href="/bonifications" legacyBehavior passHref>
@@ -338,6 +343,43 @@ export function Navbar() {
                         </NavigationMenuLink>
                       </Link>
                     </NavigationMenuItem> */}
+                  </>
+                )}
+
+                {isUserType("admin") && (
+                  <>
+                    <NavigationMenuItem>
+                      <Link href="/admin/users" legacyBehavior passHref>
+                        <NavigationMenuLink
+                          className={cn(
+                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                            "w-[138px] h-[41px] rounded-[11px]",
+                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                            isActive("/admin/users") 
+                              ? "bg-[#00BC6E] text-[#003F28]" 
+                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
+                          )}
+                        >
+                          Usuários
+                        </NavigationMenuLink>
+                      </Link>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <Link href="/admin/usuarios" legacyBehavior passHref>
+                        <NavigationMenuLink
+                          className={cn(
+                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                            "w-[138px] h-[41px] rounded-[11px]",
+                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                            isActive("/admin/usuarios") 
+                              ? "bg-[#00BC6E] text-[#003F28]" 
+                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
+                          )}
+                        >
+                          Configurações
+                        </NavigationMenuLink>
+                      </Link>
+                    </NavigationMenuItem>
                   </>
                 )}
               </NavigationMenuList>
@@ -498,10 +540,10 @@ export function Navbar() {
                 </>
               )}
 
-              {(user.user_type === "distributor" ||
-                user.user_type === "admin" ||
-                user.user_type === "advisor" ||
-                user.user_type === "assessor") && (
+              {(isUserType("distributor") ||
+                isUserType("admin") ||
+                isUserType("advisor") ||
+                isUserType("office")) && (
                 <>
                   <Link
                     href="/calculator"
@@ -517,19 +559,52 @@ export function Navbar() {
                     Calculadora
                   </Link>
 
-                  <Link
-                    href="/distributor/analises"
-                    className={cn(
-                      "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
-                      isActive("/distributor/analises")
-                        ? "bg-accent text-white"
-                        : "text-white hover:text-white hover:bg-accent/80"
-                    )}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <BarChart3 className="h-5 w-5 mr-3 text-white" />
-                    Análises
-                  </Link>
+                  {user.role === "distribuidor" && (
+                    <Link
+                      href="/distributor/analises"
+                      className={cn(
+                        "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                        isActive("/distributor/analises")
+                          ? "bg-accent text-white"
+                          : "text-white hover:text-white hover:bg-accent/80"
+                      )}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <BarChart3 className="h-5 w-5 mr-3 text-white" />
+                      Análises
+                    </Link>
+                  )}
+
+                  {isUserType("admin") && (
+                    <>
+                      <Link
+                        href="/admin/users"
+                        className={cn(
+                          "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                          isActive("/admin/users")
+                            ? "bg-accent text-white"
+                            : "text-white hover:text-white hover:bg-accent/80"
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <User className="h-5 w-5 mr-3 text-white" />
+                        Usuários
+                      </Link>
+                      <Link
+                        href="/admin/usuarios"
+                        className={cn(
+                          "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                          isActive("/admin/usuarios")
+                            ? "bg-accent text-white"
+                            : "text-white hover:text-white hover:bg-accent/80"
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <Settings className="h-5 w-5 mr-3 text-white" />
+                        Configurações
+                      </Link>
+                    </>
+                  )}
                 </>
               )}
             </nav>

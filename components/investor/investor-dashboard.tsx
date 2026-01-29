@@ -15,6 +15,8 @@ import { InvestmentSimulator } from "./investment-simulator";
 import { InvestmentHistory } from "./investment-history";
 import { PerformanceChart } from "./performance-chart";
 import { createBrowserClient } from "@supabase/ssr";
+import { getRateByPeriodAndLiquidity as getRateFromDB } from "@/lib/rentability-utils";
+import { useUserType } from "@/hooks/useUserType";
 
 interface UserData {
   name: string;
@@ -46,6 +48,46 @@ interface TransactionHistoryItem {
   monthly_return_rate?: number | null;
 }
 
+// Componente para exibir taxa de rentabilidade (carrega assincronamente)
+function RateDisplay({ 
+  item, 
+  isExternalAdvisorInvestor, 
+  getRateByPeriodAndLiquidity 
+}: { 
+  item: TransactionHistoryItem; 
+  isExternalAdvisorInvestor: boolean;
+  getRateByPeriodAndLiquidity: (period: number, liquidity: string, isExternalAdvisor: boolean) => Promise<number>;
+}) {
+  const [displayRate, setDisplayRate] = useState<number | null>(item.monthly_return_rate || null);
+
+  useEffect(() => {
+    if (item.commitment_period && item.profitability_liquidity) {
+      getRateByPeriodAndLiquidity(
+        item.commitment_period,
+        item.profitability_liquidity,
+        isExternalAdvisorInvestor
+      ).then((rate) => {
+        if (rate > 0) {
+          setDisplayRate(rate);
+        }
+      }).catch(() => {
+        // Manter taxa original em caso de erro
+      });
+    }
+  }, [item.commitment_period, item.profitability_liquidity, isExternalAdvisorInvestor, getRateByPeriodAndLiquidity]);
+
+  if (!displayRate) return null;
+
+  return (
+    <div className="flex flex-row justify-between">
+      <span>Porcentagem de rentabilidade:</span>
+      <span className="font-semibold">
+        {(Number(displayRate) * 100).toFixed(2)}% a.m.
+      </span>
+    </div>
+  );
+}
+
 export function InvestorDashboard() {
   const [user, setUser] = useState<UserData | null>(null);
   const [investmentsData, setInvestmentsData] = useState<any[]>([]);
@@ -61,45 +103,30 @@ export function InvestorDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
+  
+  // Usar hook para obter user_type_id
+  const { user_type_id } = useUserType(user?.id);
 
-  // Função para obter a taxa correta baseada nas tabelas dinâmicas
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
-    // Tabela padrão de rentabilidade (investidores em geral)
-    const defaultRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.018 }, // 1,8%
-      6: { Mensal: 0.019, Semestral: 0.02 }, // 1,9% | 2,0%
-      12: { Mensal: 0.021, Semestral: 0.022, Anual: 0.025 }, // 2,1% | 2,2% | 2,5%
-      24: { Mensal: 0.023, Semestral: 0.025, Anual: 0.027, Bienal: 0.03 }, // 2,3% | 2,5% | 2,7% | 3,0%
-      36: {
-        Mensal: 0.024,
-        Semestral: 0.026,
-        Anual: 0.03,
-        Bienal: 0.032,
-        Trienal: 0.035,
-      }, // 2,4% | 2,6% | 3,0% | 3,2% | 3,5%
-    };
+  // Função para obter rentabilidade usando APENAS user_type_id -> rentability_id -> função get
+  const getRateByPeriodAndLiquidity = async (period: number, liquidity: string, isExternalAdvisor: boolean = false): Promise<number> => {
+    if (!user_type_id) {
+      console.error("[InvestorDashboard] user_type_id não disponível");
+      return 0;
+    }
 
-    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
-    const externalAdvisorRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.0135 }, // 1,35%
-      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
-      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
-      24: {
-        Mensal: 0.0165,
-        Semestral: 0.017,
-        Anual: 0.0175,
-        Bienal: 0.018,
-      }, // 1,65% | 1,70% | 1,75% | 1,80%
-      36: {
-        Mensal: 0.0185,
-        Semestral: 0.019,
-        Bienal: 0.0195,
-        Trienal: 0.02,
-      }, // 1,85% | 1,90% | 1,95% | 2,00%
-    };
-
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
-    return table[period]?.[liquidity] || 0;
+    try {
+      // Usar função centralizada que busca: user_type_id -> user_types.rentability_id -> get_rentability_config
+      const rate = await getRateFromDB(user_type_id, period, liquidity);
+      if (rate > 0) {
+        return rate;
+      }
+      
+      console.warn("[InvestorDashboard] Taxa não encontrada para período", period, "e liquidez", liquidity);
+      return 0;
+    } catch (error) {
+      console.error("[InvestorDashboard] Erro ao buscar rentabilidade:", error);
+      return 0;
+    }
   };
 
   const fetchTransactionHistory = async (userId: string) => {
@@ -239,10 +266,27 @@ export function InvestorDashboard() {
       const totalWithdrawals =
         withdrawalsRaw?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
 
+      // Carregar todas as taxas necessárias primeiro (assíncrono)
+      const ratePromises = investmentsRaw.map(async (inv) => {
+        const commitmentPeriod = inv.commitment_period || 12;
+        const liquidity = inv.profitability_liquidity || "Mensal";
+        const rate = await getRateByPeriodAndLiquidity(
+          commitmentPeriod,
+          liquidity,
+          isExternalAdvisorInvestor
+        );
+        return {
+          inv,
+          rate: rate || Number(inv.monthly_return_rate) || 0.02,
+        };
+      });
+      
+      const investmentsWithRates = await Promise.all(ratePromises);
+
       // Calcular rendimento acumulado de cada investimento
       // Considerando juros simples para "Mensal" e compostos para outras liquidezes
       let totalReturn = 0;
-      investmentsRaw.forEach((inv) => {
+      investmentsWithRates.forEach(({ inv, rate: monthlyRate }) => {
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
           : new Date(inv.created_at);
@@ -250,16 +294,8 @@ export function InvestorDashboard() {
           (today.getTime() - paymentDate.getTime()) /
             (1000 * 60 * 60 * 24 * 30)
         );
-
-        // Obter taxa correta das tabelas dinâmicas
-        const commitmentPeriod = inv.commitment_period || 12;
-        const liquidity = inv.profitability_liquidity || "Mensal";
-        const monthlyRate = getRateByPeriodAndLiquidity(
-          commitmentPeriod,
-          liquidity,
-          isExternalAdvisorInvestor
-        ) || Number(inv.monthly_return_rate) || 0.02;
         const amount = Number(inv.amount);
+        const liquidity = inv.profitability_liquidity || "Mensal";
 
         // Calcular resgates específicos deste investimento
         const investmentWithdrawals =
@@ -296,16 +332,9 @@ export function InvestorDashboard() {
       let currentValue = 0;
       let totalInvestedAfterWithdrawals = 0;
 
-      investmentsRaw.forEach((inv) => {
+      investmentsWithRates.forEach(({ inv, rate: monthlyRate }) => {
         const amount = Number(inv.amount);
-        // Obter taxa correta das tabelas dinâmicas
-        const commitmentPeriod = inv.commitment_period || 12;
         const liquidity = inv.profitability_liquidity || "Mensal";
-        const monthlyRate = getRateByPeriodAndLiquidity(
-          commitmentPeriod,
-          liquidity,
-          isExternalAdvisorInvestor
-        ) || Number(inv.monthly_return_rate) || 0.02;
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
           : new Date(inv.created_at);
@@ -374,16 +403,9 @@ export function InvestorDashboard() {
       // Para juros simples mensal: retorno mensal fixo sobre o valor original
       // Para juros compostos: retorno mensal sobre o valor atual
       let monthlyReturn = 0;
-      investmentsRaw.forEach((inv) => {
+      investmentsWithRates.forEach(({ inv, rate: monthlyRate }) => {
         const amount = Number(inv.amount);
-        // Obter taxa correta das tabelas dinâmicas
-        const commitmentPeriod = inv.commitment_period || 12;
         const liquidity = inv.profitability_liquidity || "Mensal";
-        const monthlyRate = getRateByPeriodAndLiquidity(
-          commitmentPeriod,
-          liquidity,
-          isExternalAdvisorInvestor
-        ) || Number(inv.monthly_return_rate) || 0.02;
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
           : new Date(inv.created_at);
@@ -661,33 +683,11 @@ export function InvestorDashboard() {
                             </div>
                           )}
                           
-                          {(() => {
-                            // Calcular a taxa correta baseada nas tabelas dinâmicas
-                            let displayRate = item.monthly_return_rate;
-                            
-                            // Se temos commitment_period e profitability_liquidity, usar a taxa das tabelas
-                            if (item.commitment_period && item.profitability_liquidity) {
-                              const expectedRate = getRateByPeriodAndLiquidity(
-                                item.commitment_period,
-                                item.profitability_liquidity,
-                                isExternalAdvisorInvestor
-                              );
-                              
-                              // Se a taxa esperada for diferente de zero, usar ela (validação)
-                              if (expectedRate > 0) {
-                                displayRate = expectedRate;
-                              }
-                            }
-                            
-                            return displayRate ? (
-                              <div className="flex flex-row justify-between">
-                                <span>Porcentagem de rentabilidade:</span>
-                                <span className="font-semibold">
-                                  {(Number(displayRate) * 100).toFixed(2)}% a.m.
-                                </span>
-                              </div>
-                            ) : null;
-                          })()}
+                          <RateDisplay 
+                            item={item}
+                            isExternalAdvisorInvestor={isExternalAdvisorInvestor}
+                            getRateByPeriodAndLiquidity={getRateByPeriodAndLiquidity}
+                          />
                           
                           {item.commitment_period && item.payment_date && (
                             <div className="flex flex-row justify-between">

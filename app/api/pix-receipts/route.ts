@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
+import { checkIsAdmin, checkIsAdvisor, checkIsDistributor } from "@/lib/permission-utils"
 
 export const dynamic = "force-dynamic"
 
@@ -23,19 +24,29 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'all'
     const transactionId = searchParams.get('transactionId')
 
-    // Verificar perfil do usuário
+    // Verificar perfil do usuário usando APENAS user_type_id
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type, role")
+      .select("user_type_id")
       .eq("id", user.id)
       .single()
 
-    const isAdmin = profile?.user_type === 'admin'
-    const isDistributor = profile?.user_type === 'distributor'
-    const isAdvisor =
-      profile?.user_type === 'distributor' &&
-      (profile?.role === 'assessor' || profile?.role === 'assessor_externo')
-    const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
+    if (!profile || !profile.user_type_id) {
+      return NextResponse.json(
+        { success: false, error: "Perfil sem user_type_id configurado" },
+        { status: 403 }
+      )
+    }
+
+    // Verificar tipos usando sistema dinâmico
+    const isAdmin = await checkIsAdmin(supabase, user.id)
+    const isDistributor = await checkIsDistributor(supabase, user.id)
+    const isAdvisor = await checkIsAdvisor(supabase, user.id)
+    
+    // Buscar user_type para verificar se é office
+    const { getUserTypeFromId } = await import("@/lib/user-type-utils")
+    const userTypeData = await getUserTypeFromId(profile.user_type_id)
+    const isOffice = userTypeData?.user_type === 'office' || userTypeData?.name === 'office'
 
     let query = supabase
       .from("pix_receipts")
@@ -122,26 +133,45 @@ export async function GET(request: NextRequest) {
         }
       } else if (isAdvisor) {
         // Assessor pode ver comprovantes dos seus investidores
-        const { data: investorIds } = await supabase
-          .from("profiles")
+        // Buscar user_type_id do tipo "investor"
+        const { data: investorType } = await supabase
+          .from("user_types")
           .select("id")
-          .eq("parent_id", user.id)
-          .eq("user_type", "investor")
+          .or("user_type.eq.investor,name.eq.investor")
+          .single()
         
-        if (investorIds && investorIds.length > 0) {
-          const ids = investorIds.map(inv => inv.id)
-          query = query.in('user_id', ids)
+        if (investorType) {
+          const { data: investorIds } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("parent_id", user.id)
+            .eq("user_type_id", investorType.id)
+          
+          if (investorIds && investorIds.length > 0) {
+            const ids = investorIds.map(inv => inv.id)
+            query = query.in('user_id', ids)
+          } else {
+            // Se não tem investidores, retorna array vazio
+            query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
+          }
         } else {
-          // Se não tem investidores, retorna array vazio
           query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
         }
       } else if (isOffice) {
         // Escritório pode ver comprovantes dos investidores vinculados ao seu office_id
-        const { data: officeInvestors } = await supabase
-          .from("profiles")
+        // Buscar user_type_id do tipo "investor"
+        const { data: investorType } = await supabase
+          .from("user_types")
           .select("id")
-          .eq("user_type", "investor")
-          .eq("office_id", user.id)
+          .or("user_type.eq.investor,name.eq.investor")
+          .single()
+        
+        if (investorType) {
+          const { data: officeInvestors } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("user_type_id", investorType.id)
+            .eq("office_id", user.id)
 
         if (officeInvestors && officeInvestors.length > 0) {
           const ids = officeInvestors.map(inv => inv.id)
@@ -332,14 +362,8 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Verificar se é admin
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("user_type")
-      .eq("id", user.id)
-      .single()
-
-    const isAdmin = profile?.user_type === 'admin'
+    // Verificar se é admin usando sistema dinâmico
+    const isAdmin = await checkIsAdmin(supabase, user.id)
     console.log('👤 Usuário:', user.id, 'É admin:', isAdmin)
 
     // Buscar o comprovante para verificar permissões

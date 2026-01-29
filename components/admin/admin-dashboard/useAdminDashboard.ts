@@ -8,6 +8,7 @@ export interface UserData {
   name: string
   email: string
   user_type: string
+  role?: string | null
 }
 
 export interface PlatformStats {

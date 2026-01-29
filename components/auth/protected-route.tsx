@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { getUserTypeFromId } from "@/lib/user-type-utils"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -54,11 +55,61 @@ export function ProtectedRoute({ children, allowedTypes }: ProtectedRouteProps) 
           }
         }
 
-        // Verificar tipos permitidos
-        if (allowedTypes.includes(user.user_type)) {
+        // Verificar tipos permitidos usando APENAS user_type_id da tabela user_types
+        const supabase = createClient()
+        
+        // Buscar user_type_id do profile
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("user_type_id")
+          .eq("id", user.id)
+          .single()
+
+        if (profileError || !profile || !profile.user_type_id) {
+          console.error("[v0] Profile não encontrado ou sem user_type_id:", profileError)
+          console.error("[v0] Profile data:", profile)
+          console.error("[v0] User ID:", user.id)
+          router.push("/login")
+          return
+        }
+        
+        console.log("[v0] Profile encontrado com user_type_id:", profile.user_type_id)
+
+        // Buscar user_type da tabela user_types
+        const userTypeData = await getUserTypeFromId(profile.user_type_id)
+        if (!userTypeData) {
+          console.error("[v0] User type não encontrado para user_type_id:", profile.user_type_id)
+          router.push("/login")
+          return
+        }
+
+        // Usar apenas o campo user_type, não o name (slug)
+        const userTypeToCheck = userTypeData.user_type
+
+        console.log("[v0] User type to check:", userTypeToCheck)
+        console.log("[v0] Allowed types:", allowedTypes)
+
+        // Verificar se o tipo do usuário está nos tipos permitidos
+        // Também verificar tipos relacionados (advisor e office podem acessar páginas de distributor)
+        let isAuthorized = allowedTypes.includes(userTypeToCheck)
+        console.log("[v0] Direct authorization check:", isAuthorized)
+        
+        // Se não autorizado diretamente, verificar tipos relacionados
+        if (!isAuthorized) {
+          // Se a página permite "distributor", também permitir "advisor" e "office"
+          if (allowedTypes.includes("distributor")) {
+            isAuthorized = userTypeToCheck === "advisor" || userTypeToCheck === "office"
+            console.log("[v0] Related type check (distributor):", isAuthorized)
+          }
+        }
+
+        console.log("[v0] Final authorization:", isAuthorized)
+
+        if (isAuthorized) {
           setIsAuthorized(true)
         } else {
           console.log("[v0] User not authorized, redirecting to login")
+          console.log("[v0] User type:", userTypeToCheck, "not in allowed types:", allowedTypes)
           router.push("/login")
         }
       } catch {

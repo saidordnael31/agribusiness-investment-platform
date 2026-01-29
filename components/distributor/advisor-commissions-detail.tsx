@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Download, Search, Eye, Calendar, DollarSign } from "lucide-react"
 import { getFifthBusinessDayOfMonth } from "@/lib/commission-calculator"
 import * as XLSX from "xlsx"
+import { getUserTypeFromId } from "@/lib/user-type-utils"
 import {
   Dialog,
   DialogContent,
@@ -48,10 +49,11 @@ interface CommissionDetail extends NewCommissionCalculation {
   investorEmail?: string
   advisorName?: string // Nome do assessor (para escritórios)
   advisorId?: string // ID do assessor (para escritórios)
+  liquidity?: string // Liquidez do investimento (Mensal, Semestral, Anual, etc.)
   pixReceipts?: Array<{
     id: string
     file_name: string
-    file_url: string
+    file_path: string
     status: string
     created_at: string
   }>
@@ -98,26 +100,40 @@ export function AdvisorCommissionsDetail() {
       // Buscar perfil do usuário para confirmar que é assessor ou escritório
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, user_type, role, office_id, full_name")
+        .select("id, user_type_id, office_id, full_name")
         .eq("id", user.id)
         .single()
 
-      if (!profile || profile.user_type !== "distributor") {
+      if (!profile || !profile.user_type_id) {
         toast({
           title: "Erro",
-          description: "Este recurso é apenas para assessores e escritórios",
+          description: "Perfil não encontrado ou sem tipo de usuário",
           variant: "destructive",
         })
         return
       }
 
-      const isOffice = profile.role === "escritorio"
-      const isAdvisor = profile.role === "assessor" || profile.role === "assessor_externo"
-
-      if (!isOffice && !isAdvisor) {
+      // Buscar tipo de usuário da tabela user_types
+      const userType = await getUserTypeFromId(profile.user_type_id)
+      if (!userType || !userType.user_type) {
         toast({
           title: "Erro",
-          description: "Este recurso é apenas para assessores e escritórios",
+          description: "Tipo de usuário não encontrado",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Verificar se é assessor, escritório ou distribuidor
+      const userTypeSlug = userType.user_type
+      const isOffice = userTypeSlug === "office"
+      const isAdvisor = userTypeSlug === "advisor"
+      const isDistributor = userTypeSlug === "distributor"
+
+      if (!isOffice && !isAdvisor && !isDistributor) {
+        toast({
+          title: "Erro",
+          description: "Este recurso é apenas para assessores, escritórios e distribuidores",
           variant: "destructive",
         })
         return
@@ -125,6 +141,10 @@ export function AdvisorCommissionsDetail() {
 
       // Armazenar o role do usuário para exibição
       setUserRole(isOffice ? "escritorio" : "assessor")
+      
+      // Se for distribuidor, tratar como assessor para os cálculos
+      const effectiveIsAdvisor = isAdvisor || isDistributor
+      const effectiveIsOffice = isOffice
 
       // Buscar investimentos dos clientes
       // Se for escritório: buscar por office_id (e também por assessores)
@@ -134,27 +154,81 @@ export function AdvisorCommissionsDetail() {
       // Buscar assessores do escritório (se for escritório) para mapear investidores
       let advisorsMap = new Map<string, { id: string; name: string }>()
       
-      if (isOffice) {
+      // Buscar user_type_id de "investor" (necessário para ambos os casos)
+      const { data: investorUserTypes, error: investorUserTypeError } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "investor")
+        .limit(1)
+      
+      if (investorUserTypeError) {
+        console.error("Erro ao buscar user_type 'investor':", investorUserTypeError)
+        toast({
+          title: "Erro",
+          description: `Erro ao buscar tipo de usuário: ${investorUserTypeError.message}`,
+          variant: "destructive",
+        })
+        return
+      }
+      
+      if (!investorUserTypes || investorUserTypes.length === 0) {
+        toast({
+          title: "Erro",
+          description: "Tipo de usuário 'investor' não encontrado",
+          variant: "destructive",
+        })
+        return
+      }
+      
+      const investorUserType = investorUserTypes[0]
+      
+      if (effectiveIsOffice) {
         // Buscar assessores do escritório com seus nomes
+        // Primeiro, buscar o user_type_id de "advisor"
+        const { data: advisorUserTypes, error: advisorUserTypeError } = await supabase
+          .from("user_types")
+          .select("id")
+          .eq("user_type", "advisor")
+          .limit(1)
+        
+        if (advisorUserTypeError) {
+          console.error("Erro ao buscar user_type 'advisor':", advisorUserTypeError)
+          toast({
+            title: "Erro",
+            description: `Erro ao buscar tipo de usuário: ${advisorUserTypeError.message}`,
+            variant: "destructive",
+          })
+          return
+        }
+        
+        if (!advisorUserTypes || advisorUserTypes.length === 0) {
+          toast({
+            title: "Erro",
+            description: "Tipo de usuário 'advisor' não encontrado",
+            variant: "destructive",
+          })
+          return
+        }
+        
+        const advisorUserType = advisorUserTypes[0]
+        
         const { data: advisors } = await supabase
           .from("profiles")
           .select("id, full_name")
           .eq("office_id", user.id)
-          .eq("user_type", "distributor")
-          .in("role", ["assessor", "assessor_externo"])
+          .eq("user_type_id", advisorUserType.id)
 
         if (advisors) {
           advisors.forEach(advisor => {
             advisorsMap.set(advisor.id, { id: advisor.id, name: advisor.full_name || "Assessor" })
           })
         }
-
-        // Escritório: buscar investidores por office_id (com parent_id para identificar assessor)
+        
         const { data: investorsByOffice } = await supabase
           .from("profiles")
-          .select("id, full_name, email, parent_id")
+          .select("id, full_name, email, parent_id, user_type_id")
           .eq("office_id", user.id)
-          .eq("user_type", "investor")
+          .eq("user_type_id", investorUserType.id)
 
         if (investorsByOffice) {
           investorProfiles = investorsByOffice
@@ -165,9 +239,9 @@ export function AdvisorCommissionsDetail() {
           const advisorIds = advisors.map(a => a.id)
           const { data: investorsByAdvisors } = await supabase
             .from("profiles")
-            .select("id, full_name, email, parent_id")
+            .select("id, full_name, email, parent_id, user_type_id")
             .in("parent_id", advisorIds)
-            .eq("user_type", "investor")
+            .eq("user_type_id", investorUserType.id)
 
           if (investorsByAdvisors) {
             // Combinar e remover duplicatas
@@ -181,9 +255,9 @@ export function AdvisorCommissionsDetail() {
         // Assessor (interno ou externo): buscar investidores por parent_id
         const { data: investorsByParent } = await supabase
           .from("profiles")
-          .select("id, full_name, email")
+          .select("id, full_name, email, user_type_id")
           .eq("parent_id", user.id)
-          .eq("user_type", "investor")
+          .eq("user_type_id", investorUserType.id)
 
         if (investorsByParent) {
           investorProfiles = investorsByParent
@@ -234,8 +308,8 @@ export function AdvisorCommissionsDetail() {
       const investmentIds = investmentsToProcess.map((inv) => inv.id)
       const { data: receipts } = await supabase
         .from("pix_receipts")
-        .select("id, investment_id, file_name, file_url, status, created_at")
-        .in("investment_id", investmentIds)
+        .select("id, transaction_id, file_name, file_path, status, created_at")
+        .in("transaction_id", investmentIds)
 
       // Processar cada investimento
       const processedCommissions: CommissionDetail[] = []
@@ -246,6 +320,9 @@ export function AdvisorCommissionsDetail() {
         if (!investorProfile) {
           continue; // Pular investimento se não encontrar perfil
         }
+        
+        // Obter user_type_id do investidor (já deve estar no perfil)
+        const investorUserTypeId = investorProfile.user_type_id || null
 
         // Determinar a data de pagamento (payment_date tem prioridade, senão usa created_at)
         const investmentPaymentDateRaw = investment.payment_date || investment.created_at
@@ -283,9 +360,9 @@ export function AdvisorCommissionsDetail() {
         // Para escritório: sem D+60 também, proporcional aos dias
         let commissionCalc;
         try {
-          if (isOffice) {
+          if (effectiveIsOffice) {
             // Escritório: calcular comissão do escritório (1%)
-            commissionCalc = calculateNewCommissionLogic({
+            const calcResult = await calculateNewCommissionLogic({
               id: investment.id,
               user_id: investment.user_id,
               amount: Number(investment.amount),
@@ -293,25 +370,25 @@ export function AdvisorCommissionsDetail() {
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
               investorName: investorProfile?.full_name || "Investidor",
+              investorUserTypeId: investorUserTypeId,
               officeId: user.id,
               officeName: profile?.full_name || "Escritório",
               // Sem isForAdvisor, então sem D+60 para escritório também
             })
             // Para escritório, mostrar apenas a comissão do escritório (1%) como advisorCommission
-            commissionCalc.advisorCommission = commissionCalc.officeCommission
-            commissionCalc.advisorId = undefined
-            commissionCalc.advisorName = undefined
-            
-            // Ajustar monthlyBreakdown para mostrar apenas comissão do escritório (1%)
-            if (commissionCalc.monthlyBreakdown) {
-              commissionCalc.monthlyBreakdown = commissionCalc.monthlyBreakdown.map(month => ({
+            commissionCalc = {
+              ...calcResult,
+              advisorCommission: calcResult.officeCommission,
+              advisorId: undefined,
+              advisorName: undefined,
+              monthlyBreakdown: calcResult.monthlyBreakdown?.map((month: any) => ({
                 ...month,
                 advisorCommission: month.officeCommission, // Usar comissão do escritório (1%) ao invés de assessor (3%)
               }))
             }
           } else {
             // Assessor: calcular comissão do assessor
-            commissionCalc = calculateNewCommissionLogic({
+            commissionCalc = await calculateNewCommissionLogic({
               id: investment.id,
               user_id: investment.user_id,
               amount: Number(investment.amount),
@@ -319,42 +396,69 @@ export function AdvisorCommissionsDetail() {
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
               investorName: investorProfile?.full_name || "Investidor",
+              investorUserTypeId: investorUserTypeId,
               advisorId: user.id,
               advisorName: profile?.full_name || "Assessor",
-              advisorRole: profile.role,
+              advisorRole: userTypeSlug, // Usar o slug do user_type
+              advisorUserTypeId: profile?.user_type_id || null,
               isForAdvisor: true, // Flag para aplicar regra sem D+60
             })
           }
         } catch (error) {
+          console.error("Erro ao calcular comissão:", error)
           continue; // Pular investimento com erro
         }
 
         // Buscar comprovantes deste investimento
         const investmentReceipts = receipts?.filter(
-          (r) => r.investment_id === investment.id
+          (r) => r.transaction_id === investment.id
         ) || []
 
         // Se for escritório, buscar informações do assessor do investidor
         let advisorInfo: { id?: string; name?: string } = {}
-        if (isOffice && investorProfile?.parent_id) {
+        if (effectiveIsOffice && investorProfile?.parent_id) {
           const advisor = advisorsMap.get(investorProfile.parent_id)
           if (advisor) {
             advisorInfo = { id: advisor.id, name: advisor.name }
           }
         }
 
+        // Formatar liquidez para exibição
+        const formatLiquidity = (liquidity: string | null | undefined): string => {
+          if (!liquidity) return "N/A"
+          const liquidityMap: Record<string, string> = {
+            "Mensal": "Mensal",
+            "mensal": "Mensal",
+            "monthly": "Mensal",
+            "Semestral": "Semestral",
+            "semestral": "Semestral",
+            "semiannual": "Semestral",
+            "Anual": "Anual",
+            "anual": "Anual",
+            "annual": "Anual",
+            "Bienal": "Bienal",
+            "bienal": "Bienal",
+            "biennial": "Bienal",
+            "Trienal": "Trienal",
+            "trienal": "Trienal",
+            "triennial": "Trienal",
+          }
+          return liquidityMap[liquidity] || liquidity
+        }
+
         processedCommissions.push({
           ...commissionCalc,
           investorEmail: investorProfile?.email,
+          liquidity: formatLiquidity(investment.profitability_liquidity),
           // Adicionar informações do assessor se for escritório (sempre adicionar, mesmo se não houver)
-          ...(isOffice ? {
+          ...(effectiveIsOffice ? {
             advisorId: advisorInfo.id,
             advisorName: advisorInfo.name || "N/A"
           } : {}),
           pixReceipts: investmentReceipts.map((r) => ({
             id: r.id,
             file_name: r.file_name,
-            file_url: r.file_url,
+            file_path: r.file_path,
             status: r.status,
             created_at: r.created_at,
           })),
@@ -416,7 +520,10 @@ export function AdvisorCommissionsDetail() {
   const getProrataInfo = (commission: CommissionDetail) => {
     if (!commission.paymentDate || !commission.commissionPeriod) return null
 
-    const monthlyRate = 0.03 // 3% ao mês para assessor
+    // Usar a taxa real do banco (assessor ou escritório)
+    const monthlyRate = userRole === "escritorio" 
+      ? (commission.officeRate || 0.01) // Taxa do escritório ou fallback 1%
+      : (commission.advisorRate || 0.03) // Taxa do assessor ou fallback 3%
     const dailyRate = monthlyRate / 30
     const amount = commission.amount
     if (!amount || amount <= 0) return null
@@ -673,8 +780,11 @@ export function AdvisorCommissionsDetail() {
         // Meses futuros: usar a comissão mensal específica deste mês
         monthlyCommission = c.monthlyBreakdown[paymentIndex].advisorCommission
       } else {
-        // Fallback: calcular comissão mensal completa (3% do valor)
-        monthlyCommission = c.amount * 0.03
+        // Fallback: calcular comissão mensal completa usando taxa real
+        const rate = userRole === "escritorio" 
+          ? (c.officeRate || 0.01)
+          : (c.advisorRate || 0.03)
+        monthlyCommission = c.amount * rate
       }
 
       return sum + monthlyCommission
@@ -743,8 +853,11 @@ export function AdvisorCommissionsDetail() {
             // Meses futuros: usar a comissão mensal específica deste mês
             monthlyCommission = commission.monthlyBreakdown[paymentIndex].advisorCommission;
           } else {
-            // Fallback: calcular comissão mensal completa (3% do valor)
-            monthlyCommission = commission.amount * 0.03;
+            // Fallback: calcular comissão mensal completa usando taxa real
+            const rate = userRole === "escritorio" 
+              ? (commission.officeRate || 0.01)
+              : (commission.advisorRate || 0.03)
+            monthlyCommission = commission.amount * rate;
           }
           
           if (!groupedByDate.has(dateStr)) {
@@ -945,9 +1058,9 @@ export function AdvisorCommissionsDetail() {
 
   if (loading) {
     return (
-      <Card>
+      <Card className="bg-[#01223F] border-[#003562]">
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Carregando comissões...</p>
+          <p className="text-center text-gray-400">Carregando comissões...</p>
         </CardContent>
       </Card>
     )
@@ -955,33 +1068,37 @@ export function AdvisorCommissionsDetail() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
+      <Card className="bg-[#01223F] border-[#003562] shadow-lg">
+        <CardHeader className="border-b border-[#003562]">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Minhas Comissões Detalhadas</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-[#00BC6E] text-2xl">Minhas Comissões Detalhadas</CardTitle>
+              <CardDescription className="text-gray-400 mt-1">
                 Visualize todas as suas comissões por investimento, com detalhes completos
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button onClick={exportToExcel} variant="outline">
+              <Button 
+                onClick={exportToExcel} 
+                variant="outline"
+                className="bg-[#003562] border-[#003562] text-white hover:bg-[#00BC6E] hover:border-[#00BC6E] hover:text-white"
+              >
                 <Download className="mr-2 h-4 w-4" />
                 Exportar Excel
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="bg-[#01223F]">
           <div className="flex flex-col md:flex-row gap-4 mb-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Buscar por investidor, email ou ID do investimento..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
+                  className="pl-8 bg-[#003562] border-[#003562] text-white placeholder:text-gray-500 focus:border-[#00BC6E]"
                 />
               </div>
             </div>
@@ -993,6 +1110,10 @@ export function AdvisorCommissionsDetail() {
               variant={chartView === "table" ? "default" : "outline"}
               onClick={() => setChartView("table")}
               size="sm"
+              className={chartView === "table" 
+                ? "bg-[#00BC6E] text-white hover:bg-[#00BC6E]/90" 
+                : "bg-[#003562] border-[#003562] text-white hover:bg-[#003562]/80"
+              }
             >
               <Calendar className="mr-2 h-4 w-4" />
               Tabela
@@ -1001,6 +1122,10 @@ export function AdvisorCommissionsDetail() {
               variant={chartView === "chart" ? "default" : "outline"}
               onClick={() => setChartView("chart")}
               size="sm"
+              className={chartView === "chart" 
+                ? "bg-[#00BC6E] text-white hover:bg-[#00BC6E]/90" 
+                : "bg-[#003562] border-[#003562] text-white hover:bg-[#003562]/80"
+              }
             >
               <DollarSign className="mr-2 h-4 w-4" />
               Previsão de Recebimentos
@@ -1008,18 +1133,18 @@ export function AdvisorCommissionsDetail() {
           </div>
 
           {chartView === "chart" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Previsão de Recebimentos</CardTitle>
-                <CardDescription>
+            <Card className="bg-[#003562] border-[#003562]">
+              <CardHeader className="border-b border-[#01223F]">
+                <CardTitle className="text-white">Previsão de Recebimentos</CardTitle>
+                <CardDescription className="text-gray-400">
                   Consulte quando e quanto você receberá nos próximos meses baseado nos investimentos ativos de seus clientes
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="bg-[#003562]">
                 <div className="space-y-6">
                   {/* Área destacada com próximo quinto dia útil */}
                   <Card 
-                    className="bg-primary/5 border-primary/20 cursor-pointer"
+                    className="bg-[#00BC6E]/20 border-[#00BC6E]/30 cursor-pointer hover:border-[#00BC6E]/50 transition-colors"
                     onClick={() => {
                       if (nextPaymentInfo.count > 0) {
                         // Encontrar o grupo correspondente na lista de próximos recebimentos,
@@ -1042,22 +1167,22 @@ export function AdvisorCommissionsDetail() {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <DollarSign className="h-6 w-6 text-primary" />
-                            <h3 className="text-lg font-semibold">A receber no próximo quinto dia útil</h3>
+                            <DollarSign className="h-6 w-6 text-[#00BC6E]" />
+                            <h3 className="text-lg font-semibold text-white">A receber no próximo quinto dia útil</h3>
                           </div>
-                          <p className="text-sm text-muted-foreground mb-4">
+                          <p className="text-sm text-gray-400 mb-4">
                             Valor total das comissões que serão pagas no próximo quinto dia útil do mês
                           </p>
                           <div className="flex items-baseline gap-3">
-                            <span className="text-2xl font-bold text-primary">
+                            <span className="text-2xl font-bold text-[#00BC6E]">
                               {formatCurrency(nextPaymentInfo.total)}
                             </span>
-                            <Badge variant="outline" className="text-sm">
+                            <Badge className="bg-[#003562] text-white border-[#003562] text-sm">
                               {nextPaymentInfo.dateFormatted}
                             </Badge>
                           </div>
                           {nextPaymentInfo.count > 0 && (
-                            <p className="text-xs text-muted-foreground mt-2">
+                            <p className="text-xs text-gray-400 mt-2">
                               {nextPaymentInfo.count} {nextPaymentInfo.count === 1 ? "comissão" : "comissões"} será{nextPaymentInfo.count === 1 ? "" : "ão"} paga{nextPaymentInfo.count === 1 ? "" : "s"} nesta data
                             </p>
                           )}
@@ -1068,14 +1193,14 @@ export function AdvisorCommissionsDetail() {
 
                   {/* Lista de próximos recebimentos */}
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-white">
                       <Calendar className="h-5 w-5" />
                       Próximos Recebimentos
                     </h3>
                     {nextPayments.length === 0 ? (
-                      <Card>
+                      <Card className="bg-[#01223F] border-[#003562]">
                         <CardContent className="pt-6">
-                          <p className="text-center text-muted-foreground">
+                          <p className="text-center text-gray-400">
                             Nenhum recebimento previsto para os próximos 12 meses
                           </p>
                         </CardContent>
@@ -1085,7 +1210,7 @@ export function AdvisorCommissionsDetail() {
                         {nextPayments.map((payment, index) => (
                           <Card 
                             key={index} 
-                            className="hover:bg-accent/50 transition-colors cursor-pointer"
+                            className="bg-[#01223F] border-[#003562] hover:border-[#00BC6E]/50 transition-colors cursor-pointer"
                             onClick={() => {
                               setSelectedPaymentDate({
                                 date: payment.dateFull,
@@ -1098,22 +1223,22 @@ export function AdvisorCommissionsDetail() {
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-3 mb-1">
-                                    <p className="font-semibold text-base">{payment.dateFull}</p>
-                                    <Badge variant="outline" className="text-xs">
+                                    <p className="font-semibold text-base text-white">{payment.dateFull}</p>
+                                    <Badge className="bg-[#003562] text-white border-[#003562] text-xs">
                                       Em {payment.daysUntil} {payment.daysUntil === 1 ? "dia" : "dias"}
                                     </Badge>
                                   </div>
-                                  <p className="text-sm text-muted-foreground capitalize">
+                                  <p className="text-sm text-gray-400 capitalize">
                                     {payment.dateLong}
                                   </p>
                                   {payment.count > 1 && (
-                                    <p className="text-xs text-muted-foreground mt-1">
+                                    <p className="text-xs text-gray-400 mt-1">
                                       {payment.count} recebimentos nesta data
                                     </p>
                                   )}
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-xl font-bold text-green-600">
+                                  <p className="text-xl font-bold text-[#00BC6E]">
                                     {formatCurrency(payment.total)}
                                   </p>
                                 </div>
@@ -1128,59 +1253,66 @@ export function AdvisorCommissionsDetail() {
               </CardContent>
             </Card>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-lg border border-[#01223F]/50 bg-[#01223F] overflow-hidden shadow-lg">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Investidor</TableHead>
-                  {userRole === "escritorio" && <TableHead>Assessor</TableHead>}
-                  <TableHead>Valor Investido</TableHead>
-                  <TableHead>Data de Depósito</TableHead>
-                  <TableHead>Próximo Pagamento</TableHead>
-                  <TableHead>Comissão</TableHead>
-                  <TableHead>Detalhes</TableHead>
+                <TableRow className="bg-[#003562] hover:bg-[#003562] border-b border-[#01223F]">
+                  <TableHead className="font-semibold text-white">Investidor</TableHead>
+                  {userRole === "escritorio" && <TableHead className="font-semibold text-white">Assessor</TableHead>}
+                  <TableHead className="font-semibold text-white">Valor Investido</TableHead>
+                  <TableHead className="font-semibold text-white">Data de Depósito</TableHead>
+                  <TableHead className="font-semibold text-white">Liquidez</TableHead>
+                  <TableHead className="font-semibold text-white">Próximo Pagamento</TableHead>
+                  <TableHead className="font-semibold text-white">Minha Comissão</TableHead>
+                  <TableHead className="font-semibold text-white">Comissão Investidor</TableHead>
+                  <TableHead className="font-semibold text-white text-center">Detalhes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCommissions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={userRole === "escritorio" ? 7 : 6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={userRole === "escritorio" ? 9 : 8} className="text-center text-gray-400 py-8 bg-[#01223F]">
                       Nenhuma comissão encontrada
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredCommissions.map((commission) => {
                     return (
-                      <TableRow key={commission.investmentId}>
-                        <TableCell>
+                      <TableRow key={commission.investmentId} className="hover:bg-[#003562]/50 transition-colors border-b border-[#01223F]/50 bg-[#01223F]">
+                        <TableCell className="py-4">
                           <div>
-                            <p className="font-medium">{commission.investorName}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="font-medium text-white">{commission.investorName}</p>
+                            <p className="text-xs text-gray-400">
                               {commission.investorEmail}
                             </p>
                           </div>
                         </TableCell>
                         {userRole === "escritorio" && (
-                          <TableCell>
-                            <p className="text-sm">
+                          <TableCell className="py-4">
+                            <p className="text-sm text-white">
                               {commission.advisorName || "N/A"}
                             </p>
                           </TableCell>
                         )}
-                        <TableCell>{formatCurrency(commission.amount)}</TableCell>
-                        <TableCell>{formatDate(commission.paymentDate)}</TableCell>
-                        <TableCell>
+                        <TableCell className="py-4 font-medium text-white">{formatCurrency(commission.amount)}</TableCell>
+                        <TableCell className="py-4 text-white">{formatDate(commission.paymentDate)}</TableCell>
+                        <TableCell className="py-4">
+                          <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30 hover:bg-blue-500/30">
+                            {commission.liquidity || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-4 text-white">
                           {(() => {
                             const nextDate = getNextPaymentDateForCommission(commission)
                             return nextDate ? formatDate(nextDate) : "N/A"
                           })()}
                           {commission.paymentDueDate.length > 1 && (
-                            <span className="text-xs text-muted-foreground ml-1">
+                            <span className="text-xs text-gray-400 ml-1">
                               (+{commission.paymentDueDate.length - 1} mais)
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="font-semibold text-green-600">
+                        <TableCell className="py-4 font-semibold text-[#00BC6E]">
                           <div className="flex flex-col">
                             <span>
                               {(() => {
@@ -1191,17 +1323,42 @@ export function AdvisorCommissionsDetail() {
                               })()}
                             </span>
                             {commission.monthlyBreakdown && commission.monthlyBreakdown.length > 1 && (
-                              <span className="text-xs text-muted-foreground font-normal mt-1">
+                              <span className="text-xs text-gray-400 font-normal mt-1">
                                 Recorrência de {commission.monthlyBreakdown.length}{" "}
                                 {commission.monthlyBreakdown.length === 1 ? "mês" : "meses"}
                               </span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4 font-semibold text-blue-400">
+                          <div className="flex flex-col">
+                            <span>
+                              {(() => {
+                                // Calcular comissão do investidor proporcionalmente
+                                const investorRate = commission.investorRate || 0.02
+                                const info = getProrataInfo(commission)
+                                if (info) {
+                                  const dailyRate = investorRate / 30
+                                  const investorProrataCommission = commission.amount * dailyRate * info.days
+                                  return formatCurrency(investorProrataCommission)
+                                }
+                                // Se não houver info de pró-rata, usar a comissão do investidor do objeto
+                                return formatCurrency(commission.investorCommission || 0)
+                              })()}
+                            </span>
+                            {commission.monthlyBreakdown && commission.monthlyBreakdown.length > 1 && (
+                              <span className="text-xs text-gray-400 font-normal mt-1">
+                                Recorrência de {commission.monthlyBreakdown.length}{" "}
+                                {commission.monthlyBreakdown.length === 1 ? "mês" : "meses"}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="hover:bg-[#00BC6E]/20 hover:text-[#00BC6E] text-white"
                             onClick={() => {
                               setSelectedCommission(commission)
                               setDetailModalOpen(true)
@@ -1222,50 +1379,58 @@ export function AdvisorCommissionsDetail() {
       </Card>
 
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalhes da Comissão</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[#01223F] border-[#003562] text-white">
+          <DialogHeader className="border-b border-[#003562] pb-4">
+            <DialogTitle className="text-2xl font-bold text-white">Detalhes da Comissão</DialogTitle>
+            <DialogDescription className="text-gray-400">
               Informações completas do investimento e comissão
             </DialogDescription>
           </DialogHeader>
           {selectedCommission && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Investidor</p>
-                  <p className="font-semibold">{selectedCommission.investorName}</p>
-                  <p className="text-sm text-muted-foreground">
+            <div className="space-y-6 pt-4">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-400">Investidor</p>
+                  <p className="font-semibold text-white text-lg">{selectedCommission.investorName}</p>
+                  <p className="text-sm text-gray-400">
                     {selectedCommission.investorEmail}
                   </p>
                 </div>
                 {userRole === "escritorio" && (
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Assessor</p>
-                    <p className="font-semibold">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-400">Assessor</p>
+                    <p className="font-semibold text-white text-lg">
                       {selectedCommission.advisorName || "N/A"}
                     </p>
                   </div>
                 )}
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-400">
                     Valor do Investimento
                   </p>
-                  <p className="font-semibold text-lg">
+                  <p className="font-semibold text-xl text-white">
                     {formatCurrency(selectedCommission.amount)}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-400">
                     Data de Depósito
                   </p>
-                  <p>{formatDate(selectedCommission.paymentDate)}</p>
+                  <p className="text-white font-medium">{formatDate(selectedCommission.paymentDate)}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-400">
+                    Liquidez
+                  </p>
+                  <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30">
+                    {selectedCommission.liquidity || "N/A"}
+                  </Badge>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-400">
                     Próximo Pagamento
                   </p>
-                  <p>
+                  <p className="text-white font-medium">
                     {(() => {
                       const nextDate = getNextPaymentDateForCommission(selectedCommission)
                       return nextDate ? formatDate(nextDate) : "N/A"
@@ -1274,19 +1439,49 @@ export function AdvisorCommissionsDetail() {
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-4">Valores da Comissão</h4>
-                <div className="flex justify-start">
-                  <div className="p-4 bg-green-50 rounded-lg border border-green-200 w-full max-w-[300px]">
-                    <p className="text-sm text-muted-foreground mb-1">
-                      Sua Comissão ({userRole === "escritorio" ? "1%" : "3%"})
+              <div className="border-t border-[#003562] pt-6">
+                <h4 className="font-semibold text-lg text-white mb-4">Valores da Comissão</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Minha Comissão (usuário logado) */}
+                  <div className="p-5 bg-gradient-to-br from-[#00BC6E]/20 to-[#00BC6E]/10 rounded-lg border-2 border-[#00BC6E]/30 shadow-lg">
+                    <p className="text-sm font-medium text-gray-300 mb-2">
+                      Minha Comissão ({(() => {
+                        const rate = userRole === "escritorio" 
+                          ? (selectedCommission.officeRate || 0.01)
+                          : (selectedCommission.advisorRate || 0.03)
+                        return `${(rate * 100).toFixed(2)}%`
+                      })()})
                     </p>
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-3xl font-bold text-[#00BC6E]">
                       {(() => {
                         const info = getProrataInfo(selectedCommission)
                         const value =
                           info?.prorataCommission ?? selectedCommission.advisorCommission
                         return formatCurrency(value)
+                      })()}
+                    </p>
+                  </div>
+                  
+                  {/* Comissão do Investidor */}
+                  <div className="p-5 bg-gradient-to-br from-blue-500/20 to-blue-500/10 rounded-lg border-2 border-blue-400/30 shadow-lg">
+                    <p className="text-sm font-medium text-gray-300 mb-2">
+                      Comissão do Investidor ({(() => {
+                        const rate = selectedCommission.investorRate || 0.02
+                        return `${(rate * 100).toFixed(2)}%`
+                      })()})
+                    </p>
+                    <p className="text-3xl font-bold text-blue-400">
+                      {(() => {
+                        const info = getProrataInfo(selectedCommission)
+                        // Calcular comissão do investidor proporcionalmente
+                        const investorRate = selectedCommission.investorRate || 0.02
+                        if (info) {
+                          const dailyRate = investorRate / 30
+                          const investorProrataCommission = selectedCommission.amount * dailyRate * info.days
+                          return formatCurrency(investorProrataCommission)
+                        }
+                        // Se não houver info de pró-rata, usar a comissão do investidor do objeto
+                        return formatCurrency(selectedCommission.investorCommission || 0)
                       })()}
                     </p>
                   </div>
@@ -1298,18 +1493,23 @@ export function AdvisorCommissionsDetail() {
                   if (!info) return null
 
                   return (
-                    <div className="mt-4 text-sm text-muted-foreground space-y-1">
-                      <p>
-                        <span className="font-medium text-foreground">Pró-rata considerado:</span>{" "}
+                    <div className="mt-6 p-4 bg-[#003562]/30 rounded-lg border border-[#003562]">
+                      <p className="text-sm text-gray-300 mb-2">
+                        <span className="font-semibold text-white">Pró-rata considerado:</span>{" "}
                         de {info.startLabel} até {info.endLabel}{" "}
                         ({info.days} {info.days === 1 ? "dia" : "dias"}, equivalente a{" "}
                         {(info.fractionOfMonth * 100).toFixed(1)}% de um mês de 30 dias).
                       </p>
-                      <p>
-                        A comissão cheia de 3% sobre {formatCurrency(selectedCommission.amount)} seria{" "}
+                      <p className="text-sm text-gray-400">
+                        A comissão cheia de {(() => {
+                          const rate = userRole === "escritorio" 
+                            ? (selectedCommission.officeRate || 0.01)
+                            : (selectedCommission.advisorRate || 0.03)
+                          return `${(rate * 100).toFixed(2)}%`
+                        })()} sobre {formatCurrency(selectedCommission.amount)} seria{" "}
                         {formatCurrency(info.theoreticalFullMonth)}; aplicando o pró-rata de{" "}
                         {info.days}/{30} dias, a comissão deste período é{" "}
-                        {formatCurrency(info.prorataCommission)}.
+                        <span className="font-semibold text-[#00BC6E]">{formatCurrency(info.prorataCommission)}</span>.
                       </p>
                     </div>
                   )
@@ -1317,40 +1517,58 @@ export function AdvisorCommissionsDetail() {
               </div>
 
               {selectedCommission.monthlyBreakdown && selectedCommission.monthlyBreakdown.length > 0 && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-3">Detalhamento Mensal dos Rendimentos</h4>
-                  <div className="space-y-3">
+                <div className="border-t border-[#003562] pt-6">
+                  <h4 className="font-semibold text-lg text-white mb-4">Detalhamento Mensal dos Rendimentos</h4>
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                     {selectedCommission.monthlyBreakdown.map((month, index) => (
                       <div
                         key={index}
-                        className="p-4 bg-muted/30 rounded-lg border"
+                        className="p-4 bg-[#003562]/30 rounded-lg border border-[#003562] hover:border-[#00BC6E]/50 transition-colors"
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="font-semibold capitalize text-base">
+                            <p className="font-semibold capitalize text-base text-white">
                               {month.month} de {month.year}
                             </p>
                             {selectedCommission.paymentDueDate && selectedCommission.paymentDueDate[index] && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-gray-400 mt-1">
                                 Pagamento em {formatDate(selectedCommission.paymentDueDate[index])}
                               </p>
                             )}
                           </div>
-                          <div className="text-right">
-                            <p className="text-muted-foreground text-xs mb-1">
-                              Sua Comissão ({userRole === "escritorio" ? "1%" : "3%"})
-                            </p>
-                            <p className="font-semibold text-green-600 text-lg">
-                              {formatCurrency(month.advisorCommission)}
-                            </p>
+                          <div className="flex gap-6">
+                            <div className="text-right">
+                              <p className="text-gray-400 text-xs mb-1">
+                                Minha Comissão ({(() => {
+                                  const rate = userRole === "escritorio" 
+                                    ? (selectedCommission.officeRate || 0.01)
+                                    : (selectedCommission.advisorRate || 0.03)
+                                  return `${(rate * 100).toFixed(2)}%`
+                                })()})
+                              </p>
+                              <p className="font-semibold text-[#00BC6E] text-lg">
+                                {formatCurrency(month.advisorCommission)}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-400 text-xs mb-1">
+                                Comissão do Investidor ({(() => {
+                                  const rate = selectedCommission.investorRate || 0.02
+                                  return `${(rate * 100).toFixed(2)}%`
+                                })()})
+                              </p>
+                              <p className="font-semibold text-blue-400 text-lg">
+                                {formatCurrency(month.investorCommission)}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
                     ))}
-                    <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                    <div className="mt-4 p-4 bg-gradient-to-r from-[#00BC6E]/20 to-[#00BC6E]/10 rounded-lg border-2 border-[#00BC6E]/30">
                       <div className="flex items-center justify-between">
-                        <p className="font-semibold">Total do Período</p>
-                        <p className="text-lg font-bold text-primary">
+                        <p className="font-semibold text-lg text-white">Total do Período</p>
+                        <p className="text-2xl font-bold text-[#00BC6E]">
                           {(() => {
                             const info = getProrataInfo(selectedCommission)
                             const value =
@@ -1365,28 +1583,46 @@ export function AdvisorCommissionsDetail() {
               )}
 
               {selectedCommission.pixReceipts && selectedCommission.pixReceipts.length > 0 && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-2">Comprovantes PIX</h4>
-                  <div className="space-y-2">
+                <div className="border-t border-[#003562] pt-6">
+                  <h4 className="font-semibold text-lg text-white mb-4">Comprovantes PIX</h4>
+                  <div className="space-y-3">
                     {selectedCommission.pixReceipts.map((receipt) => (
                       <div
                         key={receipt.id}
-                        className="flex items-center justify-between p-2 border rounded-lg"
+                        className="flex items-center justify-between p-4 bg-[#003562]/30 rounded-lg border border-[#003562] hover:border-[#00BC6E]/50 transition-colors"
                       >
-                        <div>
-                          <p className="font-medium text-sm">{receipt.file_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDate(receipt.created_at)}
-                          </p>
-                          <Badge variant={receipt.status === "approved" ? "default" : "secondary"}>
-                            {receipt.status === "approved" ? "Aprovado" : "Pendente"}
-                          </Badge>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm text-white">{receipt.file_name}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-xs text-gray-400">
+                              {formatDate(receipt.created_at)}
+                            </p>
+                            <Badge 
+                              className={receipt.status === "approved" 
+                                ? "bg-[#00BC6E] text-white border-[#00BC6E]" 
+                                : "bg-orange-500/20 text-orange-300 border-orange-400/30"
+                              }
+                            >
+                              {receipt.status === "approved" ? "Aprovado" : "Pendente"}
+                            </Badge>
+                          </div>
                         </div>
-                        {receipt.file_url && (
+                        {receipt.file_path && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(receipt.file_url, "_blank")}
+                            className="hover:bg-[#00BC6E] hover:text-white hover:border-[#00BC6E] text-white border-gray-600"
+                            onClick={async () => {
+                              // Gerar URL assinada do Supabase Storage
+                              const supabaseClient = createClient()
+                              const { data: signedUrl } = await supabaseClient
+                                .storage
+                                .from("pix_receipts")
+                                .createSignedUrl(receipt.file_path, 3600)
+                              if (signedUrl) {
+                                window.open(signedUrl.signedUrl, "_blank")
+                              }
+                            }}
                           >
                             Ver
                           </Button>
@@ -1403,19 +1639,19 @@ export function AdvisorCommissionsDetail() {
 
       {/* Modal de Detalhes dos Investimentos por Data de Pagamento */}
       <Dialog open={paymentDetailModalOpen} onOpenChange={setPaymentDetailModalOpen}>
-        <DialogContent className="!max-w-[95vw] w-full max-h-[90vh] overflow-y-auto sm:!max-w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>Investimentos - {selectedPaymentDate?.date}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="!max-w-[95vw] w-full max-h-[90vh] overflow-y-auto sm:!max-w-[95vw] bg-[#01223F] border-[#003562] text-white">
+          <DialogHeader className="border-b border-[#003562]">
+            <DialogTitle className="text-white">Investimentos - {selectedPaymentDate?.date}</DialogTitle>
+            <DialogDescription className="text-gray-400">
               Detalhes dos investimentos que serão pagos nesta data
             </DialogDescription>
           </DialogHeader>
           {selectedPaymentDate && selectedPaymentDate.commissions.length > 0 ? (
             <div className="space-y-4">
-              <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
+              <div className="bg-[#00BC6E]/20 rounded-lg p-4 border border-[#00BC6E]/30">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold">Total de Comissões:</span>
-                  <span className="text-xl font-bold text-primary">
+                  <span className="font-semibold text-white">Total de Comissões:</span>
+                  <span className="text-xl font-bold text-[#00BC6E]">
                     {formatCurrency(
                       selectedPaymentDate.commissions.reduce(
                         (sum, c) => sum + (c.monthlyCommissionForDate || c.advisorCommission),
@@ -1424,54 +1660,55 @@ export function AdvisorCommissionsDetail() {
                     )}
                   </span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-gray-400 mt-1">
                   {selectedPaymentDate.commissions.length} {selectedPaymentDate.commissions.length === 1 ? "investimento" : "investimentos"}
                 </p>
               </div>
 
-              <div className="rounded-md border overflow-x-auto">
+              <div className="rounded-md border border-[#003562] overflow-x-auto bg-[#01223F]">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                    <TableHead className="w-[40px] text-center">#</TableHead>
-                    <TableHead className="min-w-[200px]">Investidor</TableHead>
-                      {userRole === "escritorio" && <TableHead className="min-w-[150px]">Assessor</TableHead>}
-                      <TableHead className="min-w-[120px]">Valor Investido</TableHead>
-                      <TableHead className="min-w-[120px]">Data de Depósito</TableHead>
-                      <TableHead className="min-w-[120px]">Comissão</TableHead>
-                      <TableHead className="min-w-[80px]">Detalhes</TableHead>
+                    <TableRow className="bg-[#003562]">
+                    <TableHead className="w-[40px] text-center text-white">#</TableHead>
+                    <TableHead className="min-w-[200px] text-white">Investidor</TableHead>
+                      {userRole === "escritorio" && <TableHead className="min-w-[150px] text-white">Assessor</TableHead>}
+                      <TableHead className="min-w-[120px] text-white">Valor Investido</TableHead>
+                      <TableHead className="min-w-[120px] text-white">Data de Depósito</TableHead>
+                      <TableHead className="min-w-[120px] text-white">Comissão</TableHead>
+                      <TableHead className="min-w-[80px] text-white">Detalhes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {selectedPaymentDate.commissions.map((commission, index) => (
-                      <TableRow key={commission.investmentId}>
-                        <TableCell className="text-center text-muted-foreground">
+                      <TableRow key={commission.investmentId} className="bg-[#01223F] hover:bg-[#003562]/50 border-b border-[#003562]">
+                        <TableCell className="text-center text-gray-400">
                           {index + 1}
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{commission.investorName}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="font-medium text-white">{commission.investorName}</p>
+                            <p className="text-xs text-gray-400">
                               {commission.investorEmail}
                             </p>
                           </div>
                         </TableCell>
                         {userRole === "escritorio" && (
                           <TableCell>
-                            <p className="text-sm">
+                            <p className="text-sm text-white">
                               {commission.advisorName || "N/A"}
                             </p>
                           </TableCell>
                         )}
-                        <TableCell>{formatCurrency(commission.amount)}</TableCell>
-                        <TableCell>{formatDate(commission.paymentDate)}</TableCell>
-                        <TableCell className="font-semibold text-green-600">
+                        <TableCell className="text-white">{formatCurrency(commission.amount)}</TableCell>
+                        <TableCell className="text-white">{formatDate(commission.paymentDate)}</TableCell>
+                        <TableCell className="font-semibold text-[#00BC6E]">
                           {formatCurrency(commission.monthlyCommissionForDate || commission.advisorCommission)}
                         </TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="hover:bg-[#00BC6E]/20 hover:text-[#00BC6E] text-white"
                             onClick={() => {
                               setSelectedCommission(commission)
                               setDetailModalOpen(true)
@@ -1489,7 +1726,7 @@ export function AdvisorCommissionsDetail() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">
+              <p className="text-gray-400">
                 Nenhum investimento encontrado para esta data
               </p>
             </div>

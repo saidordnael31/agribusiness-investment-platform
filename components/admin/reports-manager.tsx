@@ -40,6 +40,7 @@ import {
 import { formatCurrency } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
+import { COMMISSION_RATES } from "@/lib/commission-calculator"
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 
@@ -281,9 +282,9 @@ export function ReportsManager() {
       const pendingTransactionVolume = pendingTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0)
 
       // Calcular comissões baseadas nos investimentos ativos
-      const totalCommissions = totalInvestments * 0.04 // 4% total (3% assessor + 1% escritório)
-      const advisorCommissions = totalInvestments * 0.03 // 3% para assessores
-      const officeCommissions = totalInvestments * 0.01 // 1% para escritórios
+      const totalCommissions = totalInvestments * (COMMISSION_RATES.assessor + COMMISSION_RATES.escritorio) // Total (3% assessor + 1% escritório)
+      const advisorCommissions = totalInvestments * COMMISSION_RATES.assessor // 3% para assessores
+      const officeCommissions = totalInvestments * COMMISSION_RATES.escritorio // 1% para escritórios
 
       // Calcular métricas de campanhas
       const activeCampaigns = campaigns.filter(c => c.is_active).length
@@ -545,10 +546,10 @@ export function ReportsManager() {
               commissionRate = rates.investor
               break
             case 'distributor':
-              commissionRate = 0.03 // Assessor sempre ganha 3%
+              commissionRate = COMMISSION_RATES.assessor // Assessor sempre ganha 3%
               break
             case 'admin':
-              commissionRate = 0.01 // Escritório sempre ganha 1%
+              commissionRate = COMMISSION_RATES.escritorio // Escritório sempre ganha 1%
               break
             default:
               commissionRate = rates.investor
@@ -583,8 +584,8 @@ export function ReportsManager() {
         }
         
         // Calcular comissões do escritório e assessor (sempre mensais)
-        officeCommission = investment.amount * 0.01 // Escritório sempre 1%
-        advisorCommission = investment.amount * 0.03 // Assessor sempre 3%
+        officeCommission = investment.amount * COMMISSION_RATES.escritorio // Escritório sempre 1%
+        advisorCommission = investment.amount * COMMISSION_RATES.assessor // Assessor sempre 3%
 
         // Gerar uma entrada para cada mês do período de compromisso
         for (let month = 1; month <= investmentCommitmentPeriod; month++) {
@@ -692,8 +693,8 @@ export function ReportsManager() {
             resgateMonths: rates.resgateMonths,
             liquidityType: rates.liquidityType,
             investorRate: rates.investor,
-            officeRate: 0.01, // Escritório sempre ganha 1%
-            advisorRate: 0.03, // Assessor sempre ganha 3%
+            officeRate: COMMISSION_RATES.escritorio, // Escritório sempre ganha 1%
+            advisorRate: COMMISSION_RATES.assessor, // Assessor sempre ganha 3%
             officeCommission, // Comissão mensal do escritório
             advisorCommission, // Comissão mensal do assessor
             advisorName: advisorInfo?.full_name || 'N/A',
@@ -903,8 +904,8 @@ export function ReportsManager() {
     else if (liquidity.includes('trienal')) liquidityType = 'trienal'
 
     // Taxas fixas para escritório e assessor (sempre 1% e 3%)
-    const officeRate = 0.01 // 1%
-    const advisorRate = 0.03 // 3%
+    const officeRate = COMMISSION_RATES.escritorio // 1%
+    const advisorRate = COMMISSION_RATES.assessor // 3%
     
     // Calcular taxa do investidor baseada na liquidez
     let investorRate = 0
@@ -2185,7 +2186,7 @@ export function ReportsManager() {
             .filter((i: any) => i.user_id === inv.user_id)
             .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
           
-          const monthlyCommission = totalInvested * 0.02 // 2% taxa de administração
+          const monthlyCommission = totalInvested * COMMISSION_RATES.investidor // 2% taxa de administração
           // Calcular próximo recebimento: 30 dias depois da data de pagamento
           const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
           const nextPayment = new Date(paymentDate)
@@ -2327,7 +2328,7 @@ export function ReportsManager() {
             .filter((i: any) => i.user_id === inv.user_id)
             .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
           
-          const monthlyCommission = totalInvested * 0.03 // 3% para assessores
+          const monthlyCommission = totalInvested * COMMISSION_RATES.assessor // 3% para assessores
           const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
           const nextPayment = new Date(paymentDate)
           nextPayment.setDate(paymentDate.getDate() + 30)
@@ -2402,7 +2403,7 @@ export function ReportsManager() {
             .filter((i: any) => i.user_id === inv.user_id)
             .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
           
-          const monthlyCommission = totalInvested * 0.01 // 1% para escritórios
+          const monthlyCommission = totalInvested * COMMISSION_RATES.escritorio // 1% para escritórios
           const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
           const nextPayment = new Date(paymentDate)
           nextPayment.setDate(paymentDate.getDate() + 30)
@@ -2988,7 +2989,7 @@ export function ReportsManager() {
             .filter((i: any) => i.user_id === inv.user_id)
             .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
           
-          const monthlyCommission = totalInvested * 0.03 // 3% para assessores
+          const monthlyCommission = totalInvested * COMMISSION_RATES.assessor // 3% para assessores
           const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
           const nextPayment = new Date(paymentDate)
           nextPayment.setDate(paymentDate.getDate() + 30)
@@ -3060,7 +3061,7 @@ export function ReportsManager() {
             .filter((i: any) => i.user_id === inv.user_id)
             .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
           
-          const monthlyCommission = totalInvested * 0.01 // 1% para escritórios
+          const monthlyCommission = totalInvested * COMMISSION_RATES.escritorio // 1% para escritórios
           const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
           const nextPayment = new Date(paymentDate)
           nextPayment.setDate(paymentDate.getDate() + 30)

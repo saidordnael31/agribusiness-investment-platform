@@ -12,11 +12,12 @@ import { Switch } from "@/components/ui/switch"
 import {
   LiquidityOption,
   getAvailableLiquidityOptions,
-  getInvestorMonthlyRate,
   getLiquidityCycleMonths,
   getRedemptionWindow,
 } from "@/lib/commission-calculator"
 import { Separator } from "@/components/ui/separator"
+import { getRateByPeriodAndLiquidity as getRateFromDB } from "@/lib/rentability-utils"
+import { useUserType } from "@/hooks/useUserType"
 
 interface ScenarioConfig {
   name: string
@@ -43,6 +44,11 @@ export function ComparisonCalculator() {
     { name: "Cenário 3", amount: 500000, commitmentPeriod: 12, liquidity: "anual" },
   ])
   const [chartMode, setChartMode] = useState<"total" | "cycle">("total")
+  const [user, setUser] = useState<any>(null)
+  const [rateCache, setRateCache] = useState<Record<string, number>>({})
+  
+  // Usar hook para obter user_type_id
+  const { user_type_id } = useUserType(user?.id)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -50,6 +56,7 @@ export function ComparisonCalculator() {
     if (!userStr) return
     try {
       const parsed = JSON.parse(userStr)
+      setUser(parsed)
       const role = parsed.role || parsed.user_type || parsed.type
       setIsExternalAdvisor(role === "assessor_externo")
     } catch {
@@ -57,42 +64,50 @@ export function ComparisonCalculator() {
     }
   }, [])
 
-  const getExternalAdvisorMonthlyRate = (commitmentPeriod: number, liquidity: LiquidityOption): number => {
-    const table: Record<number, Partial<Record<LiquidityOption, number>>> = {
-      3: {
-        mensal: 0.0135, // 1,35%
-      },
-      6: {
-        mensal: 0.014, // 1,40%
-        semestral: 0.0145, // 1,45%
-      },
-      12: {
-        mensal: 0.015, // 1,50%
-        semestral: 0.0155, // 1,55%
-        anual: 0.016, // 1,60%
-      },
-      24: {
-        mensal: 0.0165, // 1,65%
-        semestral: 0.017, // 1,70%
-        anual: 0.0175, // 1,75%
-        bienal: 0.018, // 1,80%
-      },
-      36: {
-        mensal: 0.0185, // 1,85%
-        semestral: 0.019, // 1,90%
-        bienal: 0.0195, // 1,95%
-        trienal: 0.02, // 2,00%
-      },
+  // Pré-carregar taxas quando scenarios ou user_type_id mudarem
+  useEffect(() => {
+    if (!user_type_id) return
+    
+    const loadRates = async () => {
+      const uniqueRates = new Set<string>()
+      scenarios.forEach(scenario => {
+        uniqueRates.add(`${scenario.commitmentPeriod}-${scenario.liquidity}`)
+      })
+      
+      const ratePromises = Array.from(uniqueRates).map(async (key) => {
+        const [period, liquidity] = key.split('-')
+        try {
+          const rate = await getRateFromDB(user_type_id, Number(period), liquidity)
+          return { key, rate: rate > 0 ? rate : 0 }
+        } catch (error) {
+          console.error(`[ComparisonCalculator] Erro ao carregar taxa ${key}:`, error)
+          return { key, rate: 0 }
+        }
+      })
+      
+      const rates = await Promise.all(ratePromises)
+      const newCache: Record<string, number> = {}
+      rates.forEach(({ key, rate }) => {
+        newCache[key] = rate
+      })
+      
+      setRateCache(newCache)
     }
+    
+    loadRates()
+  }, [scenarios, user_type_id])
 
-    return table[commitmentPeriod]?.[liquidity] ?? 0
+  // Função para obter taxa usando APENAS user_type_id -> rentability_id -> função get
+  const getRate = (commitmentPeriod: number, liquidity: LiquidityOption): number => {
+    const cacheKey = `${commitmentPeriod}-${liquidity}`
+    return rateCache[cacheKey] || 0
   }
 
   const calculateScenario = (scenario: ScenarioConfig) => {
     const { amount, commitmentPeriod, liquidity } = scenario
-    const investorRate = isExternalAdvisor
-      ? getExternalAdvisorMonthlyRate(commitmentPeriod, liquidity)
-      : getInvestorMonthlyRate(commitmentPeriod, liquidity)
+    
+    // Usar taxa do cache (pré-carregada via user_type_id)
+    const investorRate = getRate(commitmentPeriod, liquidity)
     const redemptionWindow = getRedemptionWindow(commitmentPeriod)
     const liquidityCycleMonths = getLiquidityCycleMonths(liquidity)
 

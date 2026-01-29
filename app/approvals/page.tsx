@@ -188,19 +188,23 @@ function ApprovalsContent() {
 }
 
 export default function ApprovalsPage() {
-  const [userType, setUserType] = useState<string | null>(null)
+  const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const userStr = localStorage.getItem("user")
       if (userStr) {
         const userData = JSON.parse(userStr)
-        setUserType(userData.user_type)
+        setUser(userData)
       }
     }
   }, [])
 
-  const isDistributor = userType === "distributor"
+  // Usar hook para obter informações do tipo de usuário
+  const { user_type_id } = useUserType(user?.id)
+  
+  // Verificar se é distributor usando função helper
+  const isDistributor = user ? isDistributorSync(user.user_type, user.role) : false
 
   return (
     <ProtectedRoute allowedTypes={["distributor"]} requiresHierarchy="office">

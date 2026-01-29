@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
+import { checkIsAdmin, checkIsAdvisor, checkIsDistributor } from "@/lib/permission-utils"
 
 export const dynamic = "force-dynamic"
 
@@ -45,16 +46,17 @@ export async function GET(request: NextRequest) {
     // Verificar permissões
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type, role")
+      .select("user_type_id, user_type, role")
       .eq("id", user.id)
       .single()
 
-    const isAdmin = profile?.user_type === 'admin'
-    const isDistributor = profile?.user_type === 'distributor'
+    // Verificar tipos usando sistema dinâmico
+    const isAdmin = await checkIsAdmin(supabase, user.id)
+    const isDistributor = await checkIsDistributor(supabase, user.id)
     const isOwner = receipt.user_id === user.id
-    const isAdvisor =
-      profile?.user_type === 'distributor' &&
-      (profile?.role === 'assessor' || profile?.role === 'assessor_externo')
+    const isAdvisor = await checkIsAdvisor(supabase, user.id) ||
+      (profile?.user_type === 'distributor' &&
+      (profile?.role === 'assessor' || profile?.role === 'assessor_externo'))
     const isOffice = profile?.user_type === 'distributor' && profile?.role === 'escritorio'
 
     // Buscar perfil do usuário que possui o comprovante

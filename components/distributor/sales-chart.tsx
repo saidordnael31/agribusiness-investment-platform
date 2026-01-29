@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
+import { useUserType } from "@/hooks/useUserType";
+import { getCommissionRate } from "@/lib/commission-utils";
 
 interface SalesData {
   month: string;
@@ -27,6 +29,7 @@ export function SalesChart({ distributorId }: SalesChartProps) {
   const [user, setUser] = useState<any>(null);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user_type_id } = useUserType();
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -37,11 +40,11 @@ export function SalesChart({ distributorId }: SalesChartProps) {
   }, []);
 
 useEffect(() => {
-  if (!distributorId || !user) {
+  if (!distributorId || !user || !user_type_id) {
     return;
   }
   fetchSalesData();
-}, [distributorId, user]);
+}, [distributorId, user, user_type_id]);
 
   const fetchSalesData = async () => {
     if (!distributorId) {
@@ -59,19 +62,67 @@ useEffect(() => {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
+      // Tentar buscar usando user_type_id primeiro, com fallback para user_type legado
       let query = supabase
         .from("profiles")
         .select("*")
-        .eq("user_type", "investor")
         .order("created_at", { ascending: false });
 
-      if (user?.role === "escritorio") {
-        query = query.eq("office_id", distributorId);
+      // Buscar user_type_id do tipo "investor"
+      const { data: investorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "investor")
+        .single();
+
+      if (investorUserType) {
+        // Usar nova lógica com user_type_id
+        query = query.eq("user_type_id", investorUserType.id);
       } else {
+        // Fallback: usar user_type legado
+        console.warn("[SalesChart] user_type_id não encontrado, usando user_type legado");
+        query = query.eq("user_type", "investor");
+      }
+
+      // Verificar se o usuário logado é escritório ou assessor
+      const { data: currentUserProfile } = await supabase
+        .from("profiles")
+        .select("user_type_id, distributor_id")
+        .eq("id", distributorId)
+        .single();
+
+      if (currentUserProfile) {
+        // Se tiver user_type_id, verificar o tipo
+        if (currentUserProfile.user_type_id) {
+          const { data: currentUserType } = await supabase
+            .from("user_types")
+            .select("user_type")
+            .eq("id", currentUserProfile.user_type_id)
+            .single();
+
+          if (currentUserType?.user_type === "office") {
+            query = query.eq("office_id", distributorId);
+          } else {
+            // Para assessor ou distribuidor, usar parent_id
+            query = query.eq("parent_id", distributorId);
+          }
+        } else {
+          // Fallback: usar lógica antiga baseada em role
+          if (user?.role === "escritorio") {
+            query = query.eq("office_id", distributorId);
+          } else {
+            query = query.eq("parent_id", distributorId);
+          }
+        }
+      } else {
+        // Se não encontrar perfil, usar parent_id como padrão
         query = query.eq("parent_id", distributorId);
       }
 
       const { data: investors, error: investorsError } = await query;
+      
+      console.log("[SalesChart] Investidores encontrados:", investors?.length || 0);
+      console.log("[SalesChart] Erro na busca:", investorsError);
 
       if (investorsError) {
         console.error("Erro ao buscar dados de vendas:", investorsError);
@@ -80,6 +131,15 @@ useEffect(() => {
       }
 
       const profileIds = (investors ?? []).map((p) => p.id);
+      
+      console.log("[SalesChart] IDs dos investidores:", profileIds);
+
+      if (profileIds.length === 0) {
+        console.warn("[SalesChart] Nenhum investidor encontrado");
+        setSalesData([]);
+        setLoading(false);
+        return;
+      }
 
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
@@ -90,8 +150,11 @@ useEffect(() => {
       if (investmentsError) {
         console.error("Erro ao buscar investimentos para o gráfico:", investmentsError);
         setSalesData([]);
+        setLoading(false);
         return;
       }
+      
+      console.log("[SalesChart] Investimentos encontrados:", investments?.length || 0);
 
       const currentDate = new Date();
 
@@ -103,6 +166,21 @@ useEffect(() => {
           const paymentDate = new Date(investment.payment_date);
           return paymentDate >= sixMonthsAgo && paymentDate <= currentDate;
         }) ?? [];
+
+      console.log("[SalesChart] Investimentos ativos nos últimos 6 meses:", activeInvestments.length);
+
+      // Buscar taxa de comissão do banco (sempre usa período de 12 meses e liquidez mensal para comissões)
+      let commissionRate = 0;
+      if (user_type_id) {
+        commissionRate = await getCommissionRate(user_type_id, 12, "Mensal");
+        console.log("[SalesChart] Taxa de comissão obtida:", commissionRate, `(${(commissionRate * 100).toFixed(2)}%)`);
+      } else {
+        console.warn("[SalesChart] user_type_id não disponível, não será possível calcular comissão");
+      }
+      
+      if (commissionRate === 0) {
+        console.warn("[SalesChart] Taxa de comissão não encontrada, usando 0");
+      }
 
       // Processar dados para o gráfico
       const monthlyData: {
@@ -142,8 +220,8 @@ useEffect(() => {
         if (monthlyData[monthKey]) {
           const investmentValue = Number(investment.amount) || 0;
           monthlyData[monthKey].captured += investmentValue;
-          monthlyData[monthKey].commission +=
-            investmentValue * (user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03);
+          // commissionRate já vem em decimal (ex: 0.03 para 3%)
+          monthlyData[monthKey].commission += investmentValue * commissionRate;
         }
       });
 

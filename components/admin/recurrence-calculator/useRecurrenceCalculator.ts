@@ -148,7 +148,7 @@ export function useRecurrenceCalculator() {
 
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, user_type, parent_id, office_id, hierarchy_level")
+        .select("id, full_name, email, user_type, parent_id, office_id, hierarchy_level, user_type_id")
 
       if (profilesError) {
         console.error("Erro ao buscar perfis:", profilesError)
@@ -168,14 +168,16 @@ export function useRecurrenceCalculator() {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
 
-      const processedRecurrences: RecurrenceCalculation[] = (investments || [])
-        .filter((investment: any) => {
-          // Validar que payment_date existe e é uma data válida
-          if (!investment.payment_date) return false
-          const date = new Date(investment.payment_date)
-          return !isNaN(date.getTime())
-        })
-        .map((investment: any): RecurrenceCalculation => {
+      const filteredInvestments = (investments || []).filter((investment: any) => {
+        // Validar que payment_date existe e é uma data válida
+        if (!investment.payment_date) return false
+        const date = new Date(investment.payment_date)
+        return !isNaN(date.getTime())
+      })
+
+      // Processar investimentos de forma assíncrona para buscar taxas do banco
+      const processedRecurrences: RecurrenceCalculation[] = await Promise.all(
+        filteredInvestments.map(async (investment: any): Promise<RecurrenceCalculation> => {
         const investor = profilesMap.get(investment.user_id)
         let advisor: any = null
         let office = null
@@ -206,21 +208,25 @@ export function useRecurrenceCalculator() {
         const cutoffInfoForDeposit = getInvestmentCutoffPeriod(depositDate)
         const cutoffDateForDeposit = cutoffInfoForDeposit.cutoffDate
         
-        // Calcular comissão usando a nova lógica
+        // Calcular comissão usando a nova lógica (busca taxas do banco via user_type_id)
         let commissionCalc
         try {
-          commissionCalc = calculateNewCommissionLogic({
+          commissionCalc = await calculateNewCommissionLogic({
             id: investment.id,
             user_id: investment.user_id,
             amount: Number(investment.amount),
             payment_date: depositDate,
             commitment_period: commitmentPeriod,
+            liquidity: profitabilityLiquidity,
             investorName: investor?.full_name || "Investidor",
             advisorId: advisor?.id,
             advisorName: advisor?.full_name || "Assessor",
             advisorRole: advisor?.role,
+            advisorUserTypeId: advisor?.user_type_id || null,
             officeId: office?.id,
             officeName: office?.full_name || "Escritório",
+            officeUserTypeId: office?.user_type_id || null,
+            investorUserTypeId: investor?.user_type_id || null,
             isForAdvisor: true, // Para calcular comissão do assessor
           })
         } catch (error) {
@@ -355,16 +361,22 @@ export function useRecurrenceCalculator() {
           }
         }
         
-        // Usar a comissão calculada pela nova lógica
+        // Usar a comissão calculada pela nova lógica (taxas vêm do banco)
         // Para o primeiro mês: usar advisorCommission (proporcional)
         // Para meses futuros: usar monthlyBreakdown (mensal completa)
-        const advisorRate = 3.0
-        const officeRate = 1.0
-        const totalCommissionRate = advisorRate + officeRate
+        // Calcular taxas percentuais baseadas nas comissões calculadas
+        const advisorRatePercent = commissionCalc.amount > 0 
+          ? (commissionCalc.advisorCommission / commissionCalc.amount) * 100 
+          : 0
+        const officeRatePercent = commissionCalc.amount > 0 
+          ? (commissionCalc.officeCommission / commissionCalc.amount) * 100 
+          : 0
+        const totalCommissionRate = advisorRatePercent + officeRatePercent
         
         // Comissão mensal completa (a partir do segundo mês)
-        const monthlyAdvisorCommission = commissionCalc.amount * (advisorRate / 100)
-        const monthlyOfficeCommission = commissionCalc.amount * (officeRate / 100)
+        // Usar valores do monthlyBreakdown se disponível, senão usar primeiro mês
+        const monthlyAdvisorCommission = commissionCalc.monthlyBreakdown?.[1]?.advisorCommission || commissionCalc.advisorCommission
+        const monthlyOfficeCommission = commissionCalc.monthlyBreakdown?.[1]?.officeCommission || commissionCalc.officeCommission
         const monthlyCommission = monthlyAdvisorCommission + monthlyOfficeCommission
         
         // Para exibição: usar a comissão do primeiro mês (proporcional) ou mensal completa
@@ -543,7 +555,8 @@ export function useRecurrenceCalculator() {
           appliedBonuses: [],
           riskFactors: [],
         }
-      })
+        })
+      )
 
       const investors = processedRecurrences
         .map(r => ({ id: r.investorName, name: r.investorName }))
@@ -891,7 +904,7 @@ export function useRecurrenceCalculator() {
     }
   }, [selectedRecurrence])
 
-  const generateProjection = (recurrence: RecurrenceCalculation) => {
+  const generateProjection = async (recurrence: RecurrenceCalculation) => {
     const projections: RecurrenceProjection[] = []
     let cumulativeAdvisor = 0
     let cumulativeOffice = 0
@@ -914,7 +927,7 @@ export function useRecurrenceCalculator() {
       }
       paymentDate.setHours(0, 0, 0, 0)
       
-      commissionCalc = calculateNewCommissionLogic({
+      commissionCalc = await calculateNewCommissionLogic({
         id: recurrence.id,
         user_id: "", // Não precisamos do user_id para projeção
         amount: recurrence.investmentAmount,
@@ -926,6 +939,7 @@ export function useRecurrenceCalculator() {
         officeId: recurrence.officeId,
         officeName: recurrence.officeName,
         isForAdvisor: true,
+        // user_type_id serão buscados automaticamente pela função se não fornecidos
       })
     } catch (error) {
       console.error("Erro ao calcular comissão para projeção:", error)
@@ -1061,7 +1075,7 @@ export function useRecurrenceCalculator() {
 
   const handleViewProjection = (recurrence: RecurrenceCalculation) => {
     setSelectedRecurrence(recurrence)
-    generateProjection(recurrence)
+    generateProjection(recurrence).catch(console.error)
     setIsProjectionOpen(true)
   }
 

@@ -55,6 +55,8 @@ import { ApproveInvestmentModal } from "./approve-investment-modal";
 import { AdvisorCommissionsDetail } from "./advisor-commissions-detail";
 import { useToast } from "@/hooks/use-toast";
 import { calculateNewCommissionLogic } from "@/lib/commission-calculator";
+import { getCommissionRate } from "@/lib/commission-utils";
+import { getUserTypeHierarchy } from "@/lib/user-type-utils";
 import { createClient } from "@/lib/supabase/client";
 import {
   Dialog,
@@ -67,6 +69,78 @@ import { InvestmentSimulator } from "../investor/investment-simulator";
 import { PDFViewer } from "../contracts/pdf-viewer";
 
 const REGISTRATION_STEPS = ["Gerais", "Endereço", "Dados Bancários"];
+
+// Componente para exibir a data do próximo pagamento de forma assíncrona
+function NextPaymentDateCell({ investment }: { investment: any }) {
+  const [nextDate, setNextDate] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchNextDate = async () => {
+      try {
+        const paymentDateSource = investment.payment_date || investment.created_at;
+        if (!paymentDateSource) {
+          setNextDate(null);
+          setLoading(false);
+          return;
+        }
+
+        const commissionData = await calculateNewCommissionLogic({
+          id: investment.id,
+          user_id: investment.user_id ?? "",
+          amount: investment.amount,
+          payment_date: paymentDateSource,
+          commitment_period: investment.commitment_period ?? 12,
+          liquidity: investment.profitability_liquidity ?? investment.liquidity ?? "mensal",
+          advisorName: undefined,
+          advisorId: undefined,
+          advisorRole: undefined,
+          officeId: undefined,
+          officeName: undefined,
+          isForAdvisor: false,
+        });
+
+        const paymentDates = commissionData.paymentDueDate ?? [];
+        const breakdown = commissionData.monthlyBreakdown ?? [];
+
+        if (!paymentDates.length || !breakdown.length) {
+          setNextDate(null);
+          setLoading(false);
+          return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Próximo pagamento de acordo com a LIQUIDEZ:
+        // pegar a primeira data futura (>= hoje) cujo investorCommission seja > 0
+        for (let i = 0; i < paymentDates.length; i++) {
+          const paymentDate = new Date(paymentDates[i]);
+          paymentDate.setHours(0, 0, 0, 0);
+          const monthData = breakdown[i];
+
+          if (paymentDate >= today && monthData && monthData.investorCommission > 0) {
+            setNextDate(paymentDate);
+            setLoading(false);
+            return;
+          }
+        }
+
+        setNextDate(null);
+        setLoading(false);
+      } catch (error) {
+        console.error("Erro ao calcular próxima data de pagamento:", error);
+        setNextDate(null);
+        setLoading(false);
+      }
+    };
+
+    fetchNextDate();
+  }, [investment]);
+
+  if (loading) return <span>--</span>;
+  return nextDate ? <span>{nextDate.toLocaleDateString("pt-BR")}</span> : <span>--</span>;
+}
 
 const REGISTRATION_INPUT_CLASS =
   "h-11 rounded-xl border border-white/50 bg-white/40 text-[#064E3B] placeholder:text-slate-500 shadow-[0_1px_0_rgba(255,255,255,0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-emerald-500";
@@ -274,7 +348,7 @@ export function DistributorDashboard() {
     percentage: string;
   } | null>(null);
 
-  const getNextCommissionPaymentDate = (investment: {
+  const getNextCommissionPaymentDate = async (investment: {
     id: string;
     user_id?: string;
     amount: number;
@@ -283,12 +357,12 @@ export function DistributorDashboard() {
     commitment_period?: number | null;
     profitability_liquidity?: string | null;
     liquidity?: string | null;
-  }): Date | null => {
+  }): Promise<Date | null> => {
     try {
       const paymentDateSource = investment.payment_date || investment.created_at;
       if (!paymentDateSource) return null;
 
-      const commissionData = calculateNewCommissionLogic({
+      const commissionData = await calculateNewCommissionLogic({
         id: investment.id,
         user_id: investment.user_id ?? "",
         amount: investment.amount,
@@ -487,6 +561,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     clientsCount: 0,
     officeShare: 0,
     advisorShare: 0,
+    advisorRate: 0, // Taxa de comissão do assessor (em decimal)
+    officeRate: 0, // Taxa de comissão do escritório (em decimal)
     currentMonth: {
       captured: 0,
       commission: 0,
@@ -1198,49 +1274,231 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   useEffect(() => {
     if (myInvestors.length === 0 || !user) return;
 
-    const totalCaptured = myInvestors.reduce(
-      (sum, inv) => sum + inv.totalInvested,
-      0
-    );
+    const calculateCommissions = async () => {
+      const totalCaptured = myInvestors.reduce(
+        (sum, inv) => sum + inv.totalInvested,
+        0
+      );
 
-    const officeShare = totalCaptured * 0.01;
-    const advisorShare = officeShare * 3;
+      // Buscar user_type_id e office_id do perfil do usuário
+      const supabase = createClient();
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("user_type_id, office_id, parent_id")
+        .eq("id", user.id)
+        .single();
 
-    const baseCommissionRate =
-      user.role === "escritorio"
-        ? 0.01
-        : user.role === "investor"
-        ? 0.02
-        : 0.03; // Baseado no role
-    const monthlyCommission = totalCaptured * baseCommissionRate;
-    const annualCommission = monthlyCommission * 12;
+      const userTypeId = userProfile?.user_type_id || null;
+      const userOfficeId = userProfile?.office_id || null;
+      const userParentId = userProfile?.parent_id || null;
 
-    setDistributorData((prev) => ({
-      ...prev,
-      totalCaptured,
-      monthlyCommission: monthlyCommission,
-      annualCommission: annualCommission,
-      clientsCount: myInvestors.length,
-      advisorShare,
-      officeShare,
-      currentMonth: {
-        captured: totalCaptured,
-        commission: monthlyCommission,
-      },
-      performanceBonus: {
-        meta1Achieved: totalCaptured >= 3000000,
-        meta2Achieved: totalCaptured >= 7000000,
-        meta3Achieved: totalCaptured >= 15000000,
-        meta4Achieved: totalCaptured >= 30000000,
-        meta5Achieved: totalCaptured >= 50000000,
-        additionalRate: totalCaptured >= 7000000 ? 5 : 0,
-      },
-      ranking: {
-        ...prev.ranking,
-        poolShare: totalCaptured * 0.02,
-      },
-    }));
-  }, [myInvestors]);
+      // Buscar taxas de comissão do banco (sempre usar período padrão de 12 meses e liquidez mensal)
+      const commitmentPeriod = 12;
+      const liquidity = "Mensal";
+
+      // Buscar taxa de comissão do usuário atual
+      const baseCommissionRate = await getCommissionRate(userTypeId, commitmentPeriod, liquidity);
+
+      // Buscar user_type do usuário logado para identificar se é assessor, escritório ou distribuidor
+      const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+      const userType = await getUserTypeFromId(userTypeId);
+      const userTypeSlug = userType?.user_type || null;
+
+      // Buscar user_type_id de office, advisor e investor usando todas as relações
+      // Hierarquia: distribuidor -> escritorio -> assessor -> investidor
+      let officeRate = baseCommissionRate;
+      let advisorRate = baseCommissionRate;
+      let investorRate = baseCommissionRate;
+      
+      if (userTypeId) {
+        // CASO 1: Se o usuário logado é um ASSESSOR
+        if (userTypeSlug === "advisor") {
+          // A taxa do assessor é a taxa do próprio usuário logado
+          advisorRate = baseCommissionRate;
+          console.log("[DistributorDashboard] Taxa de assessor (usuário logado):", advisorRate, `(${(advisorRate * 100).toFixed(2)}%)`);
+          
+          // Buscar TODAS as relações do assessor (como pai e como filho)
+          const { data: allAdvisorRelations, error: advisorRelationsError } = await supabase.rpc(
+            'get_user_type_relations_all',
+            { p_user_type_id: userTypeId }
+          );
+          
+          if (!advisorRelationsError && allAdvisorRelations && allAdvisorRelations.length > 0) {
+            // Filtrar relações onde o assessor é FILHO (role: "child")
+            // Isso nos dá os pais do assessor
+            const parentRelations = allAdvisorRelations.filter((rel: any) => rel.role === "child");
+            
+            // Encontrar a relação onde o pai é do tipo "office"
+            const officeParentRelation = parentRelations.find((rel: any) => rel.parent_user_type === "office");
+            
+            if (officeParentRelation) {
+              // Usar o parent_user_type_id para buscar a taxa do escritório
+              officeRate = await getCommissionRate(officeParentRelation.parent_user_type_id, commitmentPeriod, liquidity);
+              console.log("[DistributorDashboard] Taxa de escritório obtida (pai do assessor via relações):", officeRate, `(${(officeRate * 100).toFixed(2)}%)`);
+            } else {
+              // Fallback: buscar via office_id do perfil
+              if (userOfficeId) {
+                const { data: officeProfile } = await supabase
+                  .from("profiles")
+                  .select("user_type_id")
+                  .eq("id", userOfficeId)
+                  .single();
+                
+                if (officeProfile?.user_type_id) {
+                  officeRate = await getCommissionRate(officeProfile.user_type_id, commitmentPeriod, liquidity);
+                  console.log("[DistributorDashboard] Taxa de escritório obtida (fallback via office_id):", officeRate, `(${(officeRate * 100).toFixed(2)}%)`);
+                }
+              }
+            }
+          } else {
+            // Fallback: buscar via office_id do perfil se não encontrou relações
+            if (userOfficeId) {
+              const { data: officeProfile } = await supabase
+                .from("profiles")
+                .select("user_type_id")
+                .eq("id", userOfficeId)
+                .single();
+              
+              if (officeProfile?.user_type_id) {
+                officeRate = await getCommissionRate(officeProfile.user_type_id, commitmentPeriod, liquidity);
+                console.log("[DistributorDashboard] Taxa de escritório obtida (fallback via office_id):", officeRate, `(${(officeRate * 100).toFixed(2)}%)`);
+              }
+            }
+          }
+        }
+        // CASO 2: Se o usuário logado é um ESCRITÓRIO
+        else if (userTypeSlug === "office") {
+          // A taxa do escritório é a taxa do próprio usuário logado
+          officeRate = baseCommissionRate;
+          console.log("[DistributorDashboard] Taxa de escritório (usuário logado):", officeRate, `(${(officeRate * 100).toFixed(2)}%)`);
+          
+          // Buscar as relações do escritório para obter a taxa do assessor (filho)
+          const { data: officeRelations, error: officeRelationsError } = await supabase.rpc(
+            'get_user_type_relations_all',
+            { p_user_type_id: userTypeId }
+          );
+          
+          if (!officeRelationsError && officeRelations && officeRelations.length > 0) {
+            const childRelations = officeRelations.filter((rel: any) => rel.role === "parent");
+            const advisorRelation = childRelations.find((rel: any) => rel.child_user_type === "advisor");
+            
+            if (advisorRelation) {
+              advisorRate = await getCommissionRate(advisorRelation.child_user_type_id, commitmentPeriod, liquidity);
+              console.log("[DistributorDashboard] Taxa de assessor obtida (filho do escritório):", advisorRate, `(${(advisorRate * 100).toFixed(2)}%)`);
+            }
+          }
+        }
+        // CASO 3: Se o usuário logado é um DISTRIBUIDOR
+        else if (userTypeSlug === "distributor") {
+          // Buscar todas as relações (como pai e como filho) usando a função RPC
+          const { data: allRelations, error: relationsError } = await supabase.rpc(
+            'get_user_type_relations_all',
+            { p_user_type_id: userTypeId }
+          );
+          
+          if (relationsError) {
+            console.error("[DistributorDashboard] Erro ao buscar relações:", relationsError);
+          } else if (allRelations && allRelations.length > 0) {
+            // Filtrar relações onde o user_type atual é pai (role: "parent")
+            const childRelations = allRelations.filter((rel: any) => rel.role === "parent");
+            
+            // Identificar office, advisor e investor diretamente do retorno
+            const officeRelation = childRelations.find((rel: any) => rel.child_user_type === "office");
+            const advisorRelation = childRelations.find((rel: any) => rel.child_user_type === "advisor");
+            const investorRelation = childRelations.find((rel: any) => rel.child_user_type === "investor");
+            
+            // PRIORIDADE 1: Usar taxas das relações hierárquicas primeiro
+            if (officeRelation) {
+              officeRate = await getCommissionRate(officeRelation.child_user_type_id, commitmentPeriod, liquidity);
+              console.log("[DistributorDashboard] Taxa de escritório obtida (relações hierárquicas):", officeRate, `(${(officeRate * 100).toFixed(2)}%)`);
+              
+              // Buscar assessores (filhos dos escritórios)
+              if (!advisorRelation) {
+                const { data: officeRelations } = await supabase.rpc(
+                  'get_user_type_relations_all',
+                  { p_user_type_id: officeRelation.child_user_type_id }
+                );
+                
+                if (officeRelations && officeRelations.length > 0) {
+                  const officeChildRelations = officeRelations.filter((rel: any) => rel.role === "parent");
+                  const advisorRelationFromOffice = officeChildRelations.find((rel: any) => rel.child_user_type === "advisor");
+                  
+                  if (advisorRelationFromOffice) {
+                    advisorRate = await getCommissionRate(advisorRelationFromOffice.child_user_type_id, commitmentPeriod, liquidity);
+                    console.log("[DistributorDashboard] Taxa de assessor obtida (neto do distribuidor):", advisorRate, `(${(advisorRate * 100).toFixed(2)}%)`);
+                  }
+                }
+              }
+            }
+            
+            if (advisorRelation) {
+              advisorRate = await getCommissionRate(advisorRelation.child_user_type_id, commitmentPeriod, liquidity);
+              console.log("[DistributorDashboard] Taxa de assessor obtida (relações hierárquicas):", advisorRate, `(${(advisorRate * 100).toFixed(2)}%)`);
+            }
+            
+            if (investorRelation) {
+              investorRate = await getCommissionRate(investorRelation.child_user_type_id, commitmentPeriod, liquidity);
+              console.log("[DistributorDashboard] Taxa de investidor obtida:", investorRate, `(${(investorRate * 100).toFixed(2)}%)`);
+            }
+          }
+        }
+        
+        // Fallback: buscar taxa do investidor do primeiro investidor se não encontrou via hierarquia
+        if (investorRate === baseCommissionRate && myInvestors.length > 0) {
+          const firstInvestorId = myInvestors[0].id;
+          const { data: investorProfile } = await supabase
+            .from("profiles")
+            .select("user_type_id")
+            .eq("id", firstInvestorId)
+            .single();
+          
+          const fallbackInvestorUserTypeId = investorProfile?.user_type_id || null;
+          if (fallbackInvestorUserTypeId) {
+            investorRate = await getCommissionRate(fallbackInvestorUserTypeId, commitmentPeriod, liquidity);
+            console.log("[DistributorDashboard] Taxa de investidor obtida via fallback:", investorRate, `(${(investorRate * 100).toFixed(2)}%)`);
+          }
+        }
+      }
+
+      // Calcular shares e comissões usando taxas do banco
+      const officeShare = totalCaptured * officeRate;
+      const advisorShare = totalCaptured * advisorRate;
+      const monthlyCommission = totalCaptured * baseCommissionRate;
+      const annualCommission = monthlyCommission * 12;
+
+      setDistributorData((prev) => ({
+        ...prev,
+        totalCaptured,
+        monthlyCommission: monthlyCommission,
+        annualCommission: annualCommission,
+        clientsCount: myInvestors.length,
+        advisorShare,
+        officeShare,
+        advisorRate, // Armazenar taxa de assessor para exibição
+        officeRate, // Armazenar taxa de escritório para exibição
+        currentMonth: {
+          captured: totalCaptured,
+          commission: monthlyCommission,
+        },
+        performanceBonus: {
+          meta1Achieved: totalCaptured >= 3000000,
+          meta2Achieved: totalCaptured >= 7000000,
+          meta3Achieved: totalCaptured >= 15000000,
+          meta4Achieved: totalCaptured >= 30000000,
+          meta5Achieved: totalCaptured >= 50000000,
+          additionalRate: totalCaptured >= 7000000 ? 5 : 0,
+        },
+        ranking: {
+          ...prev.ranking,
+          poolShare: totalCaptured * investorRate,
+        },
+      }));
+    };
+
+    calculateCommissions().catch((error) => {
+      console.error("Erro ao calcular comissões:", error);
+    });
+  }, [myInvestors, user]);
 
   const visibleSteps = getVisibleSteps();
   const isLastStep = currentStep === visibleSteps.length - 1;
@@ -3478,7 +3736,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg">
                 <div className="flex-1">
                   <h4 className="font-bold text-[#003F28] text-base mb-1">
-                    {user?.role === "assessor_externo" ? "Assessor (2%)" : "Assessor (3%)"}
+                    Assessor ({distributorData.advisorRate > 0 ? (distributorData.advisorRate * 100).toFixed(2) : "0.00"}%)
                   </h4>
                   <p className="text-sm text-gray-600">
                     Sua parte da comissão (Até 3 milhões)
@@ -3494,7 +3752,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-[#D9D9D9]/45 border border-gray-300 rounded-lg">
                 <div className="flex-1">
                   <h4 className="font-bold text-[#01223F] text-base mb-1">
-                    Escritório (1%)
+                    Escritório ({distributorData.officeRate > 0 ? (distributorData.officeRate * 100).toFixed(2) : "0.00"}%)
                   </h4>
                   <p className="text-sm text-gray-600">
                     Parte do escritório (até R$ 3 milhões)
@@ -3710,7 +3968,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           </TabsList>
 
           <TabsContent value="simulator">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
               <CommissionSimulator />
 
               <InvestmentSimulator title="Simule o investimento do cliente" />
@@ -5707,12 +5965,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                               {inv.commitment_period ?? "--"}
                             </TableCell>
                             <TableCell>
-                              {(() => {
-                                const nextDate = getNextCommissionPaymentDate(inv);
-                                return nextDate
-                                  ? nextDate.toLocaleDateString("pt-BR")
-                                  : "--";
-                              })()}
+                              <NextPaymentDateCell investment={inv} />
                             </TableCell>
                             <TableCell className="text-center">
                               <Button

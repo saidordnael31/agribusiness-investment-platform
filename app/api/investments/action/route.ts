@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
+import { checkIsAdmin, checkIsAdvisor } from "@/lib/permission-utils"
 
 // Força a rota a ser dinâmica para permitir uso de cookies
 export const dynamic = "force-dynamic"
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Verificar perfil do usuário
     const { data: profile } = await supabase
       .from("profiles")
-      .select("user_type, role, id")
+      .select("user_type_id, user_type, role, id")
       .eq("id", user.id)
       .single()
 
@@ -33,9 +34,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se é admin ou assessor
-    const isAdmin = profile.user_type === 'admin'
-    const isAdvisor = profile.user_type === 'distributor' && (profile.role === 'assessor' || profile.role === 'assessor_externo')
+    // Verificar se é admin ou assessor usando sistema dinâmico
+    const isAdmin = await checkIsAdmin(supabase, user.id)
+    const isAdvisor = await checkIsAdvisor(supabase, user.id) || 
+      (profile.user_type === 'distributor' && (profile.role === 'assessor' || profile.role === 'assessor_externo'))
     
     if (!isAdmin && !isAdvisor) {
       return NextResponse.json(

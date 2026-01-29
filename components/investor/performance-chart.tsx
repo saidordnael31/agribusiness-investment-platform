@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts"
 import { createBrowserClient } from "@supabase/ssr"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { getRateByPeriodAndLiquidity as getRateFromDB } from "@/lib/rentability-utils"
+import { useUserType } from "@/hooks/useUserType"
 
 interface PerformanceDataPoint {
   month: string
@@ -34,46 +36,65 @@ export function PerformanceChart() {
   const [growthRate, setGrowthRate] = useState(0)
   const [hasOnlySimpleInterest, setHasOnlySimpleInterest] = useState(false)
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [rateCache, setRateCache] = useState<Record<string, number>>({})
+  
+  // Usar hook para obter user_type_id
+  const { user_type_id } = useUserType(user?.id)
 
-  // Função para obter a taxa correta baseada nas tabelas dinâmicas
+  useEffect(() => {
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      setUser(JSON.parse(userStr))
+    }
+  }, [])
+
+  // Função para obter taxa usando APENAS user_type_id -> rentability_id -> função get
+  // Usa cache para permitir uso síncrono dentro de loops
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
-    // Tabela padrão de rentabilidade (investidores em geral)
-    const defaultRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.018 }, // 1,8%
-      6: { Mensal: 0.019, Semestral: 0.02 }, // 1,9% | 2,0%
-      12: { Mensal: 0.021, Semestral: 0.022, Anual: 0.025 }, // 2,1% | 2,2% | 2,5%
-      24: { Mensal: 0.023, Semestral: 0.025, Anual: 0.027, Bienal: 0.03 }, // 2,3% | 2,5% | 2,7% | 3,0%
-      36: {
-        Mensal: 0.024,
-        Semestral: 0.026,
-        Anual: 0.03,
-        Bienal: 0.032,
-        Trienal: 0.035,
-      }, // 2,4% | 2,6% | 3,0% | 3,2% | 3,5%
-    };
-
-    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
-    const externalAdvisorRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.0135 }, // 1,35%
-      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
-      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
-      24: {
-        Mensal: 0.0165,
-        Semestral: 0.017,
-        Anual: 0.0175,
-        Bienal: 0.018,
-      }, // 1,65% | 1,70% | 1,75% | 1,80%
-      36: {
-        Mensal: 0.0185,
-        Semestral: 0.019,
-        Bienal: 0.0195,
-        Trienal: 0.02,
-      }, // 1,85% | 1,90% | 1,95% | 2,00%
-    };
-
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
-    return table[period]?.[liquidity] || 0;
+    const cacheKey = `${period}-${liquidity}`
+    
+    // Se já está no cache, retornar
+    if (rateCache[cacheKey] !== undefined) {
+      return rateCache[cacheKey]
+    }
+    
+    // Se não tem user_type_id, retornar taxa do investimento ou 0
+    // Isso será atualizado quando o cache for carregado
+    return 0
   };
+  
+  // Pré-carregar todas as taxas necessárias antes de gerar os dados
+  const preloadRates = async (investments: Investment[]) => {
+    if (!user_type_id) return
+    
+    const uniqueRates = new Set<string>()
+    investments.forEach(inv => {
+      const period = inv.commitment_period || 12
+      const liquidity = inv.profitability_liquidity || "Mensal"
+      uniqueRates.add(`${period}-${liquidity}`)
+    })
+    
+    // Carregar todas as taxas em paralelo
+    const ratePromises = Array.from(uniqueRates).map(async (key) => {
+      const [period, liquidity] = key.split('-')
+      try {
+        const rate = await getRateFromDB(user_type_id, Number(period), liquidity)
+        return { key, rate: rate > 0 ? rate : 0 }
+      } catch (error) {
+        console.error(`[PerformanceChart] Erro ao carregar taxa ${key}:`, error)
+        return { key, rate: 0 }
+      }
+    })
+    
+    const rates = await Promise.all(ratePromises)
+    const newCache: Record<string, number> = {}
+    rates.forEach(({ key, rate }) => {
+      newCache[key] = rate
+    })
+    
+    setRateCache(newCache)
+  }
 
   const generatePerformanceData = (investments: Investment[], withdrawals: any[] = []): PerformanceDataPoint[] => {
     const months = [
@@ -157,11 +178,12 @@ export function PerformanceChart() {
           const amount = Number(investment.amount)
           const liquidity = investment.profitability_liquidity || "Mensal"
           const commitmentPeriod = investment.commitment_period || 12
-          const rate = getRateByPeriodAndLiquidity(
-            commitmentPeriod,
-            liquidity,
-            isExternalAdvisorInvestor
-          ) || Number(investment.monthly_return_rate) || 0.02
+          
+          // Buscar taxa do cache (pré-carregado) ou usar monthly_return_rate do investimento como fallback
+          const cachedRate = getRateByPeriodAndLiquidity(commitmentPeriod, liquidity, isExternalAdvisorInvestor)
+          const rate = cachedRate > 0 
+            ? cachedRate 
+            : (Number(investment.monthly_return_rate) || 0.02)
           
           // Calcular meses completos decorridos desde o mês de investimento até o mês atual
           // Para juros simples mensal, conta desde o mês de depósito (inclusive)
@@ -327,7 +349,10 @@ export function PerformanceChart() {
         return
       }
 
-      // Gerar dados de performance baseados nos investimentos reais e resgates
+      // Pré-carregar todas as taxas necessárias antes de gerar os dados
+      await preloadRates(investments || [])
+
+      // Gerar dados de performance baseados nos investimentos reais e resgates (agora com taxas no cache)
       const performanceData = generatePerformanceData(investments, withdrawals || [])
       setPerformanceData(performanceData)
       

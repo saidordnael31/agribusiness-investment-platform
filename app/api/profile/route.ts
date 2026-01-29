@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { checkIsAdmin, checkIsDistributor } from "@/lib/permission-utils"
 
 export const dynamic = "force-dynamic"
 
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     // Verificar tipo de usuário para permitir buscar perfil de outros usuários
     const { data: currentUserProfile } = await supabase
       .from("profiles")
-      .select("user_type, role")
+      .select("user_type_id, user_type, role")
       .eq("id", user.id)
       .single()
 
@@ -30,8 +31,8 @@ export async function GET(request: NextRequest) {
 
     // Se um userId foi fornecido, verificar permissões
     if (targetUserId && targetUserId !== user.id) {
-      const isAdmin = currentUserProfile?.user_type === 'admin'
-      const isDistributor = currentUserProfile?.user_type === 'distributor'
+      const isAdmin = await checkIsAdmin(supabase, user.id)
+      const isDistributor = await checkIsDistributor(supabase, user.id)
       
       if (isAdmin) {
         // Admin pode ver qualquer perfil
@@ -174,7 +175,7 @@ export async function PUT(request: NextRequest) {
     // Verificar se é admin para permitir editar perfil de outros usuários
     const { data: currentUserProfile } = await supabase
       .from("profiles")
-      .select("user_type")
+      .select("user_type_id, user_type")
       .eq("id", user.id)
       .single()
 
@@ -186,7 +187,8 @@ export async function PUT(request: NextRequest) {
     let profileId = user.id
 
     // Se um userId foi fornecido e o usuário é admin, editar perfil do usuário específico
-    if (targetUserId && currentUserProfile?.user_type === 'admin') {
+    const isAdmin = await checkIsAdmin(supabase, user.id)
+    if (targetUserId && isAdmin) {
       profileId = targetUserId
     }
 

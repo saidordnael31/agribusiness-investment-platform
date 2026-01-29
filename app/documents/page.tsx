@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useUserType } from "@/hooks/useUserType";
+import { isAdminSync, isAdvisorSync, isDistributorSync, isInvestorSync } from "@/lib/permission-utils";
 import { DistributorLayout } from "@/components/layout/distributor-layout";
 
 interface UserData {
@@ -36,6 +38,9 @@ interface UserData {
 export default function DocumentsPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const { toast } = useToast();
+  
+  // Usar hook para obter informações do tipo de usuário
+  const { user_type_id } = useUserType(user?.id);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -46,15 +51,17 @@ export default function DocumentsPage() {
     }
   }, []);
 
-  const isAdmin = user?.user_type === "admin";
+  // Migrado para usar funções helper com suporte a mapeamento legado
+  const isAdmin = isAdminSync(user?.user_type || null, user?.role || null);
   const isOffice =
-    user?.user_type === "distributor" && user?.role === "escritorio";
+    isDistributorSync(user?.user_type || null, user?.role || null) && user?.role === "escritorio";
   const isManager =
-    user?.user_type === "distributor" && user?.role === "gestor";
-  const isLeader = user?.user_type === "distributor" && user?.role === "lider";
+    isDistributorSync(user?.user_type || null, user?.role || null) && user?.role === "gestor";
+  const isLeader = isDistributorSync(user?.user_type || null, user?.role || null) && user?.role === "lider";
   const isAdvisor =
-    user?.user_type === "distributor" && (user?.role === "assessor" || user?.role === "assessor_externo");
-  const isInvestor = user?.user_type === "investor";
+    isAdvisorSync(user?.user_type || null, user?.role || null) ||
+    (user?.user_type === "distributor" && (user?.role === "assessor" || user?.role === "assessor_externo"));
+  const isInvestor = isInvestorSync(user?.user_type || null, user?.role || null);
 
   const canAccessDistributorDocs =
     isAdmin || isOffice || isManager || isLeader || isAdvisor;

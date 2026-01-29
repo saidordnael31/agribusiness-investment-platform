@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart3, Loader2, TrendingUp, Users, UserPlus, DollarSign, ChevronLeft, ChevronRight, Eye, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts"
 import { calculateNewCommissionLogic } from "@/lib/commission-calculator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -64,6 +65,7 @@ const formatCurrency = (value: number) => {
 }
 
 export default function AnalisesPage() {
+  const router = useRouter()
   const [escritorios, setEscritorios] = useState<EscritorioData[]>([])
   const [assessores, setAssessores] = useState<AssessorData[]>([])
   const [allAssessores, setAllAssessores] = useState<AssessorData[]>([]) // Lista completa de assessores para o select
@@ -81,16 +83,53 @@ export default function AnalisesPage() {
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<string | null>(null)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
+  // Verificar se o usuário tem role "distribuidor"
   useEffect(() => {
-    const userStr = localStorage.getItem("user")
-    if (userStr) {
-      const userData = JSON.parse(userStr)
-      setUser(userData)
-      if (userData?.id && viewMode === "geral") {
-        fetchEscritoriosData(userData.id)
+    const checkRole = async () => {
+      const userStr = localStorage.getItem("user")
+      if (!userStr) {
+        router.push("/login")
+        return
+      }
+
+      try {
+        const userData = JSON.parse(userStr)
+        let userRole = userData.role
+
+        // Se o role não estiver no localStorage, buscar do Supabase
+        if (!userRole) {
+          const supabase = createClient()
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", userData.id)
+            .single()
+
+          userRole = profile?.role || null
+        }
+
+        // Se não for distribuidor, redirecionar para o dashboard
+        if (userRole !== "distribuidor") {
+          router.push("/distributor")
+          return
+        }
+
+        setUser(userData)
+      } catch (error) {
+        console.error("Erro ao verificar role:", error)
+        router.push("/distributor")
       }
     }
-  }, [viewMode])
+
+    checkRole()
+  }, [router])
+
+  // Carregar dados quando o usuário estiver definido e viewMode for "geral"
+  useEffect(() => {
+    if (user?.id && viewMode === "geral") {
+      fetchEscritoriosData(user.id)
+    }
+  }, [user, viewMode])
 
   const fetchEscritoriosData = async (distribuidorId: string) => {
     try {
@@ -2254,3 +2293,5 @@ export default function AnalisesPage() {
     </ProtectedRoute>
   )
 }
+
+

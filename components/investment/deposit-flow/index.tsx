@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,20 @@ export function DepositFlow() {
     canContinue,
     router,
   } = useDepositFlow();
+  
+  // Estado para armazenar taxa mensal carregada
+  const [monthlyRate, setMonthlyRate] = useState<number>(0);
+  
+  // Carregar taxa quando commitmentPeriod ou liquidity mudarem
+  useEffect(() => {
+    if (commitmentPeriod && liquidity) {
+      // getRateByPeriodAndLiquidity agora é síncrona (wrapper do cache)
+      const rate = getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity);
+      setMonthlyRate(rate);
+    } else {
+      setMonthlyRate(0);
+    }
+  }, [commitmentPeriod, liquidity, getRateByPeriodAndLiquidity]);
 
   const getLiquidityCycleMonths = (liquidityLabel: string): number => {
     switch (liquidityLabel) {
@@ -183,18 +198,22 @@ export function DepositFlow() {
   }
 
   if (step === "confirmation") {
-    const monthlyRate = getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity);
-
+    // Usar monthlyRate do estado (já carregado via useEffect)
     const principal = Number(depositAmount);
     const periodMonths = Number(commitmentPeriod);
+    
+    // Se monthlyRate ainda não foi carregado, tentar buscar do cache síncrono
+    const currentRate = monthlyRate || (commitmentPeriod && liquidity 
+      ? getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity) 
+      : 0);
 
     const { totalReturn, finalValue } =
-      principal && monthlyRate && periodMonths && liquidity
-        ? calculateReturnsWithLiquidity(principal, periodMonths, monthlyRate, liquidity)
+      principal && currentRate && periodMonths && liquidity
+        ? calculateReturnsWithLiquidity(principal, periodMonths, currentRate, liquidity)
         : { totalReturn: 0, finalValue: 0 };
 
     // Retorno mensal mostrado deve ser juros simples (principal * taxa mensal)
-    const monthlyReturn = principal && monthlyRate ? principal * monthlyRate : 0;
+    const monthlyReturn = principal && currentRate ? principal * currentRate : 0;
 
     return (
       <div className="max-w-4xl mx-auto">
@@ -377,10 +396,7 @@ export function DepositFlow() {
     );
   }
 
-  const monthlyRate =
-    commitmentPeriod && liquidity
-      ? getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity)
-      : 0;
+  // monthlyRate agora vem do estado (carregado via useEffect acima)
 
   let monthlyReturn = 0;
   let totalReturn = 0;
