@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
+import { validateAdminAccess } from "@/lib/client-permission-utils"
 
 // Força a rota a ser dinâmica para permitir uso de cookies
 export const dynamic = "force-dynamic"
@@ -7,6 +8,26 @@ export const dynamic = "force-dynamic"
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient()
+    
+    // Verificar autenticação
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Usuário não autenticado" },
+        { status: 401 }
+      )
+    }
+
+    // Validar se é admin (esta rota retorna todos os investidores sem investimentos)
+    const isAdmin = await validateAdminAccess(user.id)
+    if (!isAdmin) {
+      return NextResponse.json(
+        { success: false, error: "Acesso negado: apenas administradores podem acessar esta funcionalidade" },
+        { status: 403 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     
     // Parâmetros de filtro
@@ -23,11 +44,22 @@ export async function GET(request: NextRequest) {
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
     const twelveMonthsAgoISO = twelveMonthsAgo.toISOString()
 
-    // Buscar todos os investidores
+    // Buscar user_type_id de "investor"
+    const { data: investorUserType } = await supabase
+      .from("user_types")
+      .select("id")
+      .eq("user_type", "investor")
+      .limit(1);
+
+    if (!investorUserType || investorUserType.length === 0) {
+      return NextResponse.json({ success: false, error: "Tipo de usuário 'investor' não encontrado" }, { status: 400 });
+    }
+
+    // Buscar todos os investidores usando user_type_id
     let profilesQuery = supabase
       .from("profiles")
-      .select("id, full_name, email, phone, created_at, user_type, parent_id")
-      .eq("user_type", "investor")
+      .select("id, full_name, email, phone, created_at, user_type_id, parent_id")
+      .eq("user_type_id", investorUserType[0].id)
       .order("created_at", { ascending: false })
 
     // Aplicar filtro de busca

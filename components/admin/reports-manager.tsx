@@ -241,6 +241,16 @@ export function ReportsManager() {
       // Buscar dados de usuários
       const { data: profiles } = await supabase.from("profiles").select("*")
 
+      // Buscar todos os user_types para mapear user_type_id -> user_type
+      const { data: userTypes } = await supabase
+        .from("user_types")
+        .select("id, user_type")
+      
+      const userTypeMap = new Map<number, string>()
+      userTypes?.forEach((ut) => {
+        userTypeMap.set(ut.id, ut.user_type)
+      })
+
       // Buscar dados de transações
       const { data: transactions } = await supabase
         .from("transactions")
@@ -288,12 +298,12 @@ export function ReportsManager() {
       const activeInvestments = allInvestments.filter((inv: any) => inv.status === "active")
       const totalInvestments = activeInvestments.reduce((sum: number, inv: any) => sum + (inv.amount || 0), 0)
 
-      // Calcular métricas reais de usuários
+      // Calcular métricas reais de usuários usando user_type_id
       const totalUsers = profiles?.length || 0
-      const investors = profiles?.filter(p => p.user_type === "investor").length || 0
-      const distributors = profiles?.filter(p => p.user_type === "distributor").length || 0
-      const offices = profiles?.filter(p => p.user_type === "escritorio").length || 0
-      const advisors = profiles?.filter(p => p.user_type === "assessor").length || 0
+      const investors = profiles?.filter(p => userTypeMap.get(p.user_type_id) === "investor").length || 0
+      const distributors = profiles?.filter(p => userTypeMap.get(p.user_type_id) === "distributor").length || 0
+      const offices = profiles?.filter(p => userTypeMap.get(p.user_type_id) === "office").length || 0
+      const advisors = profiles?.filter(p => userTypeMap.get(p.user_type_id) === "advisor").length || 0
 
       // Calcular usuários novos no período
       const newUsersThisPeriod = profiles?.filter(p => 

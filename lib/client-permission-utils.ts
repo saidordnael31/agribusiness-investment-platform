@@ -60,38 +60,45 @@ export async function validateUserAccess(
     return false
   }
 
-  // Se o usuário logado é distribuidor/escritório/assessor, verificar hierarquia
-  if (loggedUserType.user_type === "distributor" || loggedUserType.user_type === "office" || loggedUserType.user_type === "advisor") {
-    // Se o alvo é investidor, verificar se está vinculado
-    if (targetUserType.user_type === "investor") {
-      // Verificar se o investidor tem o assessor como parent_id
-      if (targetProfile.parent_id === loggedUserId) {
-        return true
-      }
-      // Verificar se o investidor tem o escritório como office_id
-      if (targetProfile.office_id === loggedUserId) {
-        return true
-      }
-      // Se o usuário logado é escritório, verificar assessores vinculados
-      if (loggedUserType.user_type === "office") {
-        // Buscar assessores do escritório
-        const { data: advisors } = await supabase
+  // DISTRIBUIDOR: pode ver Escritórios, Assessores dos Escritórios dele, e Investidores dos Assessores
+  if (loggedUserType.user_type === "distributor") {
+    // Pode ver Escritórios que são seus filhos (parent_id = distribuidor)
+    if (targetUserType.user_type === "office" && targetProfile.parent_id === loggedUserId) {
+      return true
+    }
+    
+    // Pode ver Assessores dos Escritórios dele
+    if (targetUserType.user_type === "advisor") {
+      if (targetProfile.office_id) {
+        const { data: officeProfile } = await supabase
           .from("profiles")
-          .select("id")
-          .eq("office_id", loggedUserId)
+          .select("parent_id")
+          .eq("id", targetProfile.office_id)
+          .single()
         
-        if (advisors && advisors.some(a => a.id === targetProfile.parent_id)) {
+        if (officeProfile && officeProfile.parent_id === loggedUserId) {
           return true
         }
       }
-      // Se o usuário logado é distribuidor, verificar hierarquia completa
-      if (loggedUserType.user_type === "distributor") {
-        // Verificar se o investidor está vinculado a escritórios/assessores do distribuidor
-        if (targetProfile.office_id) {
+    }
+    
+    // Pode ver Investidores dos Assessores dos Escritórios dele
+    if (targetUserType.user_type === "investor") {
+      // Verificar se o investidor está vinculado a assessor de escritório do distribuidor
+      if (targetProfile.parent_id) {
+        // Buscar o assessor do investidor
+        const { data: advisorProfile } = await supabase
+          .from("profiles")
+          .select("office_id, user_type_id")
+          .eq("id", targetProfile.parent_id)
+          .single()
+        
+        if (advisorProfile && advisorProfile.office_id) {
+          // Buscar o escritório do assessor
           const { data: officeProfile } = await supabase
             .from("profiles")
             .select("parent_id")
-            .eq("id", targetProfile.office_id)
+            .eq("id", advisorProfile.office_id)
             .single()
           
           if (officeProfile && officeProfile.parent_id === loggedUserId) {
@@ -99,6 +106,55 @@ export async function validateUserAccess(
           }
         }
       }
+      
+      // Verificar se o investidor está vinculado diretamente a escritório do distribuidor
+      if (targetProfile.office_id) {
+        const { data: officeProfile } = await supabase
+          .from("profiles")
+          .select("parent_id")
+          .eq("id", targetProfile.office_id)
+          .single()
+        
+        if (officeProfile && officeProfile.parent_id === loggedUserId) {
+          return true
+        }
+      }
+    }
+  }
+
+  // ESCRITÓRIO: pode ver Assessores e Investidores dos Assessores dele
+  if (loggedUserType.user_type === "office") {
+    // Pode ver Assessores que são seus filhos (office_id = escritório)
+    if (targetUserType.user_type === "advisor" && targetProfile.office_id === loggedUserId) {
+      return true
+    }
+    
+    // Pode ver Investidores dos Assessores dele
+    if (targetUserType.user_type === "investor") {
+      // Verificar se o investidor tem assessor vinculado ao escritório
+      if (targetProfile.parent_id) {
+        const { data: advisorProfile } = await supabase
+          .from("profiles")
+          .select("office_id")
+          .eq("id", targetProfile.parent_id)
+          .single()
+        
+        if (advisorProfile && advisorProfile.office_id === loggedUserId) {
+          return true
+        }
+      }
+      
+      // Verificar se o investidor está vinculado diretamente ao escritório
+      if (targetProfile.office_id === loggedUserId) {
+        return true
+      }
+    }
+  }
+
+  // ASSESSOR: pode ver Investidores que são seus filhos
+  if (loggedUserType.user_type === "advisor") {
+    if (targetUserType.user_type === "investor" && targetProfile.parent_id === loggedUserId) {
+      return true
     }
   }
 
@@ -183,25 +239,39 @@ export async function validateCanCreateProfile(
     return true
   }
 
-  // Distribuidor/escritório/assessor pode criar investidores
+  const supabase = createClient()
+  
+  // Buscar user_type_id do usuário logado
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("user_type_id")
+    .eq("id", loggedUserId)
+    .single()
+  
+  if (!profile?.user_type_id) {
+    return false
+  }
+  
+  const loggedUserType = await getUserTypeFromId(profile.user_type_id)
+  if (!loggedUserType) {
+    return false
+  }
+
+  // DISTRIBUIDOR: pode criar Escritórios
+  if (loggedUserType.user_type === "distributor" && targetUserType === "office") {
+    return true
+  }
+
+  // ESCRITÓRIO: pode criar Assessores
+  if (loggedUserType.user_type === "office" && targetUserType === "advisor") {
+    return true
+  }
+
+  // DISTRIBUIDOR/ESCRITÓRIO/ASSESSOR: pode criar Investidores
   if (targetUserType === "investor") {
-    const supabase = createClient()
-    const isDistributor = await checkIsDistributor(supabase, loggedUserId)
-    const isAdvisor = await checkIsAdvisor(supabase, loggedUserId)
-    
-    // Buscar se é escritório
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("user_type_id")
-      .eq("id", loggedUserId)
-      .single()
-    
-    if (profile?.user_type_id) {
-      const userType = await getUserTypeFromId(profile.user_type_id)
-      const isOffice = userType?.user_type === "office"
-      
-      return isDistributor || isAdvisor || isOffice
-    }
+    return loggedUserType.user_type === "distributor" || 
+           loggedUserType.user_type === "office" || 
+           loggedUserType.user_type === "advisor"
   }
 
   return false

@@ -360,6 +360,16 @@ export function WithdrawFlow() {
       
       const supabase = createClient();
       
+      // Validar que o usuário está acessando seus próprios dados
+      const { validateUserAccess } = await import("@/lib/client-permission-utils")
+      const hasAccess = await validateUserAccess(user.id, user.id)
+      
+      if (!hasAccess) {
+        console.error("[WithdrawFlow] Acesso negado ao buscar investimentos")
+        setIsLoading(false)
+        return
+      }
+      
       // Buscar investimentos ativos do usuário atual
       const { data, error } = await supabase
         .from("investments")

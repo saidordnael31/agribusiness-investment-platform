@@ -456,8 +456,8 @@ export function ComparisonCalculator() {
                       ) : scenario.availableLiquidity && scenario.availableLiquidity.length > 0 ? (
                         scenario.availableLiquidity.map((option) => (
                           <SelectItem key={option} value={option} className="hover:bg-[#003562]">
-                            {liquidityLabels[option]}
-                          </SelectItem>
+                          {liquidityLabels[option]}
+                        </SelectItem>
                         ))
                       ) : (
                         <div className="px-2 py-1.5 text-sm text-gray-400">
@@ -620,15 +620,15 @@ export function ComparisonCalculator() {
                     <div className="flex justify-between items-center">
                       <span className="text-[#003F28] font-semibold">Total com Bônus</span>
                       <p className="font-bold text-[#003F28] text-lg">
-                        {new Intl.NumberFormat("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
                         }).format(
                           (data.investorMonthlyCommission * data.commitmentPeriod) +
                           (data.amount * 0.01 * data.commitmentPeriod) +
                           (data.amount * 0.03 * data.commitmentPeriod)
                         )}
-                      </p>
+                    </p>
                     </div>
                   </div>
                 </CardContent>

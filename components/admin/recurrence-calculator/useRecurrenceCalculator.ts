@@ -136,6 +136,40 @@ export function useRecurrenceCalculator() {
     try {
       setLoading(true)
 
+      // Validar se o usuário é admin antes de buscar dados
+      const userStr = localStorage.getItem("user")
+      if (!userStr) {
+        console.error("[RecurrenceCalculator] Usuário não autenticado")
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
+      const loggedUser = JSON.parse(userStr)
+      if (!loggedUser.id) {
+        console.error("[RecurrenceCalculator] ID do usuário não encontrado")
+        setLoading(false)
+        return
+      }
+
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils")
+      const isAdmin = await validateAdminAccess(loggedUser.id)
+      
+      if (!isAdmin) {
+        console.error("[RecurrenceCalculator] Acesso negado: apenas administradores podem acessar esta funcionalidade")
+        toast({
+          title: "Acesso negado",
+          description: "Apenas administradores podem acessar esta funcionalidade",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
         .select("*")
@@ -148,22 +182,28 @@ export function useRecurrenceCalculator() {
 
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, user_type, parent_id, office_id, hierarchy_level, user_type_id")
+        .select("id, full_name, email, parent_id, office_id, hierarchy_level, user_type_id")
 
       if (profilesError) {
         console.error("Erro ao buscar perfis:", profilesError)
         throw profilesError
       }
 
+      // Buscar user_types para mapear user_type_id para user_type
+      const { getUserTypeFromId } = await import("@/lib/user-type-utils")
       const profilesMap = new Map()
       const distributorsMap = new Map()
       
-      profiles?.forEach((profile) => {
+      for (const profile of profiles || []) {
         profilesMap.set(profile.id, profile)
-        if (profile.user_type === "distributor" || profile.user_type === "admin") {
-          distributorsMap.set(profile.id, profile)
+        
+        if (profile.user_type_id) {
+          const userType = await getUserTypeFromId(profile.user_type_id)
+          if (userType && (userType.user_type === "distributor" || userType.user_type === "admin")) {
+            distributorsMap.set(profile.id, profile)
+          }
         }
-      })
+      }
 
       const today = new Date()
       today.setHours(0, 0, 0, 0)

@@ -100,19 +100,48 @@ export function DynamicCommissionCalculator({
         return
       }
 
+      // Validar se o usuário é admin
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils")
+      const isAdmin = await validateAdminAccess(user.id)
+      
+      if (!isAdmin) {
+        toast({
+          title: "Acesso negado",
+          description: "Apenas administradores podem acessar esta funcionalidade",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
       // Buscar perfil do usuário
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, user_type, full_name")
+        .select("id, user_type_id, full_name")
         .eq("id", user.id)
         .single()
 
-      if (!profile) {
+      if (!profile || !profile.user_type_id) {
         toast({
           title: "Erro",
           description: "Perfil não encontrado",
           variant: "destructive",
         })
+        setLoading(false)
+        return
+      }
+
+      // Buscar user_type do perfil
+      const { getUserTypeFromId } = await import("@/lib/user-type-utils")
+      const userType = await getUserTypeFromId(profile.user_type_id)
+      
+      if (!userType) {
+        toast({
+          title: "Erro",
+          description: "Tipo de usuário não encontrado",
+          variant: "destructive",
+        })
+        setLoading(false)
         return
       }
 
@@ -146,26 +175,60 @@ export function DynamicCommissionCalculator({
         .select("id, user_id, amount, payment_date, created_at, status")
         .eq("status", "active")
 
-      // Se for escritório, buscar investimentos dos assessores vinculados
-      if (profile.user_type === "admin") {
+      // Se for admin, buscar investimentos dos assessores vinculados
+      if (userType.user_type === "admin") {
         const targetOfficeId = officeId || user.id
+        
+        // Buscar user_type_id de "advisor" (assessor)
+        const { data: advisorUserType } = await supabase
+          .from("user_types")
+          .select("id")
+          .eq("user_type", "advisor")
+          .limit(1)
+        
+        if (!advisorUserType || advisorUserType.length === 0) {
+          toast({
+            title: "Erro",
+            description: "Tipo de usuário 'advisor' não encontrado",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
         
         // Buscar assessores do escritório
         const { data: advisors } = await supabase
           .from("profiles")
           .select("id")
           .eq("office_id", targetOfficeId)
-          .eq("user_type", "distributor")
+          .eq("user_type_id", advisorUserType[0].id)
 
         if (advisors && advisors.length > 0) {
           const advisorIds = advisors.map((a) => a.id)
 
+          // Buscar user_type_id de "investor"
+          const { data: investorUserType } = await supabase
+            .from("user_types")
+            .select("id")
+            .eq("user_type", "investor")
+            .limit(1)
+          
+          if (!investorUserType || investorUserType.length === 0) {
+            toast({
+              title: "Erro",
+              description: "Tipo de usuário 'investor' não encontrado",
+              variant: "destructive",
+            })
+            setLoading(false)
+            return
+          }
+          
           // Buscar investidores dos assessores
           const { data: investorProfiles } = await supabase
             .from("profiles")
             .select("id")
             .in("parent_id", advisorIds)
-            .eq("user_type", "investor")
+            .eq("user_type_id", investorUserType[0].id)
 
           if (investorProfiles && investorProfiles.length > 0) {
             const investorIds = investorProfiles.map((p) => p.id)
@@ -196,13 +259,30 @@ export function DynamicCommissionCalculator({
           setLoading(false)
           return
         }
-      } else if (profile.user_type === "distributor" && advisorId) {
+      } else if (userType.user_type === "distributor" && advisorId) {
+        // Buscar user_type_id de "investor"
+        const { data: investorUserType } = await supabase
+          .from("user_types")
+          .select("id")
+          .eq("user_type", "investor")
+          .limit(1)
+        
+        if (!investorUserType || investorUserType.length === 0) {
+          toast({
+            title: "Erro",
+            description: "Tipo de usuário 'investor' não encontrado",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+        
         // Se for assessor, buscar investimentos dos seus clientes
         const { data: investorProfiles } = await supabase
           .from("profiles")
           .select("id")
           .eq("parent_id", advisorId || user.id)
-          .eq("user_type", "investor")
+          .eq("user_type_id", investorUserType[0].id)
 
         if (investorProfiles && investorProfiles.length > 0) {
           const investorIds = investorProfiles.map((p) => p.id)

@@ -300,16 +300,16 @@ export function PerformanceChart() {
           const hasAccess = await validateUserAccess(user.id, advisorId)
           
           if (hasAccess) {
-            const { data: advisorProfile } = await supabase
-              .from("profiles")
-              .select("role")
-              .eq("id", advisorId)
-              .single()
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", advisorId)
+            .single()
 
-            if (advisorProfile && advisorProfile.role === "assessor_externo") {
-              setIsExternalAdvisorInvestor(true)
-            } else {
-              setIsExternalAdvisorInvestor(false)
+          if (advisorProfile && advisorProfile.role === "assessor_externo") {
+            setIsExternalAdvisorInvestor(true)
+          } else {
+            setIsExternalAdvisorInvestor(false)
             }
           }
         }

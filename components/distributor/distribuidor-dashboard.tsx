@@ -962,6 +962,22 @@ export function DistribuidorDashboard() {
 
     try {
       setSubmittingEscritorio(true);
+      
+      // Validar que o usuário logado tem permissão para criar escritórios
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateCanCreateProfile, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      const canCreate = isAdmin || await validateCanCreateProfile(loggedUser.id, "office");
+      
+      if (!canCreate) {
+        throw new Error("Você não tem permissão para criar escritórios");
+      }
+
       const supabase = createClient();
 
       const pixNote = escritorioForm.pixKey

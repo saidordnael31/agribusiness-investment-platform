@@ -1288,10 +1288,10 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     if (myInvestors.length === 0 || !user) return;
 
     const calculateCommissions = async () => {
-      const totalCaptured = myInvestors.reduce(
-        (sum, inv) => sum + inv.totalInvested,
-        0
-      );
+    const totalCaptured = myInvestors.reduce(
+      (sum, inv) => sum + inv.totalInvested,
+      0
+    );
 
       // Buscar user_type_id e office_id do perfil do usuário
       const supabase = createClient();
@@ -1476,36 +1476,36 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       // Calcular shares e comissões usando taxas do banco
       const officeShare = totalCaptured * officeRate;
       const advisorShare = totalCaptured * advisorRate;
-      const monthlyCommission = totalCaptured * baseCommissionRate;
-      const annualCommission = monthlyCommission * 12;
+    const monthlyCommission = totalCaptured * baseCommissionRate;
+    const annualCommission = monthlyCommission * 12;
 
-      setDistributorData((prev) => ({
-        ...prev,
-        totalCaptured,
-        monthlyCommission: monthlyCommission,
-        annualCommission: annualCommission,
-        clientsCount: myInvestors.length,
-        advisorShare,
-        officeShare,
+    setDistributorData((prev) => ({
+      ...prev,
+      totalCaptured,
+      monthlyCommission: monthlyCommission,
+      annualCommission: annualCommission,
+      clientsCount: myInvestors.length,
+      advisorShare,
+      officeShare,
         advisorRate, // Armazenar taxa de assessor para exibição
         officeRate, // Armazenar taxa de escritório para exibição
-        currentMonth: {
-          captured: totalCaptured,
-          commission: monthlyCommission,
-        },
-        performanceBonus: {
-          meta1Achieved: totalCaptured >= 3000000,
-          meta2Achieved: totalCaptured >= 7000000,
-          meta3Achieved: totalCaptured >= 15000000,
-          meta4Achieved: totalCaptured >= 30000000,
-          meta5Achieved: totalCaptured >= 50000000,
-          additionalRate: totalCaptured >= 7000000 ? 5 : 0,
-        },
-        ranking: {
-          ...prev.ranking,
+      currentMonth: {
+        captured: totalCaptured,
+        commission: monthlyCommission,
+      },
+      performanceBonus: {
+        meta1Achieved: totalCaptured >= 3000000,
+        meta2Achieved: totalCaptured >= 7000000,
+        meta3Achieved: totalCaptured >= 15000000,
+        meta4Achieved: totalCaptured >= 30000000,
+        meta5Achieved: totalCaptured >= 50000000,
+        additionalRate: totalCaptured >= 7000000 ? 5 : 0,
+      },
+      ranking: {
+        ...prev.ranking,
           poolShare: totalCaptured * investorRate,
-        },
-      }));
+      },
+    }));
     };
 
     calculateCommissions().catch((error) => {
@@ -1573,12 +1573,12 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         const { getUserTypeFromId } = await import("@/lib/user-type-utils");
         const userType = await getUserTypeFromId(profile.user_type_id);
         const isOffice = userType?.user_type === "office";
-        
-        // Se o usuário for um escritório, seu office_id é seu próprio id
-        // Se for um assessor, usa o office_id do seu perfil
+
+      // Se o usuário for um escritório, seu office_id é seu próprio id
+      // Se for um assessor, usa o office_id do seu perfil
         const officeId = isOffice ? userId : profile.office_id;
         console.log(`[v0] Office ID definido para usuário ${userId}:`, officeId, `(user_type: ${userType?.user_type})`);
-        setUserOfficeId(officeId);
+      setUserOfficeId(officeId);
       }
     } catch (error) {
       console.error("Erro ao buscar office_id:", error);
@@ -1851,18 +1851,18 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
       // Se for escritório, buscar por office_id, senão buscar por parent_id
       const query = isOffice
-        ? supabase
-            .from("profiles")
-            .select("*")
+          ? supabase
+              .from("profiles")
+              .select("*")
             .eq("user_type_id", investorUserType.id)
-            .eq("office_id", distributorId)
-            .order("created_at", { ascending: false })
-        : supabase
-            .from("profiles")
-            .select("*")
+              .eq("office_id", distributorId)
+              .order("created_at", { ascending: false })
+          : supabase
+              .from("profiles")
+              .select("*")
             .eq("user_type_id", investorUserType.id)
-            .eq("parent_id", distributorId)
-            .order("created_at", { ascending: false });
+              .eq("parent_id", distributorId)
+              .order("created_at", { ascending: false });
 
       const { data: profiles, error: profilesError } = await query;
 
@@ -2187,18 +2187,18 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
       // Se for escritório, buscar por office_id, senão buscar por parent_id
       const query = isOffice
-        ? supabase
-            .from("profiles")
-            .select("*")
+          ? supabase
+              .from("profiles")
+              .select("*")
             .eq("user_type_id", advisorUserType.id)
-            .eq("office_id", distributorId)
-            .order("created_at", { ascending: false })
-        : supabase
-            .from("profiles")
-            .select("*")
+              .eq("office_id", distributorId)
+              .order("created_at", { ascending: false })
+          : supabase
+              .from("profiles")
+              .select("*")
             .eq("user_type_id", advisorUserType.id)
-            .eq("parent_id", distributorId)
-            .order("created_at", { ascending: false });
+              .eq("parent_id", distributorId)
+              .order("created_at", { ascending: false });
 
       const { data: profiles, error: profilesError } = await query;
 
@@ -4136,36 +4136,36 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
           {/* Card de Ranking - Não mostrar para investidores */}
           {currentUserType !== "investor" && (
-            <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
-              <div className="absolute right-0 top-0 opacity-10">
-                <Award className="h-24 w-24" />
-              </div>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
-              </CardHeader>
-              <CardContent className="relative z-10">
+          <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+            <div className="absolute right-0 top-0 opacity-10">
+              <Award className="h-24 w-24" />
+            </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
+            </CardHeader>
+            <CardContent className="relative z-10">
                 {currentUserType === "distributor" ? (
-                  <>
+                <>
                     <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
                       {distributorData.ranking.topAdvisorName || "-"}
-                    </div>
-                    <p className="text-xs text-white/70 mt-1">
-                      {distributorData.ranking.totalDistributors > 0
+                  </div>
+                  <p className="text-xs text-white/70 mt-1">
+                    {distributorData.ranking.totalDistributors > 0
                         ? `Total de ${distributorData.ranking.totalDistributors} Escritórios`
-                        : "Aguardando dados"}
-                    </p>
-                  </>
+                      : "Aguardando dados"}
+                  </p>
+                </>
                 ) : currentUserType === "office" ? (
-                  <>
-                    <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
-                      {distributorData.ranking.topAdvisorName || "-"}
-                    </div>
-                    <p className="text-xs text-white/70 mt-1">
-                      {distributorData.ranking.totalDistributors > 0
+                <>
+                  <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
+                    {distributorData.ranking.topAdvisorName || "-"}
+                  </div>
+                  <p className="text-xs text-white/70 mt-1">
+                    {distributorData.ranking.totalDistributors > 0
                         ? `Total de ${distributorData.ranking.totalDistributors} Assessores`
-                        : "Aguardando dados"}
-                    </p>
-                  </>
+                      : "Aguardando dados"}
+                  </p>
+                </>
                 ) : currentUserType === "advisor" ? (
                   <>
                     <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
@@ -4178,8 +4178,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     </p>
                   </>
                 ) : null}
-              </CardContent>
-            </Card>
+            </CardContent>
+          </Card>
           )}
         </div>
 

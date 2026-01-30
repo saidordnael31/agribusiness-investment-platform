@@ -74,6 +74,21 @@ export function HierarchyManager() {
     try {
       setLoading(true)
       setError(null)
+      
+      // Validar se é admin
+      const userStr = localStorage.getItem("user")
+      if (!userStr) {
+        throw new Error("Usuário não autenticado")
+      }
+
+      const loggedUser = JSON.parse(userStr)
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils")
+      const isAdmin = await validateAdminAccess(loggedUser.id)
+      
+      if (!isAdmin) {
+        throw new Error("Apenas administradores podem acessar esta funcionalidade")
+      }
+
       const supabase = createClient()
 
       // Buscar user_type_id de "office" e "advisor" na tabela user_types

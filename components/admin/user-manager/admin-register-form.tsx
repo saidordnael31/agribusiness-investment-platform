@@ -485,7 +485,37 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
       const { generateTemporaryPassword } = await import("@/lib/password-utils");
       const temporaryPassword = generateTemporaryPassword(12);
 
-      // Mapear corretamente user_type e role para manter compatibilidade com o restante do sistema
+      // Mapear formData.type para user_type na tabela user_types
+      let userTypeName = formData.type;
+      
+      // Mapear tipos específicos para user_type correto
+      switch (formData.type) {
+        case "escritorio":
+          userTypeName = "office";
+          break;
+        case "assessor":
+        case "assessor_externo":
+          userTypeName = "advisor";
+          break;
+        default:
+          // "distributor", "investor", "admin" já estão corretos
+          break;
+      }
+
+      // Buscar user_type_id da tabela user_types
+      const { data: userTypeData, error: userTypeError } = await supabase
+        .from("user_types")
+        .select("id, user_type")
+        .eq("user_type", userTypeName)
+        .limit(1);
+
+      if (userTypeError || !userTypeData || userTypeData.length === 0) {
+        throw new Error(`Tipo de usuário '${userTypeName}' não encontrado na tabela user_types`);
+      }
+
+      const userTypeId = userTypeData[0].id;
+
+      // Manter userType e userRole para compatibilidade com auth metadata (se necessário)
       let userType = formData.type;
       let userRole = formData.type;
 
@@ -495,17 +525,14 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           userRole = "distribuidor";
           break;
         case "escritorio":
-          // Escritórios fazem parte da hierarquia de distribuidores
           userType = "distributor";
           userRole = "escritorio";
           break;
         case "assessor":
-          // Assessores também ficam na hierarquia de distribuidores
           userType = "distributor";
           userRole = "assessor";
           break;
         case "assessor_externo":
-          // Assessores externos também ficam na hierarquia de distribuidores
           userType = "distributor";
           userRole = "assessor_externo";
           break;
@@ -515,7 +542,6 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           break;
         case "admin":
         default:
-          // Admins da plataforma terão role "gestor" para fins de hierarquia/permissões de negócio
           userType = "admin";
           userRole = "gestor";
           break;
@@ -587,18 +613,22 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
 
       if (authError) throw authError;
 
-      // Validar se é admin antes de criar perfil
+      // Validar permissão para criar perfil
       const userStr = localStorage.getItem("user");
       if (!userStr) {
         throw new Error("Usuário não autenticado");
       }
 
       const loggedUser = JSON.parse(userStr);
-      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const { validateCanCreateProfile, validateAdminAccess } = await import("@/lib/client-permission-utils");
       const isAdmin = await validateAdminAccess(loggedUser.id);
       
+      // Se não for admin, verificar se tem permissão para criar o tipo específico
       if (!isAdmin) {
-        throw new Error("Apenas administradores podem criar perfis");
+        const canCreate = await validateCanCreateProfile(loggedUser.id, formData.type);
+        if (!canCreate) {
+          throw new Error(`Você não tem permissão para criar perfis do tipo ${formData.type}`);
+        }
       }
 
       const { error: profileError } = await supabase.from("profiles").insert([
@@ -606,8 +636,9 @@ export function AdminRegisterForm({ closeModal }: AdminRegisterFormProps) {
           id: authData.user.id,
           email: formData.email,
           full_name: formData.name,
-          user_type: userType,
-          role: userRole,
+          user_type_id: userTypeId, // Usar user_type_id em vez de user_type
+          user_type: userType, // Manter para compatibilidade
+          role: userRole, // Manter para compatibilidade
           parent_id: finalParentId,
           office_id: finalOfficeId,
           distributor_id: distributorId,

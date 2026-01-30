@@ -185,7 +185,19 @@ export function useUserManager() {
       }
 
       if (typeFilter !== "all") {
-        query = query.eq("user_type", typeFilter);
+        // Buscar user_type_id correspondente ao typeFilter
+        const { data: userTypeData } = await supabase
+          .from("user_types")
+          .select("id")
+          .eq("user_type", typeFilter)
+          .limit(1);
+        
+        if (userTypeData && userTypeData.length > 0) {
+          query = query.eq("user_type_id", userTypeData[0].id);
+        } else {
+          // Fallback: se não encontrar user_type_id, usar user_type legado
+          query = query.eq("user_type", typeFilter);
+        }
       }
 
       if (statusFilter !== "all") {
