@@ -419,6 +419,22 @@ export function useAdminDashboard() {
 
   const fetchPlatformStats = async () => {
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[useAdminDashboard] Usuário não autenticado");
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        console.error("[useAdminDashboard] Acesso negado: apenas administradores");
+        return;
+      }
+
       const supabase = createClient()
 
       const { data: profiles, error: profilesError } = await supabase.from("profiles").select("user_type")

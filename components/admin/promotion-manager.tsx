@@ -198,6 +198,20 @@ export function PromotionManager() {
     }
 
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        throw new Error("Apenas administradores podem gerenciar campanhas");
+      }
+
       if (editingPromotion) {
         const { error } = await supabase
           .from("promotional_campaigns")
@@ -265,6 +279,20 @@ export function PromotionManager() {
     }
 
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        throw new Error("Apenas administradores podem gerenciar metas");
+      }
+
       if (editingGoal) {
         const { error } = await supabase.from("promotional_campaigns").update(goalData).eq("id", editingGoal.id)
 
@@ -329,6 +357,20 @@ export function PromotionManager() {
 
   const handleDelete = async (id: string) => {
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        throw new Error("Apenas administradores podem excluir campanhas");
+      }
+
       const { error } = await supabase.from("promotional_campaigns").delete().eq("id", id)
 
       if (error) throw error
@@ -351,6 +393,20 @@ export function PromotionManager() {
 
   const toggleActive = async (id: string) => {
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        throw new Error("Apenas administradores podem alterar status de campanhas");
+      }
+
       const promotion = promotions.find((p) => p.id === id)
       if (!promotion) return
 

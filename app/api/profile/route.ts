@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     // Verificar tipo de usuário para permitir buscar perfil de outros usuários
     const { data: currentUserProfile } = await supabase
       .from("profiles")
-      .select("user_type_id, user_type, role")
+      .select("user_type_id")
       .eq("id", user.id)
       .single()
 
@@ -29,82 +29,13 @@ export async function GET(request: NextRequest) {
 
     let profileId = user.id
 
-    // Se um userId foi fornecido, verificar permissões
+    // Se um userId foi fornecido, verificar permissões usando validateUserAccess
     if (targetUserId && targetUserId !== user.id) {
-      const isAdmin = await checkIsAdmin(supabase, user.id)
-      const isDistributor = await checkIsDistributor(supabase, user.id)
+      const { validateUserAccess } = await import("@/lib/client-permission-utils")
+      const hasAccess = await validateUserAccess(user.id, targetUserId)
       
-      if (isAdmin) {
-        // Admin pode ver qualquer perfil
+      if (hasAccess) {
         profileId = targetUserId
-      } else if (isDistributor) {
-        // Distribuidor pode ver perfis de escritórios, assessores e investidores vinculados
-        // Buscar o perfil do usuário alvo para verificar relacionamento
-        const { data: targetProfile } = await supabase
-          .from("profiles")
-          .select("user_type, role, parent_id, office_id")
-          .eq("id", targetUserId)
-          .single()
-        
-        if (targetProfile) {
-          const currentRole = currentUserProfile?.role
-          const isCurrentOffice = currentRole === 'escritorio'
-          const isCurrentAdvisor = currentRole === 'assessor' || currentRole === 'assessor_externo'
-          
-          // Verificar se o usuário alvo é um escritório, assessor ou investidor vinculado
-          const isTargetOffice = targetProfile.user_type === 'distributor' && targetProfile.role === 'escritorio'
-          const isTargetAdvisor = targetProfile.user_type === 'distributor' && (targetProfile.role === 'assessor' || targetProfile.role === 'assessor_externo')
-          const isTargetInvestor = targetProfile.user_type === 'investor'
-          
-          // Verificar permissões baseadas no relacionamento
-          let hasAccess = false
-          
-          if (isTargetOffice || isTargetAdvisor) {
-            // Distribuidor pode ver qualquer escritório ou assessor (hierarquia)
-            hasAccess = true
-          } else if (isTargetInvestor) {
-            // Investidor: verificar se está vinculado ao distribuidor atual
-            if (isCurrentOffice) {
-              // Escritório pode ver investidores do seu office_id
-              hasAccess = targetProfile.office_id === user.id
-            } else if (isCurrentAdvisor) {
-              // Assessor pode ver investidores com parent_id = seu id
-              hasAccess = targetProfile.parent_id === user.id
-            } else {
-              // Distribuidor de nível superior pode ver investidores vinculados a seus escritórios/assessores
-              // Verificar se o investidor está vinculado a algum escritório ou assessor do distribuidor
-              if (targetProfile.office_id) {
-                // Verificar se o office_id pertence ao distribuidor
-                const { data: officeProfile } = await supabase
-                  .from("profiles")
-                  .select("id, parent_id")
-                  .eq("id", targetProfile.office_id)
-                  .single()
-                
-                if (officeProfile && (officeProfile.id === user.id || officeProfile.parent_id === user.id)) {
-                  hasAccess = true
-                }
-              }
-              
-              if (!hasAccess && targetProfile.parent_id) {
-                // Verificar se o parent_id (assessor) pertence ao distribuidor
-                const { data: advisorProfile } = await supabase
-                  .from("profiles")
-                  .select("id, office_id")
-                  .eq("id", targetProfile.parent_id)
-                  .single()
-                
-                if (advisorProfile && (advisorProfile.id === user.id || advisorProfile.office_id === user.id)) {
-                  hasAccess = true
-                }
-              }
-            }
-          }
-          
-          if (hasAccess) {
-            profileId = targetUserId
-          }
-        }
       }
     }
 

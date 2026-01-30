@@ -269,6 +269,22 @@ export default function AkintecManager() {
       return
     }
 
+    // Validar se é admin
+    const userStr = localStorage.getItem("user");
+    if (!userStr) {
+      toast.error("Usuário não autenticado");
+      return;
+    }
+
+    const loggedUser = JSON.parse(userStr);
+    const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+    const isAdmin = await validateAdminAccess(loggedUser.id);
+    
+    if (!isAdmin) {
+      toast.error("Apenas administradores podem modificar estruturas de comissão");
+      return;
+    }
+
     const supabase = createClient()
     const { error } = await supabase.from("akintec_commission_structures").upsert({
       product_id: selectedProduct,

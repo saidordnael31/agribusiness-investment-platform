@@ -103,7 +103,7 @@ export function InvestorDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
-  
+
   // Usar hook para obter user_type_id
   const { user_type_id } = useUserType(user?.id);
 
@@ -131,6 +131,19 @@ export function InvestorDashboard() {
 
   const fetchTransactionHistory = async (userId: string) => {
     try {
+      // Validar se o userId é do usuário logado
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[InvestorDashboard] Usuário não autenticado");
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      if (loggedUser.id !== userId) {
+        console.error("[InvestorDashboard] Tentativa de acessar dados de outro usuário");
+        return;
+      }
+
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -212,6 +225,19 @@ export function InvestorDashboard() {
 
   const fetchInvestmentData = async (userId: string) => {
     try {
+      // Validar se o userId é do usuário logado
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[InvestorDashboard] Usuário não autenticado");
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      if (loggedUser.id !== userId) {
+        console.error("[InvestorDashboard] Tentativa de acessar dados de outro usuário");
+        return;
+      }
+
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!

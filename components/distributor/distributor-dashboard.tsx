@@ -256,6 +256,15 @@ interface Advisor {
   bankAccount?: string;
 }
 
+interface Office {
+  id: string;
+  name: string;
+  email: string;
+  totalCaptured: number;
+  advisorsCount: number;
+  investorsCount: number;
+}
+
 interface QRCodeData {
   qrCode: string;
   paymentString: string;
@@ -318,8 +327,10 @@ export function DistributorDashboard() {
   const { toast } = useToast();
   const [user, setUser] = useState<UserData | null>(null);
   const [userOfficeId, setUserOfficeId] = useState<string | null>(null);
+  const [currentUserType, setCurrentUserType] = useState<string | null>(null);
   const [myInvestors, setMyInvestors] = useState<Investor[]>([]);
   const [myAdvisors, setMyAdvisors] = useState<Advisor[]>([]);
+  const [myOffices, setMyOffices] = useState<Office[]>([]);
   const [loadingInvestors, setLoadingInvestors] = useState(true);
   const [loadingAdvisors, setLoadingAdvisors] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -448,7 +459,8 @@ export function DistributorDashboard() {
   const resetInvestorForm = () => {
     setInvestorForm(createEmptyInvestorForm());
     setCurrentStep(0);
-    setUserType(user?.role === "escritorio" ? "advisor" : "investor");
+    // Usar currentUserType ao invés de user?.role
+    setUserType(currentUserType === "office" ? "advisor" : "investor");
     setBankSearchTerm("");
     setIsBankListOpen(false);
   };
@@ -592,12 +604,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   }, [userType]);
 
   useEffect(() => {
-    if (user?.role === "escritorio") {
+    // Usar currentUserType ao invés de user?.role
+    if (currentUserType === "office") {
       setUserType("advisor");
-    } else if (user?.role === "assessor" || user?.role === "assessor_externo") {
+    } else if (currentUserType === "advisor") {
       setUserType("investor");
     }
-  }, [user]);
+  }, [currentUserType]);
 
   useEffect(() => {
     const loadBanks = async () => {
@@ -1502,9 +1515,10 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
   const visibleSteps = getVisibleSteps();
   const isLastStep = currentStep === visibleSteps.length - 1;
-  const showContractsTab = user?.role === "assessor" || user?.role === "assessor_externo" || user?.role === "escritorio";
+  // Usar currentUserType ao invés de user?.role
+  const showContractsTab = currentUserType === "advisor" || currentUserType === "office";
   const tabsGridCols =
-    user?.role === "escritorio" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
+    currentUserType === "office" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
   const overviewGridCols = "lg:grid-cols-4";
   const filteredContractsOverview = useMemo(() => {
     if (!contractsSearchTerm.trim()) {
@@ -1545,7 +1559,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       const supabase = createClient();
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("office_id, role")
+        .select("office_id, user_type_id")
         .eq("id", userId)
         .single();
 
@@ -1554,15 +1568,48 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      // Se o usuário for um escritório, seu office_id é seu próprio id
-      // Se for um assessor, usa o office_id do seu perfil
-      const officeId = profile.role === "escritorio" ? userId : profile.office_id;
-      console.log(`[v0] Office ID definido para usuário ${userId}:`, officeId, `(role: ${profile.role})`);
-      setUserOfficeId(officeId);
+      // Buscar user_type_id para determinar se é escritório
+      if (profile?.user_type_id) {
+        const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+        const userType = await getUserTypeFromId(profile.user_type_id);
+        const isOffice = userType?.user_type === "office";
+        
+        // Se o usuário for um escritório, seu office_id é seu próprio id
+        // Se for um assessor, usa o office_id do seu perfil
+        const officeId = isOffice ? userId : profile.office_id;
+        console.log(`[v0] Office ID definido para usuário ${userId}:`, officeId, `(user_type: ${userType?.user_type})`);
+        setUserOfficeId(officeId);
+      }
     } catch (error) {
       console.error("Erro ao buscar office_id:", error);
     }
   };
+
+  // Buscar user_type do usuário logado
+  useEffect(() => {
+    const fetchCurrentUserType = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const supabase = createClient();
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("user_type_id")
+          .eq("id", user.id)
+          .single();
+        
+        if (profile?.user_type_id) {
+          const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+          const userType = await getUserTypeFromId(profile.user_type_id);
+          setCurrentUserType(userType?.user_type || null);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar user_type:", error);
+      }
+    };
+    
+    void fetchCurrentUserType();
+  }, [user]);
 
   useEffect(() => {
     if (user?.id) {
@@ -1573,39 +1620,256 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   }, [user]);
 
   useEffect(() => {
-    if ((user?.role === "assessor" || user?.role === "assessor_externo") && userOfficeId) {
+    if (currentUserType === "distributor" && user?.id) {
+      void fetchMyOffices(user.id);
+    }
+  }, [currentUserType, user]);
+
+  useEffect(() => {
+    if (currentUserType === "advisor" && userOfficeId) {
       void fetchOfficeAdvisors(userOfficeId);
     }
-  }, [user?.role, userOfficeId]);
+  }, [currentUserType, userOfficeId]);
+
+  // Buscar escritórios quando o usuário for distribuidor
+  const fetchMyOffices = async (distributorId: string) => {
+    try {
+      const supabase = createClient();
+      
+      // Buscar perfil do distribuidor para obter user_type_id
+      const { data: distributorProfile } = await supabase
+        .from("profiles")
+        .select("user_type_id")
+        .eq("id", distributorId)
+        .single();
+
+      if (!distributorProfile?.user_type_id) {
+        console.error("Distribuidor sem user_type_id");
+        return;
+      }
+
+      // Buscar relações onde o distribuidor é pai e o filho é escritório
+      const { data: relations, error: relationsError } = await supabase.rpc(
+        'get_user_type_relations_all',
+        { p_user_type_id: distributorProfile.user_type_id }
+      );
+
+      if (relationsError) {
+        console.error("Erro ao buscar relações:", relationsError);
+        return;
+      }
+
+      // Filtrar relações onde o distribuidor é pai (role: "parent") e o filho é escritório
+      const officeRelations = relations?.filter(
+        (rel: any) => rel.role === "parent" && rel.child_user_type === "office"
+      ) || [];
+
+      if (officeRelations.length === 0) {
+        setMyOffices([]);
+        return;
+      }
+
+      // Buscar perfis dos escritórios usando parent_id
+      const { data: officeProfiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, parent_id")
+        .eq("parent_id", distributorId)
+        .in("user_type_id", officeRelations.map((rel: any) => rel.child_user_type_id));
+
+      if (profilesError) {
+        console.error("Erro ao buscar perfis dos escritórios:", profilesError);
+        return;
+      }
+
+      if (!officeProfiles || officeProfiles.length === 0) {
+        setMyOffices([]);
+        return;
+      }
+
+      const officeIds = officeProfiles.map((p) => p.id);
+
+      // Buscar assessores de cada escritório
+      const { data: advisors, error: advisorsError } = await supabase
+        .from("profiles")
+        .select("id, office_id, parent_id")
+        .in("office_id", officeIds);
+
+      if (advisorsError) {
+        console.error("Erro ao buscar assessores:", advisorsError);
+      }
+
+      // Buscar investidores de cada escritório (via office_id ou via assessores)
+      const advisorIds = (advisors || []).map((a) => a.id);
+      
+      // Buscar investidores vinculados diretamente aos escritórios
+      const { data: investorsByOffice, error: investorsByOfficeError } = await supabase
+        .from("profiles")
+        .select("id, office_id, parent_id")
+        .in("office_id", officeIds);
+
+      if (investorsByOfficeError) {
+        console.error("Erro ao buscar investidores por escritório:", investorsByOfficeError);
+      }
+
+      // Buscar investidores vinculados aos assessores (se houver assessores)
+      let investorsByAdvisor: any[] = [];
+      if (advisorIds.length > 0) {
+        const { data: data, error: investorsByAdvisorError } = await supabase
+          .from("profiles")
+          .select("id, office_id, parent_id")
+          .in("parent_id", advisorIds);
+
+        if (investorsByAdvisorError) {
+          console.error("Erro ao buscar investidores por assessor:", investorsByAdvisorError);
+        } else {
+          investorsByAdvisor = data || [];
+        }
+      }
+
+      // Combinar e remover duplicatas
+      const allInvestors = [
+        ...(investorsByOffice || []),
+        ...investorsByAdvisor
+      ];
+      const uniqueInvestors = Array.from(
+        new Map(allInvestors.map((inv) => [inv.id, inv])).values()
+      );
+
+      const investorIds = uniqueInvestors.map((i) => i.id);
+
+      // Buscar investimentos
+      let investments: any[] = [];
+      if (investorIds.length > 0) {
+        const { data: investmentsData, error: investmentsError } = await supabase
+          .from("investments")
+          .select("user_id, amount, status")
+          .eq("status", "active")
+          .in("user_id", investorIds);
+
+        if (investmentsError) {
+          console.error("Erro ao buscar investimentos:", investmentsError);
+        } else {
+          investments = investmentsData || [];
+        }
+      }
+
+      // Calcular totais por escritório
+      const investmentsByInvestor = investments.reduce(
+        (acc, inv) => {
+          acc[inv.user_id] = (acc[inv.user_id] || 0) + inv.amount;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+
+      const transformed: Office[] = officeProfiles.map((profile) => {
+        const officeAdvisorIds = (advisors || [])
+          .filter((a) => a.office_id === profile.id)
+          .map((a) => a.id);
+
+        const officeInvestorIds = uniqueInvestors
+          .filter(
+            (i) => i.office_id === profile.id || officeAdvisorIds.includes(i.parent_id || "")
+          )
+          .map((i) => i.id);
+
+        const totalCaptured = officeInvestorIds.reduce(
+          (sum, investorId) => sum + (investmentsByInvestor[investorId] || 0),
+          0
+        );
+
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email.split("@")[0],
+          email: profile.email,
+          totalCaptured,
+          advisorsCount: officeAdvisorIds.length,
+          investorsCount: officeInvestorIds.length,
+        };
+      });
+
+      setMyOffices(transformed);
+    } catch (error) {
+      console.error("Erro ao buscar escritórios:", error);
+    }
+  };
 
   const fetchMyInvestors = async (distributorId: string) => {
     let profilesWithInvestments: any[] = [];
     try {
       setLoadingInvestors(true);
+      
+      // Validar que o distributorId é do usuário logado ou que o usuário tem acesso
+      if (!user?.id) {
+        console.error("[DistributorDashboard] Usuário não autenticado");
+        return;
+      }
+
+      // Validar acesso
+      const { validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(user.id);
+      const hasAccess = distributorId === user.id || isAdmin || await validateUserAccess(user.id, distributorId);
+      
+      if (!hasAccess) {
+        console.error("[DistributorDashboard] Usuário não tem permissão para acessar estes investidores");
+        toast({
+          title: "Erro",
+          description: "Você não tem permissão para acessar estes dados",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const supabase = createClient();
 
+      // Buscar user_type_id do usuário logado para determinar se é escritório
+      const { data: loggedUserProfile } = await supabase
+        .from("profiles")
+        .select("user_type_id")
+        .eq("id", distributorId)
+        .single();
+
+      let isOffice = false;
+      if (loggedUserProfile?.user_type_id) {
+        const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+        const userType = await getUserTypeFromId(loggedUserProfile.user_type_id);
+        isOffice = userType?.user_type === "office";
+      }
+
+      // Buscar user_type_id de "investor" na tabela user_types
+      const { data: investorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "investor")
+        .limit(1)
+        .single();
+
+      if (!investorUserType) {
+        console.error("Tipo 'investor' não encontrado na tabela user_types");
+        return;
+      }
+
       // Se for escritório, buscar por office_id, senão buscar por parent_id
-      const query =
-        user?.role === "escritorio"
-          ? supabase
-              .from("profiles")
-              .select("*")
-              .eq("user_type", "investor")
-              .eq("office_id", distributorId)
-              .order("created_at", { ascending: false })
-          : supabase
-              .from("profiles")
-              .select("*")
-              .eq("user_type", "investor")
-              .eq("parent_id", distributorId)
-              .order("created_at", { ascending: false });
+      const query = isOffice
+        ? supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_type_id", investorUserType.id)
+            .eq("office_id", distributorId)
+            .order("created_at", { ascending: false })
+        : supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_type_id", investorUserType.id)
+            .eq("parent_id", distributorId)
+            .order("created_at", { ascending: false });
 
       const { data: profiles, error: profilesError } = await query;
 
       const advisorInfoMap: Record<string, { name: string; email: string | null }> = {};
 
       if (!profilesError && profiles.length > 0) {
-        if (user?.role === "escritorio") {
+        if (currentUserType === "office") {
           const parentIds = Array.from(
             new Set(
               profiles
@@ -1635,13 +1899,29 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
         const profileIds = profiles.map((p) => p.id);
 
+        // Validar acesso aos investidores antes de buscar investimentos
+        const { validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
+        const isAdmin = await validateAdminAccess(user.id);
+        
+        const validProfileIds = [];
+        for (const profileId of profileIds) {
+          if (isAdmin || await validateUserAccess(user.id, profileId)) {
+            validProfileIds.push(profileId);
+          }
+        }
+        
+        if (validProfileIds.length === 0) {
+          console.warn("[DistributorDashboard] Nenhum investidor válido encontrado");
+          return;
+        }
+
         // Buscar investimentos ativos e pendentes (para assessores externos verem todos os investimentos)
         let investments: any[] = [];
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
           .select("*")
           .in("status", ["active", "pending"])
-          .in("user_id", profileIds);
+          .in("user_id", validProfileIds);
         
         if (investmentsError) {
           console.error("Erro ao buscar investimentos:", investmentsError);
@@ -1877,24 +2157,48 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       setLoadingAdvisors(true);
       const supabase = createClient();
 
+      // Buscar user_type_id do usuário logado para determinar se é escritório
+      const { data: loggedUserProfile } = await supabase
+        .from("profiles")
+        .select("user_type_id")
+        .eq("id", distributorId)
+        .single();
+
+      let isOffice = false;
+      if (loggedUserProfile?.user_type_id) {
+        const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+        const userType = await getUserTypeFromId(loggedUserProfile.user_type_id);
+        isOffice = userType?.user_type === "office";
+      }
+
+      // Buscar assessores usando user_type_id ao invés de user_type/role
+      // Primeiro, buscar o user_type_id de "advisor" na tabela user_types
+      const { data: advisorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "advisor")
+        .limit(1)
+        .single();
+
+      if (!advisorUserType) {
+        console.error("Tipo 'advisor' não encontrado na tabela user_types");
+        return;
+      }
+
       // Se for escritório, buscar por office_id, senão buscar por parent_id
-      // Sempre filtrar apenas assessores (interno ou externo)
-      const query =
-        user?.role === "escritorio"
-          ? supabase
-              .from("profiles")
-              .select("*")
-              .eq("user_type", "distributor")
-              .in("role", ["assessor", "assessor_externo"])
-              .eq("office_id", distributorId)
-              .order("created_at", { ascending: false })
-          : supabase
-              .from("profiles")
-              .select("*")
-              .eq("user_type", "distributor")
-              .in("role", ["assessor", "assessor_externo"])
-              .eq("parent_id", distributorId)
-              .order("created_at", { ascending: false });
+      const query = isOffice
+        ? supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_type_id", advisorUserType.id)
+            .eq("office_id", distributorId)
+            .order("created_at", { ascending: false })
+        : supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_type_id", advisorUserType.id)
+            .eq("parent_id", distributorId)
+            .order("created_at", { ascending: false });
 
       const { data: profiles, error: profilesError } = await query;
 
@@ -1910,11 +2214,45 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
       const profileIds = profiles.map((p) => p.id);
 
+      if (!user?.id) {
+        console.error("[DistributorDashboard] Usuário não autenticado");
+        return;
+      }
+
+      // Validar acesso aos assessores antes de buscar seus investidores
+      const { validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(user.id);
+      
+      const validProfileIds = [];
+      for (const profileId of profileIds) {
+        if (isAdmin || await validateUserAccess(user.id, profileId)) {
+          validProfileIds.push(profileId);
+        }
+      }
+      
+      if (validProfileIds.length === 0) {
+        setMyAdvisors([]);
+        return;
+      }
+
+      // Buscar user_type_id de "investor" na tabela user_types
+      const { data: investorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "investor")
+        .limit(1)
+        .single();
+
+      if (!investorUserType) {
+        console.error("Tipo 'investor' não encontrado na tabela user_types");
+        return;
+      }
+
       const { data: advisorInvestors, error: advisorInvestorsError } = await supabase
         .from("profiles")
         .select("id, parent_id")
-        .eq("user_type", "investor")
-        .in("parent_id", profileIds);
+        .eq("user_type_id", investorUserType.id)
+        .in("parent_id", validProfileIds);
 
       if (advisorInvestorsError) {
         console.error("Erro ao buscar investidores dos assessores:", advisorInvestorsError);
@@ -1922,13 +2260,21 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
       const investorIds = advisorInvestors?.map((inv) => inv.id) ?? [];
 
+      // Validar acesso aos investidores antes de buscar investimentos
+      const validInvestorIds = [];
+      for (const investorId of investorIds) {
+        if (isAdmin || await validateUserAccess(user.id, investorId)) {
+          validInvestorIds.push(investorId);
+        }
+      }
+
       let investorInvestments: { user_id: string; amount: number }[] = [];
-      if (investorIds.length > 0) {
+      if (validInvestorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
           .select("user_id, amount")
           .eq("status", "active")
-          .in("user_id", investorIds);
+          .in("user_id", validInvestorIds);
 
         if (investmentsError) {
           console.error("Erro ao buscar investimentos dos investidores:", investmentsError);
@@ -1989,7 +2335,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       });
 
       setMyAdvisors(transformedAdvisors);
-      if (user?.role === "escritorio") {
+      if (currentUserType === "office") {
         setOfficeAdvisors(transformedAdvisors);
       }
     } catch (error) {
@@ -2070,7 +2416,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       const supabase = createClient();
 
       // Verificar se o office_id está disponível
-      if (!userOfficeId && user?.role === "escritorio") {
+      if (!userOfficeId && currentUserType === "office") {
         toast({
           title: "Erro de configuração",
           description: "Office ID não encontrado. Tente fazer login novamente.",
@@ -2079,13 +2425,22 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
+      if (!user?.id) {
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Buscar o distributor_id baseado no contexto do usuário
       let distributorId: string | null = null;
       
-      if (user?.role === "distribuidor") {
+      if (currentUserType === "distributor") {
         // Se o usuário é distribuidor, o distributor_id é ele mesmo
         distributorId = user.id;
-      } else if (user?.role === "escritorio") {
+      } else if (currentUserType === "office") {
         // Se o usuário é escritório, buscar o distributor_id do escritório (parent_id)
         const { data: officeProfile } = await supabase
           .from("profiles")
@@ -2094,7 +2449,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           .single();
         
         distributorId = officeProfile?.distributor_id || officeProfile?.parent_id || null;
-      } else if (user?.role === "assessor" || user?.role === "assessor_externo") {
+      } else if (currentUserType === "advisor") {
         // Se o usuário é assessor (interno ou externo), buscar o distributor_id do assessor
         const { data: assessorProfile } = await supabase
           .from("profiles")
@@ -2783,6 +3138,19 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       let updateError = null;
       let usedRpc = false;
 
+      // Validar permissão para modificar o perfil
+      if (!user?.id) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const { validateCanModifyProfile, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(user.id);
+      const canModify = isAdmin || await validateCanModifyProfile(user.id, editingUser.id);
+      
+      if (!canModify) {
+        throw new Error("Você não tem permissão para modificar este perfil");
+      }
+
       // Tentar primeiro com função RPC
       try {
         const { data: rpcResult, error: rpcError } = await supabase.rpc('update_user_profile', {
@@ -2937,6 +3305,29 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       toast({
         title: "Informações incompletas",
         description: "Selecione o prazo de investimento e a liquidez.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validar permissão para criar investimento
+    if (!user?.id) {
+      toast({
+        title: "Erro",
+        description: "Usuário não autenticado",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { validateCanCreateInvestmentForUser, validateAdminAccess } = await import("@/lib/client-permission-utils");
+    const isAdmin = await validateAdminAccess(user.id);
+    const canCreate = isAdmin || await validateCanCreateInvestmentForUser(user.id, editingUser.id);
+    
+    if (!canCreate) {
+      toast({
+        title: "Erro",
+        description: "Você não tem permissão para criar investimento para este usuário",
         variant: "destructive",
       });
       return;
@@ -3172,6 +3563,30 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
       const notes = investmentNotes[investmentId] || '';
       
+      // Validar acesso ao investimento antes de atualizar
+      if (!user?.id) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      // Buscar o investimento para validar acesso
+      const { data: investment, error: fetchError } = await supabase
+        .from("investments")
+        .select("user_id")
+        .eq("id", investmentId)
+        .single();
+
+      if (fetchError || !investment) {
+        throw new Error("Investimento não encontrado");
+      }
+
+      const { validateInvestmentAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(user.id);
+      const hasAccess = isAdmin || await validateInvestmentAccess(user.id, investment.user_id);
+      
+      if (!hasAccess) {
+        throw new Error("Você não tem permissão para modificar este investimento");
+      }
+      
       const { error } = await supabase
         .from("investments")
         .update({ 
@@ -3344,17 +3759,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !currentUserType) return;
 
-    const advisorsForRanking =
-      user.role === "escritorio"
-        ? myAdvisors
-        : user.role === "assessor" || user.role === "assessor_externo"
-        ? officeAdvisors
-        : [];
-
-    if (user.role === "assessor" || user.role === "assessor_externo") {
-      if (advisorsForRanking.length === 0) {
+    // DISTRIBUIDORES: Ranking de escritórios
+    if (currentUserType === "distributor") {
+      if (myOffices.length === 0) {
         setDistributorData((prev) => ({
           ...prev,
           ranking: {
@@ -3368,22 +3777,24 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      const sorted = [...advisorsForRanking].sort(
+      const sorted = [...myOffices].sort(
         (a, b) => (b.totalCaptured || 0) - (a.totalCaptured || 0)
       );
-      const positionIndex = sorted.findIndex((advisor) => advisor.id === user.id);
 
+      // Distribuidor vê o ranking de seus escritórios, mas não está nele
       setDistributorData((prev) => ({
         ...prev,
         ranking: {
           ...prev.ranking,
-          position: positionIndex >= 0 ? positionIndex + 1 : 0,
+          position: 0, // Distribuidor não tem posição no ranking de escritórios
           totalDistributors: sorted.length,
           topAdvisorName: sorted[0]?.name ?? "",
           topAdvisorTotal: sorted[0]?.totalCaptured ?? 0,
         },
       }));
-    } else if (user.role === "escritorio") {
+    }
+    // ESCRITÓRIOS: Ranking de assessores
+    else if (currentUserType === "office") {
       if (myAdvisors.length === 0) {
         setDistributorData((prev) => ({
           ...prev,
@@ -3413,7 +3824,41 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         },
       }));
     }
-  }, [user, myAdvisors, officeAdvisors]);
+    // ASSESSORES: Ranking de investidores
+    else if (currentUserType === "advisor") {
+      if (myInvestors.length === 0) {
+        setDistributorData((prev) => ({
+          ...prev,
+          ranking: {
+            ...prev.ranking,
+            position: 0,
+            totalDistributors: 0,
+            topAdvisorName: "",
+            topAdvisorTotal: 0,
+          },
+        }));
+        return;
+      }
+
+      // Ordenar investidores por total investido
+      const sorted = [...myInvestors].sort(
+        (a, b) => (b.totalInvested || 0) - (a.totalInvested || 0)
+      );
+
+      // Para assessores, não há "posição" no ranking de investidores
+      // Mostramos apenas o total de investidores e o maior investidor
+      setDistributorData((prev) => ({
+        ...prev,
+        ranking: {
+          ...prev.ranking,
+          position: 0, // Assessores não têm posição no ranking de investidores
+          totalDistributors: sorted.length,
+          topAdvisorName: sorted[0]?.name ?? "",
+          topAdvisorTotal: sorted[0]?.totalInvested ?? 0,
+        },
+      }));
+    }
+  }, [user, currentUserType, myAdvisors, myOffices, myInvestors]);
 
   // Funções auxiliares para investimento
   const getAvailableLiquidityOptions = (period: number) => {
@@ -3471,7 +3916,9 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     };
 
     // Se o usuário logado for um assessor externo, aplicar tabela reduzida
-    const isExternalAdvisor = user?.role === "assessor_externo";
+    // Nota: Não há distinção entre assessor interno/externo no novo sistema baseado em user_type_id
+    // Se necessário, adicionar campo adicional na tabela user_types ou profiles
+    const isExternalAdvisor = false; // TODO: Implementar lógica baseada em user_type_id se necessário
     const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
 
     return table[period]?.[liquidity] ?? 0.03;
@@ -3665,7 +4112,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             </CardContent>
           </Card>
 
-          {user?.role === "escritorio" || user?.role === "assessor" || user?.role === "assessor_externo" ? (
+          {/* Card "Meus Assessores" - Apenas para escritórios e distribuidores */}
+          {(currentUserType === "office" || currentUserType === "distributor") && (
             <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
               <div className="absolute right-0 top-0 opacity-10">
                 <UserCheck className="h-24 w-24" />
@@ -3677,50 +4125,62 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               </CardHeader>
               <CardContent className="relative z-10">
                 <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
-                  {user?.role === "escritorio" ? myAdvisors.length : 0}
+                  {currentUserType === "office" ? myAdvisors.length : 0}
                 </div>
                 <p className="text-xs text-white/70 mt-1">
                   Assessores cadastrados por você
                 </p>
               </CardContent>
             </Card>
-          ) : null}
+          )}
 
-          <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
-            <div className="absolute right-0 top-0 opacity-10">
-              <Award className="h-24 w-24" />
-            </div>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-              <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
-            </CardHeader>
-            <CardContent className="relative z-10">
-              {user?.role === "assessor" || user?.role === "assessor_externo" ? (
-                <>
-                  <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
-                    {distributorData.ranking.position > 0
-                      ? `#${distributorData.ranking.position}`
-                      : "-"}
-                  </div>
-                  <p className="text-xs text-white/70 mt-1">
-                    {distributorData.ranking.totalDistributors > 0
-                      ? `de ${distributorData.ranking.totalDistributors} Distribuidores`
-                      : "Aguardando dados"}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
-                    {distributorData.ranking.topAdvisorName || "-"}
-                  </div>
-                  <p className="text-xs text-white/70 mt-1">
-                    {distributorData.ranking.totalDistributors > 0
-                      ? `Total de ${distributorData.ranking.totalDistributors} assessores`
-                      : "Aguardando dados"}
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          {/* Card de Ranking - Não mostrar para investidores */}
+          {currentUserType !== "investor" && (
+            <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
+              <div className="absolute right-0 top-0 opacity-10">
+                <Award className="h-24 w-24" />
+              </div>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                {currentUserType === "distributor" ? (
+                  <>
+                    <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
+                      {distributorData.ranking.topAdvisorName || "-"}
+                    </div>
+                    <p className="text-xs text-white/70 mt-1">
+                      {distributorData.ranking.totalDistributors > 0
+                        ? `Total de ${distributorData.ranking.totalDistributors} Escritórios`
+                        : "Aguardando dados"}
+                    </p>
+                  </>
+                ) : currentUserType === "office" ? (
+                  <>
+                    <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
+                      {distributorData.ranking.topAdvisorName || "-"}
+                    </div>
+                    <p className="text-xs text-white/70 mt-1">
+                      {distributorData.ranking.totalDistributors > 0
+                        ? `Total de ${distributorData.ranking.totalDistributors} Assessores`
+                        : "Aguardando dados"}
+                    </p>
+                  </>
+                ) : currentUserType === "advisor" ? (
+                  <>
+                    <div className="text-lg md:text-2xl font-bold leading-tight text-[#00BC6E]">
+                      {distributorData.ranking.topAdvisorName || "-"}
+                    </div>
+                    <p className="text-xs text-white/70 mt-1">
+                      {distributorData.ranking.totalDistributors > 0
+                        ? `Total de ${distributorData.ranking.totalDistributors} Investidores`
+                        : "Aguardando dados"}
+                    </p>
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Commission Breakdown */}
@@ -3957,13 +4417,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                 Contratos
               </TabsTrigger>
             )}
-            {user?.role === "escritorio" && (
+            {currentUserType === "office" && (
               <TabsTrigger value="advisors" className="text-sm">
                 Meus Assessores
               </TabsTrigger>
             )}
             <TabsTrigger value="register" className="text-sm">
-              {user?.role === "escritorio" ? "Cadastrar Usuário" : "Cadastrar Investidor"}
+              {currentUserType === "office" ? "Cadastrar Usuário" : "Cadastrar Investidor"}
             </TabsTrigger>
           </TabsList>
 
@@ -4028,7 +4488,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
-                        {user?.role === "escritorio" && (
+                        {currentUserType === "office" && (
                           <TableHead>Assessor Responsável</TableHead>
                         )}
                         <TableHead>Liquidez</TableHead>
@@ -4049,7 +4509,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                               </span>
                             </div>
                           </TableCell>
-                          {user?.role === "escritorio" && (
+                          {currentUserType === "office" && (
                             <TableCell>
                               {investor.advisorName ? (
                                 <div className="flex flex-col">
@@ -4388,7 +4848,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             </TabsContent>
           )}
 
-          {user?.role === "escritorio" && (
+          {currentUserType === "office" && (
             <TabsContent value="advisors">
               <Card>
                 <CardHeader>

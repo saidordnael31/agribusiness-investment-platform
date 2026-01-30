@@ -141,17 +141,17 @@ export async function GET(request: NextRequest) {
           .single()
         
         if (investorType) {
-          const { data: investorIds } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("parent_id", user.id)
+        const { data: investorIds } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("parent_id", user.id)
             .eq("user_type_id", investorType.id)
-          
-          if (investorIds && investorIds.length > 0) {
-            const ids = investorIds.map(inv => inv.id)
-            query = query.in('user_id', ids)
-          } else {
-            // Se não tem investidores, retorna array vazio
+        
+        if (investorIds && investorIds.length > 0) {
+          const ids = investorIds.map(inv => inv.id)
+          query = query.in('user_id', ids)
+        } else {
+          // Se não tem investidores, retorna array vazio
             query = query.eq('user_id', '00000000-0000-0000-0000-000000000000')
           }
         } else {
@@ -167,11 +167,11 @@ export async function GET(request: NextRequest) {
           .single()
         
         if (investorType) {
-          const { data: officeInvestors } = await supabase
-            .from("profiles")
-            .select("id")
+        const { data: officeInvestors } = await supabase
+          .from("profiles")
+          .select("id")
             .eq("user_type_id", investorType.id)
-            .eq("office_id", user.id)
+          .eq("office_id", user.id)
 
         if (officeInvestors && officeInvestors.length > 0) {
           const ids = officeInvestors.map(inv => inv.id)

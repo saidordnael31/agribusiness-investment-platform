@@ -62,8 +62,8 @@ export function PerformanceChart() {
     // Se não tem user_type_id, retornar taxa do investimento ou 0
     // Isso será atualizado quando o cache for carregado
     return 0
-  };
-  
+    };
+
   // Pré-carregar todas as taxas necessárias antes de gerar os dados
   const preloadRates = async (investments: Investment[]) => {
     if (!user_type_id) return
@@ -285,6 +285,7 @@ export function PerformanceChart() {
       )
 
       // Verificar se é investidor de assessor externo
+      // Validar que está buscando o próprio perfil
       const { data: profile } = await supabase
         .from("profiles")
         .select("id, parent_id, assessor_id")
@@ -294,21 +295,27 @@ export function PerformanceChart() {
       if (profile) {
         const advisorId = (profile as any).parent_id || (profile as any).assessor_id
         if (advisorId) {
-          const { data: advisorProfile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", advisorId)
-            .single()
+          // Validar acesso ao perfil do assessor antes de buscar
+          const { validateUserAccess } = await import("@/lib/client-permission-utils")
+          const hasAccess = await validateUserAccess(user.id, advisorId)
+          
+          if (hasAccess) {
+            const { data: advisorProfile } = await supabase
+              .from("profiles")
+              .select("role")
+              .eq("id", advisorId)
+              .single()
 
-          if (advisorProfile && advisorProfile.role === "assessor_externo") {
-            setIsExternalAdvisorInvestor(true)
-          } else {
-            setIsExternalAdvisorInvestor(false)
+            if (advisorProfile && advisorProfile.role === "assessor_externo") {
+              setIsExternalAdvisorInvestor(true)
+            } else {
+              setIsExternalAdvisorInvestor(false)
+            }
           }
         }
       }
 
-      // Buscar investimentos ativos do usuário
+      // Buscar investimentos ativos do usuário (sempre validar que é o próprio usuário)
       const { data: investments, error } = await supabase
         .from("investments")
         .select("id, amount, monthly_return_rate, created_at, payment_date, profitability_liquidity, commitment_period, status")

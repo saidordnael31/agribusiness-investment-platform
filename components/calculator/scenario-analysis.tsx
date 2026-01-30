@@ -69,21 +69,25 @@ export function ScenarioAnalysis() {
   ]
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Card className="bg-[#01223F] border-[#003562] shadow-lg">
+      <CardHeader className="border-b border-[#003562]">
+        <CardTitle className="flex items-center gap-2 text-[#00BC6E] text-2xl">
           <BarChart3 className="h-5 w-5" />
           Análise de Cenários
         </CardTitle>
-        <CardDescription>Explore diferentes estratégias de crescimento e suas implicações</CardDescription>
+        <CardDescription className="text-gray-400 mt-1">Explore diferentes estratégias de crescimento e suas implicações</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 bg-[#01223F]">
         {/* Analysis Type Selector */}
         <div className="flex flex-wrap gap-2">
           <Button
             variant={selectedAnalysis === "growth" ? "default" : "outline"}
             onClick={() => setSelectedAnalysis("growth")}
             size="sm"
+            className={selectedAnalysis === "growth"
+              ? "bg-[#00BC6E] text-white hover:bg-[#00BC6E]/90"
+              : "bg-[#003562] border-[#003562] text-white hover:bg-[#003562]/80"
+            }
           >
             <TrendingUp className="h-4 w-4 mr-2" />
             Trajetória de Crescimento
@@ -92,6 +96,10 @@ export function ScenarioAnalysis() {
             variant={selectedAnalysis === "targets" ? "default" : "outline"}
             onClick={() => setSelectedAnalysis("targets")}
             size="sm"
+            className={selectedAnalysis === "targets"
+              ? "bg-[#00BC6E] text-white hover:bg-[#00BC6E]/90"
+              : "bg-[#003562] border-[#003562] text-white hover:bg-[#003562]/80"
+            }
           >
             <Target className="h-4 w-4 mr-2" />
             Atingimento de Metas
@@ -100,6 +108,10 @@ export function ScenarioAnalysis() {
             variant={selectedAnalysis === "timeline" ? "default" : "outline"}
             onClick={() => setSelectedAnalysis("timeline")}
             size="sm"
+            className={selectedAnalysis === "timeline"
+              ? "bg-[#00BC6E] text-white hover:bg-[#00BC6E]/90"
+              : "bg-[#003562] border-[#003562] text-white hover:bg-[#003562]/80"
+            }
           >
             <BarChart3 className="h-4 w-4 mr-2" />
             Análise Temporal
@@ -110,8 +122,8 @@ export function ScenarioAnalysis() {
         {selectedAnalysis === "growth" && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-semibold mb-2">Trajetórias de Crescimento</h3>
-              <p className="text-sm text-muted-foreground mb-4">
+              <h3 className="text-lg font-semibold mb-2 text-white">Trajetórias de Crescimento</h3>
+              <p className="text-sm text-gray-400 mb-4">
                 Compare diferentes estratégias de captação ao longo do tempo
               </p>
             </div>
@@ -139,31 +151,31 @@ export function ScenarioAnalysis() {
                       }).format(value),
                       name === "conservative" ? "Conservador" : name === "moderate" ? "Moderado" : "Agressivo",
                     ]}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    labelStyle={{ color: "#FFFFFF" }}
                     contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
+                      backgroundColor: "#01223F",
+                      border: "1px solid #003562",
                       borderRadius: "8px",
                     }}
                   />
                   <Line
                     type="monotone"
                     dataKey="conservative"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="#6B7280"
                     strokeWidth={2}
                     dot={{ r: 4 }}
                   />
                   <Line
                     type="monotone"
                     dataKey="moderate"
-                    stroke="hsl(var(--primary))"
+                    stroke="#00BC6E"
                     strokeWidth={2}
                     dot={{ r: 4 }}
                   />
                   <Line
                     type="monotone"
                     dataKey="aggressive"
-                    stroke="hsl(var(--secondary))"
+                    stroke="#00BC6E"
                     strokeWidth={2}
                     dot={{ r: 4 }}
                   />
@@ -172,31 +184,31 @@ export function ScenarioAnalysis() {
             </div>
 
             <div className="grid md:grid-cols-3 gap-4">
-              <Card>
+              <Card className="bg-[#003562] border-[#003562]">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-muted-foreground">Estratégia Conservadora</CardTitle>
+                  <CardTitle className="text-sm text-gray-400">Estratégia Conservadora</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-lg font-bold">R$ 600k/ano</p>
-                  <p className="text-xs text-muted-foreground">Crescimento gradual e sustentável</p>
+                <CardContent className="bg-[#003562]">
+                  <p className="text-lg font-bold text-white">R$ 600k/ano</p>
+                  <p className="text-xs text-gray-400">Crescimento gradual e sustentável</p>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="bg-[#003562] border-[#003562]">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-primary">Estratégia Moderada</CardTitle>
+                  <CardTitle className="text-sm text-[#00BC6E]">Estratégia Moderada</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-lg font-bold text-primary">R$ 1M/ano</p>
-                  <p className="text-xs text-muted-foreground">Equilibrio entre risco e retorno</p>
+                <CardContent className="bg-[#003562]">
+                  <p className="text-lg font-bold text-[#00BC6E]">R$ 1M/ano</p>
+                  <p className="text-xs text-gray-400">Equilibrio entre risco e retorno</p>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="bg-[#003562] border-[#003562]">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-secondary">Estratégia Agressiva</CardTitle>
+                  <CardTitle className="text-sm text-[#00BC6E]">Estratégia Agressiva</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-lg font-bold text-secondary">R$ 1.5M/ano</p>
-                  <p className="text-xs text-muted-foreground">Crescimento acelerado</p>
+                <CardContent className="bg-[#003562]">
+                  <p className="text-lg font-bold text-[#00BC6E]">R$ 1.5M/ano</p>
+                  <p className="text-xs text-gray-400">Crescimento acelerado</p>
                 </CardContent>
               </Card>
             </div>
@@ -207,19 +219,19 @@ export function ScenarioAnalysis() {
         {selectedAnalysis === "targets" && user && user.email === "felipe@aethosconsultoria.com.br" && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-semibold mb-2">Impacto das Metas de Performance</h3>
-              <p className="text-sm text-muted-foreground mb-4">
+              <h3 className="text-lg font-semibold mb-2 text-white">Impacto das Metas de Performance</h3>
+              <p className="text-sm text-gray-400 mb-4">
                 Veja como o atingimento das metas afeta suas comissões totais
               </p>
             </div>
 
             <div className="grid gap-4">
               {targetScenarios.map((scenario, index) => (
-                <Card key={index} className={index === 2 ? "border-2 border-primary" : ""}>
+                <Card key={index} className={index === 2 ? "border-2 border-[#00BC6E] bg-[#003562]" : "bg-[#003562] border-[#003562]"}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className={index === 2 ? "text-primary" : ""}>{scenario.name}</CardTitle>
-                      <Badge variant={index === 0 ? "secondary" : index === 1 ? "default" : "default"}>
+                      <CardTitle className={index === 2 ? "text-[#00BC6E]" : "text-white"}>{scenario.name}</CardTitle>
+                      <Badge className={index === 0 ? "bg-gray-600 text-white" : "bg-[#00BC6E] text-white"}>
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",
                           currency: "BRL",
@@ -228,11 +240,11 @@ export function ScenarioAnalysis() {
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="bg-[#003562]">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
-                        <span className="text-xs text-muted-foreground">Comissão Mensal</span>
-                        <p className="font-bold">
+                        <span className="text-xs text-gray-400">Comissão Mensal</span>
+                        <p className="font-bold text-white">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -240,8 +252,8 @@ export function ScenarioAnalysis() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground">Comissão Anual</span>
-                        <p className="font-bold">
+                        <span className="text-xs text-gray-400">Comissão Anual</span>
+                        <p className="font-bold text-white">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -249,8 +261,8 @@ export function ScenarioAnalysis() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground">Bônus</span>
-                        <p className="font-bold text-secondary">
+                        <span className="text-xs text-gray-400">Bônus</span>
+                        <p className="font-bold text-[#00BC6E]">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -258,8 +270,8 @@ export function ScenarioAnalysis() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground">Total</span>
-                        <p className={`font-bold ${index === 2 ? "text-primary" : ""}`}>
+                        <span className="text-xs text-gray-400">Total</span>
+                        <p className={`font-bold ${index === 2 ? "text-[#00BC6E]" : "text-white"}`}>
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -272,10 +284,10 @@ export function ScenarioAnalysis() {
               ))}
             </div>
 
-            <div className="p-4 bg-accent/5 rounded-lg border border-accent/20">
-              <h4 className="font-semibold text-accent mb-2">Insight Estratégico</h4>
-              <p className="text-sm text-muted-foreground">
-                Atingir a Meta 2 (R$ 1M) resulta em <strong>5x mais comissões</strong> comparado ao cenário sem metas. O
+            <div className="p-4 bg-[#003562] rounded-lg border border-[#00BC6E]/30">
+              <h4 className="font-semibold text-[#00BC6E] mb-2">Insight Estratégico</h4>
+              <p className="text-sm text-gray-400">
+                Atingir a Meta 2 (R$ 1M) resulta em <strong className="text-white">5x mais comissões</strong> comparado ao cenário sem metas. O
                 investimento em estratégias mais agressivas pode ser altamente recompensador.
               </p>
             </div>
@@ -286,19 +298,19 @@ export function ScenarioAnalysis() {
         {selectedAnalysis === "timeline" && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-semibold mb-2">Análise Temporal de Retorno</h3>
-              <p className="text-sm text-muted-foreground mb-4">
+              <h3 className="text-lg font-semibold mb-2 text-white">Análise Temporal de Retorno</h3>
+              <p className="text-sm text-gray-400 mb-4">
                 Evolução das comissões ao longo do tempo com crescimento progressivo
               </p>
             </div>
 
             <div className="grid gap-4">
               {timelineData.map((period, index) => (
-                <Card key={index}>
+                <Card key={index} className="bg-[#003562] border-[#003562]">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>{period.period}</CardTitle>
-                      <Badge variant="outline">
+                      <CardTitle className="text-white">{period.period}</CardTitle>
+                      <Badge className="bg-[#00BC6E] text-white border-[#00BC6E]">
                         {new Intl.NumberFormat("pt-BR", {
                           style: "currency",
                           currency: "BRL",
@@ -307,11 +319,11 @@ export function ScenarioAnalysis() {
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="bg-[#003562]">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <span className="text-xs text-muted-foreground">Comissão Base</span>
-                        <p className="font-bold">
+                        <span className="text-xs text-gray-400">Comissão Base</span>
+                        <p className="font-bold text-white">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -319,8 +331,8 @@ export function ScenarioAnalysis() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground">Bônus</span>
-                        <p className="font-bold text-secondary">
+                        <span className="text-xs text-gray-400">Bônus</span>
+                        <p className="font-bold text-[#00BC6E]">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -328,8 +340,8 @@ export function ScenarioAnalysis() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground">Total Acumulado</span>
-                        <p className="font-bold text-primary">
+                        <span className="text-xs text-gray-400">Total Acumulado</span>
+                        <p className="font-bold text-[#00BC6E]">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",

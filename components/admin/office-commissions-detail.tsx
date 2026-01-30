@@ -120,11 +120,24 @@ export function OfficeCommissionsDetail() {
       // Buscar perfil do usuário para confirmar que é escritório
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, user_type, role, full_name")
+        .select("id, user_type_id, full_name")
         .eq("id", user.id)
         .single()
 
-      if (!profile || profile.user_type !== "distributor" || profile.role !== "escritorio") {
+      if (!profile || !profile.user_type_id) {
+        toast({
+          title: "Erro",
+          description: "Perfil não encontrado ou sem tipo de usuário",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Buscar tipo de usuário da tabela user_types
+      const { getUserTypeFromId } = await import("@/lib/user-type-utils");
+      const userType = await getUserTypeFromId(profile.user_type_id);
+      
+      if (!userType || userType.user_type !== "office") {
         toast({
           title: "Erro",
           description: "Este recurso é apenas para escritórios",
@@ -133,14 +146,26 @@ export function OfficeCommissionsDetail() {
         return
       }
 
+      // Buscar user_type_id de "advisor" na tabela user_types
+      const { data: advisorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "advisor")
+        .limit(1)
+        .single();
+
+      if (!advisorUserType) {
+        console.error("Tipo 'advisor' não encontrado na tabela user_types");
+        return;
+      }
+
       // Buscar assessores vinculados a este escritório (office_id = user.id)
       console.log('[ESCRITÓRIO] Buscando assessores com office_id =', user.id);
       const { data: advisors, error: advisorsError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, office_id, role")
+        .select("id, full_name, email, office_id")
         .eq("office_id", user.id)
-        .eq("user_type", "distributor")
-        .in("role", ["assessor", "assessor_externo"])
+        .eq("user_type_id", advisorUserType.id)
 
       if (advisorsError) {
         console.error('[ESCRITÓRIO] Erro ao buscar assessores:', advisorsError);
@@ -148,13 +173,26 @@ export function OfficeCommissionsDetail() {
 
       console.log('[ESCRITÓRIO] Assessores encontrados:', advisors?.length || 0);
 
+      // Buscar user_type_id de "investor" na tabela user_types
+      const { data: investorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "investor")
+        .limit(1)
+        .single();
+
+      if (!investorUserType) {
+        console.error("Tipo 'investor' não encontrado na tabela user_types");
+        return;
+      }
+
       // Buscar TODOS os investidores vinculados ao escritório pelo office_id
       console.log('[ESCRITÓRIO] Buscando investidores com office_id =', user.id);
       const { data: allInvestorProfiles, error: investorsError } = await supabase
         .from("profiles")
         .select("id, full_name, email, parent_id, office_id")
         .eq("office_id", user.id)
-        .eq("user_type", "investor")
+        .eq("user_type_id", investorUserType.id)
 
       if (investorsError) {
         console.error('[ESCRITÓRIO] Erro ao buscar investidores:', investorsError);
@@ -185,7 +223,7 @@ export function OfficeCommissionsDetail() {
             .from("profiles")
             .select("id, full_name, email, parent_id, office_id")
             .in("parent_id", advisorIds)
-            .eq("user_type", "investor")
+            .eq("user_type_id", investorUserType.id)
           
           console.log('[ESCRITÓRIO] Investidores encontrados por parent_id (assessores):', investorsByParent?.length || 0);
           
@@ -203,7 +241,7 @@ export function OfficeCommissionsDetail() {
             .from("profiles")
             .select("id, full_name, email, parent_id, office_id")
             .in("parent_id", advisorIds)
-            .eq("user_type", "investor")
+            .eq("user_type_id", investorUserType.id)
           
           if (investorsByParent && investorsByParent.length > 0) {
             // Combinar e remover duplicatas

@@ -76,19 +76,39 @@ export function HierarchyManager() {
       setError(null)
       const supabase = createClient()
 
-      // Buscar escritórios (usuários com user_type = 'escritorio')
+      // Buscar user_type_id de "office" e "advisor" na tabela user_types
+      const { data: officeUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "office")
+        .limit(1)
+        .single();
+
+      const { data: advisorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "advisor")
+        .limit(1)
+        .single();
+
+      if (!officeUserType || !advisorUserType) {
+        console.error("Tipos 'office' ou 'advisor' não encontrados na tabela user_types");
+        throw new Error("Tipos de usuário não encontrados");
+      }
+
+      // Buscar escritórios usando user_type_id
       const { data: officesData, error: officesError } = await supabase
         .from("profiles")
         .select("*")
-        .eq("user_type", "escritorio")
+        .eq("user_type_id", officeUserType.id)
 
       if (officesError) throw officesError
 
-      // Buscar assessores (usuários com user_type = 'assessor')
+      // Buscar assessores usando user_type_id
       const { data: advisorsData, error: advisorsError } = await supabase
         .from("profiles")
         .select("*")
-        .eq("user_type", "assessor")
+        .eq("user_type_id", advisorUserType.id)
 
       if (advisorsError) throw advisorsError
 

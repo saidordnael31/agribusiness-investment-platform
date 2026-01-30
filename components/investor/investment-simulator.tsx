@@ -402,29 +402,29 @@ export function InvestmentSimulator({ title }: { title?: string }) {
         </CardHeader>
         
         <CardContent className="space-y-6 relative z-10">
-          <div className="space-y-2">
-            <Label htmlFor="amount" className="text-white">
-              Valor do Investimento
-            </Label>
-            <Input
-              id="amount"
-              type="number"
-              placeholder="5000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              min="5000"
-              className="bg-[#D9D9D9]/45 border-gray-300 text-[#003F28]"
-            />
-            <p className="text-xs text-white/70">
-              Mínimo: R$ 5.000,00
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="commitment" className="text-white">
-                Prazo
+              <Label htmlFor="amount" className="text-white">
+                Valor do Investimento
               </Label>
+              <Input
+                id="amount"
+                type="number"
+                placeholder="5000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                min="5000"
+                className="bg-[#D9D9D9]/45 border-gray-300 text-[#003F28]"
+              />
+              <p className="text-xs text-white/70">
+                Mínimo: R$ 5.000,00
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="commitment" className="text-white">
+                  Prazo
+                </Label>
                 <Select
                   value={commitmentPeriod}
                   onValueChange={(value) => {
@@ -446,12 +446,12 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                     <SelectItem value="36">36 meses</SelectItem>
                   </SelectContent>
                 </Select>
-            </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="liquidity" className="text-white">
-                Liquidez da Rentabilidade
-              </Label>
+              <div className="space-y-2">
+                <Label htmlFor="liquidity" className="text-white">
+                  Liquidez da Rentabilidade
+                </Label>
                 <Select 
                   value={liquidity} 
                   onValueChange={setLiquidity}
@@ -466,9 +466,9 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                         const availableOptions = getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod));
                         if (availableOptions.length > 0) {
                           return availableOptions.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option.charAt(0).toUpperCase() + option.slice(1)}
-                            </SelectItem>
+                      <SelectItem key={option} value={option}>
+                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                      </SelectItem>
                           ));
                         } else {
                           // Se não houver opções, não renderizar nenhum item
@@ -618,9 +618,9 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                       const availableOptions = getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod));
                       if (availableOptions.length > 0) {
                         return availableOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option.charAt(0).toUpperCase() + option.slice(1)}
-                          </SelectItem>
+                    <SelectItem key={option} value={option}>
+                      {option.charAt(0).toUpperCase() + option.slice(1)}
+                    </SelectItem>
                         ));
                       } else {
                         // Se não houver opções, não renderizar nenhum item

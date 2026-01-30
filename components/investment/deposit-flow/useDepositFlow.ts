@@ -76,6 +76,15 @@ export function useDepositFlow() {
           return;
         }
 
+        // Validar acesso ao perfil do assessor antes de buscar
+        const { validateUserAccess } = await import("@/lib/client-permission-utils");
+        const hasAccess = await validateUserAccess(user.id, advisorId);
+        
+        if (!hasAccess) {
+          setIsExternalAdvisorInvestor(false);
+          return;
+        }
+
         // Buscar role do assessor responsável
         const { data: advisorProfile } = await supabase
           .from("profiles")
@@ -98,9 +107,26 @@ export function useDepositFlow() {
   }, [user]);
 
   const fetchInvestments = async () => {
+    if (!user?.id) {
+      console.error("[useDepositFlow] Usuário não autenticado");
+      return;
+    }
+
     const supabase = createClient();
-    const { data, error } = await supabase.from("investments").select("*");
+    
+    // Buscar apenas investimentos do usuário logado
+    const { data, error } = await supabase
+      .from("investments")
+      .select("*")
+      .eq("user_id", user.id);
+    
+    if (error) {
+      console.error("[useDepositFlow] Erro ao buscar investimentos:", error);
+      return;
+    }
+    
     if (!data) return;
+    
     const allInvestmentsValues = data.reduce(
       (acc, curr) => acc + curr.amount,
       0
@@ -117,15 +143,39 @@ export function useDepositFlow() {
   const handleDepositConfirm = async () => {
     setIsProcessing(true);
 
+    // Validar se o usuário pode criar investimento para si mesmo
+    if (!user?.id) {
+      toast({
+        title: "Erro",
+        description: "Usuário não autenticado",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      return;
+    }
+
+    const { validateCanCreateInvestmentForUser } = await import("@/lib/client-permission-utils");
+    const canCreate = await validateCanCreateInvestmentForUser(user.id, user.id);
+    
+    if (!canCreate) {
+      toast({
+        title: "Erro",
+        description: "Você não tem permissão para criar este investimento",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      return;
+    }
+
     const supabase = createClient();
 
     // Obter taxa de rentabilidade dinamicamente
     const monthlyRate = await getRateByPeriodAndLiquidity(Number(commitmentPeriod), liquidity);
-    
+
     const { data: investmentData, error: investmentError } = await supabase.rpc(
       "create_investment_for_user",
       {
-        p_user_id: user?.id,
+        p_user_id: user.id,
         p_amount: Number(depositAmount),
         p_status: "pending",
         p_quota_type: "senior",

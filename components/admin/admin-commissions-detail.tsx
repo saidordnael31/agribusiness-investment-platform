@@ -71,6 +71,30 @@ export function AdminCommissionsDetail() {
   const fetchCommissions = async () => {
     try {
       setLoading(true)
+      
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[AdminCommissionsDetail] Usuário não autenticado");
+        setLoading(false);
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        console.error("[AdminCommissionsDetail] Acesso negado: apenas administradores");
+        toast({
+          title: "Acesso negado",
+          description: "Apenas administradores podem acessar esta funcionalidade",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       const supabase = createClient()
 
       // Buscar todos os investimentos ativos

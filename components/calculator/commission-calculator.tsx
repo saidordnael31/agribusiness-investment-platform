@@ -35,57 +35,62 @@ export function CommissionCalculator() {
   const isExternalAdvisor = user.role === "assessor_externo" || user.user_type === "assessor_externo"
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#01223F]">
       <div className="container mx-auto px-4 py-8">
         {/* Header Section */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm" onClick={handleBackToDashboard}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleBackToDashboard}
+              className="text-white hover:bg-[#003562] hover:text-white"
+            >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar
             </Button>
             <div className="flex items-center space-x-2">
-              <Calculator className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold text-card-foreground">Comparador de Cenários</h1>
+              <Calculator className="h-6 w-6 text-[#00BC6E]" />
+              <h1 className="text-2xl font-bold text-white">Comparador de Cenários</h1>
             </div>
           </div>
         </div>
         {/* Welcome Section */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-foreground mb-2">Compare diferentes estratégias de captação</h2>
-          <p className="text-muted-foreground max-w-3xl">
+          <h2 className="text-3xl font-bold text-white mb-2">Compare diferentes estratégias de captação</h2>
+          <p className="text-gray-400 max-w-3xl">
             Monte cenários alternativos com valores, liquidez e prazos distintos para visualizar como tempo de resgate e as taxas específicas do investidor impactam o retorno total do investidor.
           </p>
         </div>
 
         {/* Liquidity and Redemption Overview */}
-        <Card className="mb-8 border-primary/20 bg-primary/5 shadow-sm">
+        <Card className="mb-8 bg-[#003562] border-[#003562] shadow-sm">
           <CardHeader>
-            <CardTitle>Como avaliamos cada cenário</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-white">Como avaliamos cada cenário</CardTitle>
+            <CardDescription className="text-gray-400">
               As taxas de investidor variam conforme a liquidez acordada e o prazo de compromisso. Assessor e escritório mantêm
               suas participações fixas.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="bg-[#003562]">
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-lg bg-background/70 p-4">
-                <h4 className="font-semibold text-blue-700 mb-1">Tempo de resgate</h4>
-                <p className="text-sm text-muted-foreground">
+              <div className="rounded-lg bg-[#01223F] p-4 border border-[#003562]">
+                <h4 className="font-semibold text-[#00BC6E] mb-1">Tempo de resgate</h4>
+                <p className="text-sm text-gray-400">
                   Calculamos o período de resgate com base no compromisso (3, 6, 12, 24 ou 36 meses), refletindo o prazo mínimo
                   antes da liquidação.
                 </p>
               </div>
-              <div className="rounded-lg bg-background/70 p-4">
-                <h4 className="font-semibold text-emerald-700 mb-1">Liquidez da rentabilidade</h4>
-                <p className="text-sm text-muted-foreground">
+              <div className="rounded-lg bg-[#01223F] p-4 border border-[#003562]">
+                <h4 className="font-semibold text-[#00BC6E] mb-1">Liquidez da rentabilidade</h4>
+                <p className="text-sm text-gray-400">
                   Mensal, semestral, anual ou ciclos maiores definem a disponibilidade do retorno. Disponibilizamos apenas
                   combinações válidas para cada prazo.
                 </p>
               </div>
-              <div className="rounded-lg bg-background/70 p-4">
-                <h4 className="font-semibold text-purple-700 mb-1">Taxas aplicadas</h4>
-                <p className="text-sm text-muted-foreground">
+              <div className="rounded-lg bg-[#01223F] p-4 border border-[#003562]">
+                <h4 className="font-semibold text-[#00BC6E] mb-1">Taxas aplicadas</h4>
+                <p className="text-sm text-gray-400">
                   Rentabilidade do investidor varia entre{" "}
                   {isExternalAdvisor ? "1,35%" : "1,8%"} e {isExternalAdvisor ? "2,0%" : "3,5%"} ao mês, de acordo com a liquidez
                   escolhida.

@@ -223,7 +223,7 @@ export function AdvisorCommissionsDetail() {
             advisorsMap.set(advisor.id, { id: advisor.id, name: advisor.full_name || "Assessor" })
           })
         }
-        
+
         const { data: investorsByOffice } = await supabase
           .from("profiles")
           .select("id, full_name, email, parent_id, user_type_id")
@@ -272,12 +272,29 @@ export function AdvisorCommissionsDetail() {
 
       const investorIds = investorProfiles.map((p) => p.id)
 
+      // Validar acesso aos investidores antes de buscar investimentos
+      const { validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(user.id);
+      
+      const validInvestorIds = [];
+      for (const investorId of investorIds) {
+        if (isAdmin || await validateUserAccess(user.id, investorId)) {
+          validInvestorIds.push(investorId);
+        }
+      }
+      
+      if (validInvestorIds.length === 0) {
+        setCommissions([]);
+        setLoading(false);
+        return;
+      }
+
       // Buscar TODOS os investimentos ativos dos investidores deste assessor
       // IMPORTANTE: Não aplicar filtros de data aqui - buscar todos os ativos
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
         .select("id, user_id, amount, payment_date, created_at, status, commitment_period, profitability_liquidity")
-        .in("user_id", investorIds)
+        .in("user_id", validInvestorIds)
         .eq("status", "active")
       
       if (investmentsError) {
@@ -1537,7 +1554,7 @@ export function AdvisorCommissionsDetail() {
                             )}
                           </div>
                           <div className="flex gap-6">
-                            <div className="text-right">
+                          <div className="text-right">
                               <p className="text-gray-400 text-xs mb-1">
                                 Minha Comissão ({(() => {
                                   const rate = userRole === "escritorio" 
@@ -1545,10 +1562,10 @@ export function AdvisorCommissionsDetail() {
                                     : (selectedCommission.advisorRate || 0.03)
                                   return `${(rate * 100).toFixed(2)}%`
                                 })()})
-                              </p>
+                            </p>
                               <p className="font-semibold text-[#00BC6E] text-lg">
-                                {formatCurrency(month.advisorCommission)}
-                              </p>
+                              {formatCurrency(month.advisorCommission)}
+                            </p>
                             </div>
                             <div className="text-right">
                               <p className="text-gray-400 text-xs mb-1">
@@ -1595,17 +1612,17 @@ export function AdvisorCommissionsDetail() {
                           <p className="font-medium text-sm text-white">{receipt.file_name}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <p className="text-xs text-gray-400">
-                              {formatDate(receipt.created_at)}
-                            </p>
+                            {formatDate(receipt.created_at)}
+                          </p>
                             <Badge 
                               className={receipt.status === "approved" 
                                 ? "bg-[#00BC6E] text-white border-[#00BC6E]" 
                                 : "bg-orange-500/20 text-orange-300 border-orange-400/30"
                               }
                             >
-                              {receipt.status === "approved" ? "Aprovado" : "Pendente"}
-                            </Badge>
-                          </div>
+                            {receipt.status === "approved" ? "Aprovado" : "Pendente"}
+                          </Badge>
+                        </div>
                         </div>
                         {receipt.file_path && (
                           <Button

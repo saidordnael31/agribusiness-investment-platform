@@ -90,6 +90,26 @@ export function InvestorRegistration({ assessorId, assessorName }: InvestorRegis
     try {
       const password = generatePassword()
 
+      // Validar que o usuário logado tem permissão para criar investidores
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateCanCreateProfile, validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      const hasAccessToAdvisor = isAdmin || await validateUserAccess(loggedUser.id, assessorId);
+      
+      if (!hasAccessToAdvisor) {
+        throw new Error("Você não tem permissão para criar investidores para este assessor");
+      }
+
+      const canCreate = isAdmin || await validateCanCreateProfile(loggedUser.id, "investor");
+      if (!canCreate) {
+        throw new Error("Você não tem permissão para criar investidores");
+      }
+
       // Buscar distributor_id e office_id do assessor
       const { data: assessorProfile, error: assessorError } = await supabase
         .from("profiles")

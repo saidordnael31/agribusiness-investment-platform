@@ -60,6 +60,29 @@ export function AdminApproveInvestmentModal({
   const fetchInvestmentData = async () => {
     setFetchingData(true)
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[AdminApproveInvestmentModal] Usuário não autenticado");
+        setFetchingData(false);
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        console.error("[AdminApproveInvestmentModal] Acesso negado: apenas administradores");
+        toast({
+          title: "Acesso negado",
+          description: "Apenas administradores podem aprovar investimentos",
+          variant: "destructive",
+        });
+        setFetchingData(false);
+        return;
+      }
+
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!

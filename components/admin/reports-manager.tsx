@@ -212,6 +212,32 @@ export function ReportsManager() {
       const investmentsData = await investmentsResponse.json()
       const investmentsWithProfiles = investmentsData.success ? investmentsData.data || [] : []
 
+      // Validar se o usuário é admin antes de buscar dados
+      const userStr = localStorage.getItem("user")
+      if (!userStr) {
+        console.error("[ReportsManager] Usuário não autenticado")
+        return
+      }
+
+      const loggedUser = JSON.parse(userStr)
+      if (!loggedUser.id) {
+        console.error("[ReportsManager] ID do usuário não encontrado")
+        return
+      }
+
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils")
+      const isAdmin = await validateAdminAccess(loggedUser.id)
+      
+      if (!isAdmin) {
+        console.error("[ReportsManager] Acesso negado: apenas administradores podem acessar relatórios")
+        toast({
+          title: "Acesso negado",
+          description: "Apenas administradores podem acessar esta funcionalidade",
+          variant: "destructive",
+        })
+        return
+      }
+
       // Buscar dados de usuários
       const { data: profiles } = await supabase.from("profiles").select("*")
 

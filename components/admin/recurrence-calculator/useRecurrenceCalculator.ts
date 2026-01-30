@@ -169,11 +169,11 @@ export function useRecurrenceCalculator() {
       today.setHours(0, 0, 0, 0)
 
       const filteredInvestments = (investments || []).filter((investment: any) => {
-        // Validar que payment_date existe e é uma data válida
-        if (!investment.payment_date) return false
-        const date = new Date(investment.payment_date)
-        return !isNaN(date.getTime())
-      })
+          // Validar que payment_date existe e é uma data válida
+          if (!investment.payment_date) return false
+          const date = new Date(investment.payment_date)
+          return !isNaN(date.getTime())
+        })
 
       // Processar investimentos de forma assíncrona para buscar taxas do banco
       const processedRecurrences: RecurrenceCalculation[] = await Promise.all(
@@ -555,7 +555,7 @@ export function useRecurrenceCalculator() {
           appliedBonuses: [],
           riskFactors: [],
         }
-        })
+      })
       )
 
       const investors = processedRecurrences

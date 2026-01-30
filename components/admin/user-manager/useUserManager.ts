@@ -107,6 +107,22 @@ export function useUserManager() {
 
   const fetchAssessors = async () => {
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[useUserManager] Usuário não autenticado");
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        console.error("[useUserManager] Acesso negado: apenas administradores");
+        return;
+      }
+
       const supabase = createClient();
       const { data: profiles, error } = await supabase
         .from("profiles")
@@ -134,6 +150,29 @@ export function useUserManager() {
 
   const fetchUsers = async (page: number = 1, search: string = "", typeFilter: string = "all", statusFilter: string = "all") => {
     try {
+      // Validar se é admin
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("[useUserManager] Usuário não autenticado");
+        setLoading(false);
+        return;
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        console.error("[useUserManager] Acesso negado: apenas administradores");
+        toast({
+          title: "Acesso negado",
+          description: "Apenas administradores podem acessar esta funcionalidade",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const supabase = createClient();
 
@@ -460,6 +499,20 @@ export function useUserManager() {
         throw new Error(
           result.error || "Erro ao cadastrar investidor na API externa"
         );
+      }
+
+      // Validar se é admin antes de criar perfil
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      const loggedUser = JSON.parse(userStr);
+      const { validateAdminAccess } = await import("@/lib/client-permission-utils");
+      const isAdmin = await validateAdminAccess(loggedUser.id);
+      
+      if (!isAdmin) {
+        throw new Error("Apenas administradores podem criar perfis");
       }
 
       const supabase = createClient();
