@@ -289,6 +289,27 @@ export function Navbar() {
                   </>
                 )}
 
+                {user.user_type === "admin" && (
+                  <>
+                    <NavigationMenuItem>
+                      <Link href="/admin/churn" legacyBehavior passHref>
+                        <NavigationMenuLink
+                          className={cn(
+                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                            "w-[138px] h-[41px] rounded-[11px]",
+                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                            isActive("/admin/churn") 
+                              ? "bg-[#00BC6E] text-[#003F28]" 
+                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
+                          )}
+                        >
+                          Churn
+                        </NavigationMenuLink>
+                      </Link>
+                    </NavigationMenuItem>
+                  </>
+                )}
+
                 {(user.user_type === "distributor" ||
                   user.user_type === "admin" ||
                   user.user_type === "advisor" ||
@@ -496,6 +517,22 @@ export function Navbar() {
                     Resgatar
                   </Link>
                 </>
+              )}
+
+              {user.user_type === "admin" && (
+                <Link
+                  href="/admin/churn"
+                  className={cn(
+                    "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                    isActive("/admin/churn")
+                      ? "bg-accent text-white"
+                      : "text-white hover:text-white hover:bg-accent/80"
+                  )}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <BarChart3 className="h-5 w-5 mr-3 text-white" />
+                  Churn
+                </Link>
               )}
 
               {(user.user_type === "distributor" ||
