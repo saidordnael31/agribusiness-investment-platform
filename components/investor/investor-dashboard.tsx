@@ -14,6 +14,7 @@ import { TrendingUp, DollarSign, ArrowUpRight } from "lucide-react";
 import { InvestmentSimulator } from "./investment-simulator";
 import { InvestmentHistory } from "./investment-history";
 import { PerformanceChart } from "./performance-chart";
+import { RenewalAlertDialog } from "@/components/investment/renewal-alert-dialog";
 import { createBrowserClient } from "@supabase/ssr";
 
 interface UserData {
@@ -61,6 +62,15 @@ export function InvestorDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
+  const [renewalInvestment, setRenewalInvestment] = useState<{
+    id: string;
+    amount: number;
+    expiry_date: string;
+    days_until_expiry: number;
+    commitment_period?: number | null;
+    profitability_liquidity?: string | null;
+  } | null>(null);
+  const [showRenewalDialog, setShowRenewalDialog] = useState(false);
 
   // Função para obter a taxa correta baseada nas tabelas dinâmicas
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
@@ -437,6 +447,50 @@ export function InvestorDashboard() {
     }
   };
 
+  // Verificar investimentos próximos do vencimento
+  const checkRenewalAlerts = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/investments/renewal-check?userId=${userId}`);
+      const data = await response.json();
+
+      if (data.success && data.data && data.data.length > 0) {
+        // Pegar o primeiro investimento próximo do vencimento
+        const investment = data.data[0];
+        setRenewalInvestment(investment);
+        setShowRenewalDialog(true);
+
+        // Enviar e-mail de alerta (apenas uma vez por investimento)
+        // Verificar se já foi enviado hoje usando localStorage
+        const lastEmailKey = `renewal_email_${investment.id}`;
+        const lastEmailDate = localStorage.getItem(lastEmailKey);
+        const today = new Date().toDateString();
+
+        if (lastEmailDate !== today) {
+          try {
+            await fetch("/api/investments/renewal-email", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                investmentId: investment.id,
+                userId: userId,
+                amount: investment.amount,
+                expiryDate: investment.expiry_date,
+              }),
+            });
+            // Marcar que o e-mail foi enviado hoje
+            localStorage.setItem(lastEmailKey, today);
+          } catch (error) {
+            console.error("Erro ao enviar e-mail de renovação:", error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao verificar alertas de renovação:", error);
+    }
+  };
+
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     if (userStr) {
@@ -446,6 +500,10 @@ export function InvestorDashboard() {
       if (userData.id) {
         fetchInvestmentData(userData.id);
         fetchTransactionHistory(userData.id);
+        // Verificar alertas de renovação após carregar os dados
+        setTimeout(() => {
+          checkRenewalAlerts(userData.id);
+        }, 2000); // Aguardar 2 segundos para garantir que os dados foram carregados
       }
     } else {
       setLoading(false);
@@ -469,6 +527,22 @@ export function InvestorDashboard() {
 
   return (
     <div className="min-h-screen">
+      {/* Dialog de Renovação */}
+      {renewalInvestment && (
+        <RenewalAlertDialog
+          investment={renewalInvestment}
+          open={showRenewalDialog}
+          onOpenChange={setShowRenewalDialog}
+          onRenewalComplete={() => {
+            // Recarregar dados após renovação
+            if (user?.id) {
+              fetchInvestmentData(user.id);
+              fetchTransactionHistory(user.id);
+            }
+          }}
+        />
+      )}
+
       <div className="container mx-auto px-4 py-6 md:py-8">
         {/* Welcome Section */}
         <div className="mb-6 md:mb-8">
