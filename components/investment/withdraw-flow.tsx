@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface Investment {
   id: string;
@@ -694,6 +695,142 @@ export function WithdrawFlow() {
     }
   };
 
+  const [cdiMonthlyRate, setCdiMonthlyRate] = useState<number>(0.008); // Fallback: 0.8% ao mês
+  const [cdiLoading, setCdiLoading] = useState(false);
+
+  // Buscar CDI atualizado da API
+  useEffect(() => {
+    const fetchCDI = async () => {
+      try {
+        setCdiLoading(true);
+        const response = await fetch('/api/cdi');
+        const data = await response.json();
+        
+        if (data.success && data.cdiMonthly) {
+          setCdiMonthlyRate(data.cdiMonthly);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar CDI:', error);
+        // Manter o valor padrão em caso de erro
+      } finally {
+        setCdiLoading(false);
+      }
+    };
+
+    fetchCDI();
+  }, []);
+
+  // Gera dados do gráfico de comparação Investimento vs CDI
+  const generateCDIComparisonChart = (investment: Investment) => {
+    try {
+      if (!investment) return [];
+
+      // Valor que está sendo resgatado
+      const withdrawAmount = calculateWithdrawAmount(investment);
+      if (withdrawAmount <= 0) {
+        return [];
+      }
+
+      const monthlyRate = Number(investment.monthly_return_rate) || 0;
+      const commitmentPeriod = investment.commitment_period || 12;
+      
+      // Calcular data de vencimento
+      const createdDate = new Date(investment.created_at);
+      const expiryDate = new Date(createdDate);
+      expiryDate.setMonth(expiryDate.getMonth() + commitmentPeriod);
+      
+      const today = new Date();
+      const monthsRemaining = Math.max(0, Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+      
+      if (monthsRemaining <= 0) {
+        return [];
+      }
+
+      // Gerar dados mês a mês
+      const chartData = [];
+      for (let month = 0; month <= monthsRemaining; month++) {
+        // Valor do investimento no mês
+        const investmentValue = withdrawAmount * Math.pow(1 + monthlyRate, month);
+        
+        // Valor no CDI no mês
+        const cdiValue = withdrawAmount * Math.pow(1 + cdiMonthlyRate, month);
+        
+        // Retorno acumulado
+        const investmentReturn = investmentValue - withdrawAmount;
+        const cdiReturn = cdiValue - withdrawAmount;
+        
+        // Data do mês
+        const monthDate = new Date(today);
+        monthDate.setMonth(monthDate.getMonth() + month);
+        
+        chartData.push({
+          month: month,
+          monthLabel: month === 0 ? 'Hoje' : month === monthsRemaining ? 'Vencimento' : `Mês ${month}`,
+          investmentValue: investmentValue,
+          cdiValue: cdiValue,
+          investmentReturn: investmentReturn,
+          cdiReturn: cdiReturn,
+          difference: investmentReturn - cdiReturn,
+          date: monthDate.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+        });
+      }
+
+      return chartData;
+    } catch (error) {
+      console.error('Erro ao gerar gráfico CDI:', error);
+      return [];
+    }
+  };
+
+  // Calcula o impacto negativo em relação ao CDI (para exibição de resumo)
+  const calculateCDIImpact = (investment: Investment) => {
+    try {
+      if (!investment) return { loss: 0, projectedReturn: 0, cdiReturn: 0, monthsRemaining: 0 };
+
+      // Valor que está sendo resgatado
+      const withdrawAmount = calculateWithdrawAmount(investment);
+      if (withdrawAmount <= 0) {
+        return { loss: 0, projectedReturn: 0, cdiReturn: 0, monthsRemaining: 0 };
+      }
+
+      const monthlyRate = Number(investment.monthly_return_rate) || 0;
+      const commitmentPeriod = investment.commitment_period || 12;
+      
+      // Calcular data de vencimento
+      const createdDate = new Date(investment.created_at);
+      const expiryDate = new Date(createdDate);
+      expiryDate.setMonth(expiryDate.getMonth() + commitmentPeriod);
+      
+      const today = new Date();
+      const monthsRemaining = Math.max(0, Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+      
+      if (monthsRemaining <= 0) {
+        return { loss: 0, projectedReturn: 0, cdiReturn: 0, monthsRemaining: 0 };
+      }
+
+      // Calcular retorno projetado se mantiver o valor resgatado até o vencimento (juros compostos)
+      const investmentProjectedValue = withdrawAmount * Math.pow(1 + monthlyRate, monthsRemaining);
+      const investmentProjectedReturn = investmentProjectedValue - withdrawAmount;
+
+      // Calcular retorno se investisse o valor resgatado no CDI pelo mesmo período
+      const cdiProjectedValue = withdrawAmount * Math.pow(1 + cdiMonthlyRate, monthsRemaining);
+      const cdiProjectedReturn = cdiProjectedValue - withdrawAmount;
+
+      // Impacto negativo = diferença entre o que ganharia no investimento vs CDI
+      const loss = investmentProjectedReturn - cdiProjectedReturn;
+
+      return {
+        loss: loss,
+        projectedReturn: investmentProjectedReturn,
+        cdiReturn: cdiProjectedReturn,
+        monthsRemaining
+      };
+    } catch (error) {
+      console.error('Erro ao calcular impacto CDI:', error);
+      return { loss: 0, projectedReturn: 0, cdiReturn: 0, monthsRemaining: 0 };
+    }
+  };
+
   if (step === "success") {
     return (
       <div className="max-w-2xl mx-auto">
@@ -762,6 +899,147 @@ export function WithdrawFlow() {
                 )}
               </div>
             </div>
+
+            {/* Gráfico de comparação Investimento vs CDI - Tela de Sucesso */}
+            {selectedInvestment && (withdrawType === "partial" || withdrawType === "total") && (() => {
+              const chartData = generateCDIComparisonChart(selectedInvestment);
+              const cdiImpact = calculateCDIImpact(selectedInvestment);
+              
+              if (chartData.length === 0 || cdiImpact.monthsRemaining <= 0) {
+                return (
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                    <p className="text-sm text-amber-700">
+                      Investimento próximo do vencimento ou sem dados para comparação.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="bg-amber-50 p-6 rounded-lg border border-amber-200">
+                  <div className="flex items-start space-x-3 mb-4">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-4">
+                        <h3 className="text-[#003F28] font-ibm-plex-sans font-bold text-[20px] leading-[28px] text-amber-800">
+                          Comparação: Investimento vs CDI
+                        </h3>
+                        {cdiLoading && (
+                          <span className="text-xs text-amber-600">(Carregando CDI...)</span>
+                        )}
+                        {!cdiLoading && (
+                          <span className="text-xs text-amber-600">
+                            (CDI: {(cdiMonthlyRate * 100).toFixed(2)}% a.m.)
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Gráfico de linha */}
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-amber-200" />
+                            <XAxis 
+                              dataKey="monthLabel"
+                              className="text-xs text-amber-800"
+                              tick={{ fontSize: 11 }}
+                              angle={-45}
+                              textAnchor="end"
+                              height={60}
+                            />
+                            <YAxis
+                              className="text-xs text-amber-800"
+                              tick={{ fontSize: 11 }}
+                              tickFormatter={(value) =>
+                                new Intl.NumberFormat("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                  notation: "compact",
+                                }).format(value)
+                              }
+                            />
+                            <Tooltip
+                              formatter={(value: number, name: string) => {
+                                // O 'name' recebido é o 'name' prop do componente Line
+                                // Já vem como "Retorno do Investimento" ou "Retorno no CDI"
+                                // Mas vamos garantir que está correto
+                                let label = name;
+                                
+                                // Se por algum motivo vier o dataKey, converter
+                                if (name === "investmentReturn") {
+                                  label = "Retorno do Investimento";
+                                } else if (name === "cdiReturn") {
+                                  label = "Retorno no CDI";
+                                }
+                                
+                                return [
+                                  new Intl.NumberFormat("pt-BR", {
+                                    style: "currency",
+                                    currency: "BRL",
+                                  }).format(value),
+                                  label
+                                ];
+                              }}
+                              labelFormatter={(label) => `${label}`}
+                              contentStyle={{
+                                backgroundColor: "rgba(255, 255, 255, 0.98)",
+                                border: "1px solid rgba(251, 191, 36, 0.3)",
+                                borderRadius: "8px",
+                                color: "#003F28",
+                              }}
+                            />
+                            <Legend 
+                              formatter={(value) => {
+                                if (value === "Retorno do Investimento") return "Retorno do Investimento";
+                                if (value === "Retorno no CDI") return "Retorno no CDI";
+                                return value;
+                              }}
+                              wrapperStyle={{ paddingTop: "20px" }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="investmentReturn" 
+                              stroke="#00BC6E" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Retorno do Investimento"
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="cdiReturn" 
+                              stroke="#F59E0B" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Retorno no CDI"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      {/* Resumo */}
+                      <div className="mt-4 pt-4 border-t border-amber-300">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[#003F28] font-ibm-plex-sans font-bold text-[18px] leading-[28px] text-amber-800">
+                            Diferença no Vencimento:
+                          </span>
+                          <span className={`text-[#003F28] font-ibm-plex-sans font-bold text-[18px] leading-[28px] ${
+                            cdiImpact.loss > 0 ? 'text-red-600' : 'text-green-600'
+                          }`}>
+                            {cdiImpact.loss > 0 ? '+' : ''}{formatCurrency(cdiImpact.loss)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-700 mt-2">
+                          {cdiImpact.loss > 0 
+                            ? `Ao manter até o vencimento, você ganharia ${formatCurrency(cdiImpact.loss)} a mais que no CDI`
+                            : `Ao manter até o vencimento, você ganharia ${formatCurrency(Math.abs(cdiImpact.loss))} a menos que no CDI`
+                          } ({cdiImpact.monthsRemaining} {cdiImpact.monthsRemaining === 1 ? 'mês' : 'meses'} restantes)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* <div className="bg-amber-50 p-4 rounded-lg">
               <div className="flex items-start space-x-3">
@@ -957,6 +1235,151 @@ export function WithdrawFlow() {
                 </div>
               </div>
             )}
+
+            {/* Gráfico de comparação Investimento vs CDI - Tela de Confirmação */}
+            {selectedInvestment && (withdrawType === "partial" || withdrawType === "total") && (() => {
+              const chartData = generateCDIComparisonChart(selectedInvestment);
+              const cdiImpact = calculateCDIImpact(selectedInvestment);
+              
+              if (chartData.length === 0 || cdiImpact.monthsRemaining <= 0) {
+                return (
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                    <p className="text-sm text-amber-700">
+                      Investimento próximo do vencimento ou sem dados para comparação.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="bg-amber-50 p-6 rounded-lg border border-amber-200">
+                  <div className="flex items-start space-x-3 mb-4">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-4">
+                        <h3 className="text-[#003F28] font-ibm-plex-sans font-bold text-[20px] leading-[28px] text-amber-800">
+                          Comparação: Investimento vs CDI
+                        </h3>
+                        {cdiLoading && (
+                          <span className="text-xs text-amber-600">(Carregando CDI...)</span>
+                        )}
+                        {!cdiLoading && (
+                          <span className="text-xs text-amber-600">
+                            (CDI: {(cdiMonthlyRate * 100).toFixed(2)}% a.m.)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-amber-700 mb-4">
+                        Ao resgatar agora, você perderá a oportunidade de ganhos futuros. 
+                        Veja a comparação com o CDI:
+                      </p>
+                      
+                      {/* Gráfico de linha */}
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-amber-200" />
+                            <XAxis 
+                              dataKey="monthLabel"
+                              className="text-xs text-amber-800"
+                              tick={{ fontSize: 11 }}
+                              angle={-45}
+                              textAnchor="end"
+                              height={60}
+                            />
+                            <YAxis
+                              className="text-xs text-amber-800"
+                              tick={{ fontSize: 11 }}
+                              tickFormatter={(value) =>
+                                new Intl.NumberFormat("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                  notation: "compact",
+                                }).format(value)
+                              }
+                            />
+                            <Tooltip
+                              formatter={(value: number, name: string) => {
+                                // O 'name' recebido é o 'name' prop do componente Line
+                                // Já vem como "Retorno do Investimento" ou "Retorno no CDI"
+                                // Mas vamos garantir que está correto
+                                let label = name;
+                                
+                                // Se por algum motivo vier o dataKey, converter
+                                if (name === "investmentReturn") {
+                                  label = "Retorno do Investimento";
+                                } else if (name === "cdiReturn") {
+                                  label = "Retorno no CDI";
+                                }
+                                
+                                return [
+                                  new Intl.NumberFormat("pt-BR", {
+                                    style: "currency",
+                                    currency: "BRL",
+                                  }).format(value),
+                                  label
+                                ];
+                              }}
+                              labelFormatter={(label) => `${label}`}
+                              contentStyle={{
+                                backgroundColor: "rgba(255, 255, 255, 0.98)",
+                                border: "1px solid rgba(251, 191, 36, 0.3)",
+                                borderRadius: "8px",
+                                color: "#003F28",
+                              }}
+                            />
+                            <Legend 
+                              formatter={(value) => {
+                                if (value === "Retorno do Investimento") return "Retorno do Investimento";
+                                if (value === "Retorno no CDI") return "Retorno no CDI";
+                                return value;
+                              }}
+                              wrapperStyle={{ paddingTop: "20px" }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="investmentReturn" 
+                              stroke="#00BC6E" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Retorno do Investimento"
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="cdiReturn" 
+                              stroke="#F59E0B" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Retorno no CDI"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      {/* Resumo */}
+                      <div className="mt-4 pt-4 border-t border-amber-300">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[#003F28] font-ibm-plex-sans font-bold text-[18px] leading-[28px] text-amber-800">
+                            Diferença no Vencimento:
+                          </span>
+                          <span className={`text-[#003F28] font-ibm-plex-sans font-bold text-[18px] leading-[28px] ${
+                            cdiImpact.loss > 0 ? 'text-red-600' : 'text-green-600'
+                          }`}>
+                            {cdiImpact.loss > 0 ? '+' : ''}{formatCurrency(cdiImpact.loss)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-700 mt-2">
+                          {cdiImpact.loss > 0 
+                            ? `Ao manter até o vencimento, você ganharia ${formatCurrency(cdiImpact.loss)} a mais que no CDI`
+                            : `Ao manter até o vencimento, você ganharia ${formatCurrency(Math.abs(cdiImpact.loss))} a menos que no CDI`
+                          } ({cdiImpact.monthsRemaining} {cdiImpact.monthsRemaining === 1 ? 'mês' : 'meses'} restantes)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* <div className="bg-amber-50 p-4 rounded-lg">
               <div className="flex items-start space-x-3">
@@ -1445,6 +1868,147 @@ export function WithdrawFlow() {
                 </div>
               </div>
             )}
+
+            {/* Gráfico de comparação Investimento vs CDI */}
+            {selectedInvestment && (withdrawType === "partial" || withdrawType === "total") && (() => {
+              const chartData = generateCDIComparisonChart(selectedInvestment);
+              const cdiImpact = calculateCDIImpact(selectedInvestment);
+              
+              if (chartData.length === 0 || cdiImpact.monthsRemaining <= 0) {
+                return (
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                    <p className="text-sm text-amber-700">
+                      Investimento próximo do vencimento ou sem dados para comparação.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="bg-amber-50 p-6 rounded-lg border border-amber-200">
+                  <div className="flex items-start space-x-3 mb-4">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-4">
+                        <h4 className="text-[#003F28] font-ibm-plex-sans font-bold text-[20px] leading-[28px] text-amber-800">
+                          Comparação: Investimento vs CDI
+                        </h4>
+                        {cdiLoading && (
+                          <span className="text-xs text-amber-600">(Carregando CDI...)</span>
+                        )}
+                        {!cdiLoading && (
+                          <span className="text-xs text-amber-600">
+                            (CDI: {(cdiMonthlyRate * 100).toFixed(2)}% a.m.)
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Gráfico de linha */}
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-amber-200" />
+                            <XAxis 
+                              dataKey="monthLabel"
+                              className="text-xs text-amber-800"
+                              tick={{ fontSize: 11 }}
+                              angle={-45}
+                              textAnchor="end"
+                              height={60}
+                            />
+                            <YAxis
+                              className="text-xs text-amber-800"
+                              tick={{ fontSize: 11 }}
+                              tickFormatter={(value) =>
+                                new Intl.NumberFormat("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                  notation: "compact",
+                                }).format(value)
+                              }
+                            />
+                            <Tooltip
+                              formatter={(value: number, name: string) => {
+                                // O 'name' recebido é o 'name' prop do componente Line
+                                // Já vem como "Retorno do Investimento" ou "Retorno no CDI"
+                                // Mas vamos garantir que está correto
+                                let label = name;
+                                
+                                // Se por algum motivo vier o dataKey, converter
+                                if (name === "investmentReturn") {
+                                  label = "Retorno do Investimento";
+                                } else if (name === "cdiReturn") {
+                                  label = "Retorno no CDI";
+                                }
+                                
+                                return [
+                                  new Intl.NumberFormat("pt-BR", {
+                                    style: "currency",
+                                    currency: "BRL",
+                                  }).format(value),
+                                  label
+                                ];
+                              }}
+                              labelFormatter={(label) => `${label}`}
+                              contentStyle={{
+                                backgroundColor: "rgba(255, 255, 255, 0.98)",
+                                border: "1px solid rgba(251, 191, 36, 0.3)",
+                                borderRadius: "8px",
+                                color: "#003F28",
+                              }}
+                            />
+                            <Legend 
+                              formatter={(value) => {
+                                if (value === "Retorno do Investimento") return "Retorno do Investimento";
+                                if (value === "Retorno no CDI") return "Retorno no CDI";
+                                return value;
+                              }}
+                              wrapperStyle={{ paddingTop: "20px" }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="investmentReturn" 
+                              stroke="#00BC6E" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Retorno do Investimento"
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="cdiReturn" 
+                              stroke="#F59E0B" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Retorno no CDI"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      {/* Resumo */}
+                      <div className="mt-4 pt-4 border-t border-amber-300">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[#003F28] font-ibm-plex-sans font-bold text-[18px] leading-[28px] text-amber-800">
+                            Diferença no Vencimento:
+                          </span>
+                          <span className={`text-[#003F28] font-ibm-plex-sans font-bold text-[18px] leading-[28px] ${
+                            cdiImpact.loss > 0 ? 'text-red-600' : 'text-green-600'
+                          }`}>
+                            {cdiImpact.loss > 0 ? '+' : ''}{formatCurrency(cdiImpact.loss)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-700 mt-2">
+                          {cdiImpact.loss > 0 
+                            ? `Ao manter até o vencimento, você ganhará ${formatCurrency(cdiImpact.loss)} a mais que no CDI`
+                            : `Ao manter até o vencimento, você ganhará ${formatCurrency(Math.abs(cdiImpact.loss))} a menos que no CDI`
+                          } ({cdiImpact.monthsRemaining} {cdiImpact.monthsRemaining === 1 ? 'mês' : 'meses'} restantes)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <Button
               onClick={() => setStep("confirmation")}
