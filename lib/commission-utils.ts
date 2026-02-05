@@ -115,6 +115,23 @@ export async function getCommissionRate(
 }
 
 /**
+ * Busca payout_start_days da configuração de rentabilidade do investidor
+ * Retorna null se não houver (fallback para 60)
+ */
+export async function getPayoutStartDays(investorUserTypeId: number | null): Promise<number> {
+  if (!investorUserTypeId) return 60
+  try {
+    const userType = await getUserTypeFromId(investorUserTypeId)
+    if (!userType?.rentability_id) return 60
+    const config = await getRentabilityConfig(userType.rentability_id)
+    if (!config?.payout_start_days) return 60
+    return Number(config.payout_start_days)
+  } catch {
+    return 60
+  }
+}
+
+/**
  * Busca taxas de comissão para múltiplos tipos de usuário
  * Retorna um objeto com as taxas de cada tipo
  */

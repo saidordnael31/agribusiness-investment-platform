@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Validar se o usuário é admin
-    const isAdmin = await validateAdminAccess(user.id)
+    const isAdmin = await validateAdminAccess(user.id, supabase)
     if (!isAdmin) {
       return NextResponse.json(
         { success: false, error: "Acesso negado: apenas administradores podem ver todas as transações pendentes" },

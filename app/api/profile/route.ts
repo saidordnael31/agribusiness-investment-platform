@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     // Se um userId foi fornecido, verificar permissões usando validateUserAccess
     if (targetUserId && targetUserId !== user.id) {
       const { validateUserAccess } = await import("@/lib/client-permission-utils")
-      const hasAccess = await validateUserAccess(user.id, targetUserId)
+      const hasAccess = await validateUserAccess(user.id, targetUserId, supabase)
       
       if (hasAccess) {
         profileId = targetUserId

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
+import { getCommissionRate } from "@/lib/commission-utils"
 
 export interface UserData {
   name: string
@@ -460,7 +461,19 @@ export function useAdminDashboard() {
       }
 
       const totalInvested = investments?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0
-      const monthlyRevenue = totalInvested * 0.02
+      // Buscar taxa média de comissão (usando taxa padrão de distribuidor como referência)
+      // Nota: monthlyRevenue é uma estimativa, não um cálculo exato de comissões
+      const { data: distributorUserType } = await supabase
+        .from("user_types")
+        .select("id")
+        .eq("user_type", "distributor")
+        .limit(1)
+        .single()
+      
+      const avgCommissionRate = distributorUserType 
+        ? await getCommissionRate(distributorUserType.id, 12, "Mensal")
+        : 0.02 // Fallback se não encontrar
+      const monthlyRevenue = totalInvested * avgCommissionRate
 
       const { data: campaigns, error: campaignsError } = await supabase
         .from("promotional_campaigns")

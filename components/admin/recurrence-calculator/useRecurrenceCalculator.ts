@@ -200,8 +200,8 @@ export function useRecurrenceCalculator() {
         if (profile.user_type_id) {
           const userType = await getUserTypeFromId(profile.user_type_id)
           if (userType && (userType.user_type === "distributor" || userType.user_type === "admin")) {
-            distributorsMap.set(profile.id, profile)
-          }
+          distributorsMap.set(profile.id, profile)
+        }
         }
       }
 
@@ -517,7 +517,8 @@ export function useRecurrenceCalculator() {
               investorPercentage = commissionCalc.amount > 0 ? (investorAmount / commissionCalc.amount) * 100 : 0
               cutoffDateISO = cutoffUTC.toISOString()
             } else if (nextPaymentIndex > 0) {
-              investorAmount = commissionCalc.amount * COMMISSION_RATES.investidor
+              // Usar taxa do cálculo (vem do banco via calculateNewCommissionLogic)
+              investorAmount = commissionCalc.investorCommission || (commissionCalc.amount * (commissionCalc.investorRate || 0.02))
               const nextDate = paymentSchedule[nextPaymentIndex]?.date
               if (nextDate) {
                 const prevDate = paymentSchedule[nextPaymentIndex - 1]?.date

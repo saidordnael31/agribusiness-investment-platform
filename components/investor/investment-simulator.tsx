@@ -71,27 +71,24 @@ export function InvestmentSimulator({ title }: { title?: string }) {
   }, []);
 
   // Buscar user_type_id do investidor através das relações do user_type logado
+  // Para escritório: filhos são assessores; investidores são filhos dos assessores
   useEffect(() => {
     const findInvestorUserTypeId = async () => {
       if (!loggedUserTypeId) return;
 
       try {
-        // Limpar cache quando o user_type_id mudar para evitar valores antigos
         setRateCache({});
-        
-        // Buscar hierarquia (filhos) do user_type logado
-        const childUserTypeIds = await getUserTypeHierarchy(loggedUserTypeId);
-        
+        const supabase = createClient();
+
+        // 1. Buscar hierarquia (filhos diretos) do user_type logado
+        let childUserTypeIds = await getUserTypeHierarchy(loggedUserTypeId);
+
         if (childUserTypeIds.length === 0) {
           console.warn("[InvestmentSimulator] Nenhum filho encontrado para user_type:", loggedUserTypeId);
-          // Se não tiver filhos, pode ser que seja um investidor simulando para si mesmo
-          // Nesse caso, usar o próprio user_type_id
           setInvestorUserTypeId(loggedUserTypeId);
           return;
         }
 
-        // Buscar qual dos filhos é o investidor
-        const supabase = createClient();
         const { data: childUserTypes } = await supabase
           .from("user_types")
           .select("id, user_type, name")
@@ -103,22 +100,34 @@ export function InvestmentSimulator({ title }: { title?: string }) {
           return;
         }
 
-        // Procurar pelo tipo "investor" ou "investidor"
-        const investorType = childUserTypes.find(
-          (ut) => ut.user_type === "investor"
-        );
+        // Procurar investidor nos filhos diretos (assessor -> investidor, distribuidor -> escritório/assessor)
+        let investorType = childUserTypes.find((ut) => ut.user_type === "investor");
+
+        // 2. Se não encontrou (ex: escritório -> assessores), buscar investidores nos filhos dos filhos
+        if (!investorType) {
+          for (const child of childUserTypes) {
+            const grandchildIds = await getUserTypeHierarchy(child.id);
+            if (grandchildIds.length === 0) continue;
+            const { data: grandchildTypes } = await supabase
+              .from("user_types")
+              .select("id, user_type, name")
+              .in("id", grandchildIds);
+            investorType = grandchildTypes?.find((ut) => ut.user_type === "investor");
+            if (investorType) {
+              console.log("[InvestmentSimulator] Investor encontrado via assessor:", investorType.id);
+              break;
+            }
+          }
+        }
 
         if (investorType) {
-          console.log("[InvestmentSimulator] Investor user_type_id encontrado:", investorType.id);
           setInvestorUserTypeId(investorType.id);
         } else {
-          // Se não encontrar investidor específico, usar o primeiro filho disponível
           console.warn("[InvestmentSimulator] Tipo investidor não encontrado, usando primeiro filho:", childUserTypes[0]);
           setInvestorUserTypeId(childUserTypes[0].id);
         }
       } catch (error) {
         console.error("[InvestmentSimulator] Erro ao buscar user_type_id do investidor:", error);
-        // Fallback: usar o próprio user_type_id
         setInvestorUserTypeId(loggedUserTypeId);
       }
     };

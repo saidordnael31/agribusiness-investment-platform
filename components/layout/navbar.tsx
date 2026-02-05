@@ -295,24 +295,46 @@ export function Navbar() {
 
                 {(isUserType("distributor") ||
                   isUserType("advisor") ||
-                  isUserType("office")) && (
+                  isUserType("office") ||
+                  isUserType("admin")) && (
                   <>
                     <NavigationMenuItem>
-                      <Link href="/calculator" legacyBehavior passHref>
+                      <Link href="/users/create" legacyBehavior passHref>
                         <NavigationMenuLink
                           className={cn(
                             "flex items-center justify-center text-[#003F28] font-medium transition-colors",
                             "w-[138px] h-[41px] rounded-[11px]",
                             "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
-                            isActive("/calculator") 
+                            isActive("/users/create") 
                               ? "bg-[#00BC6E] text-[#003F28]" 
                               : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
                           )}
                         >
-                          Calculadora
+                          Cadastrar
                         </NavigationMenuLink>
                       </Link>
                     </NavigationMenuItem>
+
+                    {(isUserType("distributor") ||
+                      isUserType("advisor") ||
+                      isUserType("office")) && (
+                      <NavigationMenuItem>
+                        <Link href="/calculator" legacyBehavior passHref>
+                          <NavigationMenuLink
+                            className={cn(
+                              "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                              "w-[138px] h-[41px] rounded-[11px]",
+                              "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                              isActive("/calculator") 
+                                ? "bg-[#00BC6E] text-[#003F28]" 
+                                : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
+                            )}
+                          >
+                            Calculadora
+                          </NavigationMenuLink>
+                        </Link>
+                      </NavigationMenuItem>
+                    )}
 
                     {isUserType("distributor") && (
                     <NavigationMenuItem>

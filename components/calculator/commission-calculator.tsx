@@ -27,7 +27,9 @@ export function CommissionCalculator() {
   }, [])
 
   const handleBackToDashboard = () => {
-    router.push(user?.type === "distributor" ? "/distributor" : "/investor")
+    const type = user?.type || user?.user_type || user?.role
+    const isDistributorOrOfficeOrAdvisor = type === "distributor" || type === "office" || type === "advisor"
+    router.push(isDistributorOrOfficeOrAdvisor ? "/distributor" : "/investor")
   }
 
   if (!user) return null

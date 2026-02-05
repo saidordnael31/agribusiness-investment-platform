@@ -1,9 +1,12 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Users, Mail, Phone, TrendingUp } from "lucide-react"
+import { useUserType } from "@/hooks/useUserType"
+import { getCommissionRate } from "@/lib/commission-utils"
 
 // Mock clients data
 const clients = [
@@ -60,9 +63,33 @@ const clients = [
 ]
 
 export function ClientsList() {
+  const { user_type_id } = useUserType()
+  const [commissionRate, setCommissionRate] = useState<number>(0)
+  const [loadingRate, setLoadingRate] = useState(true)
+
+  useEffect(() => {
+    const fetchCommissionRate = async () => {
+      if (!user_type_id) {
+        setLoadingRate(false)
+        return
+      }
+      try {
+        // Buscar taxa de comissão do banco (sempre usar período padrão de 12 meses e liquidez mensal)
+        const rate = await getCommissionRate(user_type_id, 12, "Mensal")
+        setCommissionRate(rate)
+      } catch (error) {
+        console.error("[ClientsList] Erro ao buscar taxa de comissão:", error)
+      } finally {
+        setLoadingRate(false)
+      }
+    }
+    fetchCommissionRate()
+  }, [user_type_id])
+
   const totalClients = clients.length
   const activeClients = clients.filter((client) => client.status === "active").length
   const totalInvested = clients.reduce((sum, client) => sum + client.totalInvested, 0)
+  const monthlyCommission = totalInvested * commissionRate
 
   return (
     <div className="space-y-6">
@@ -103,29 +130,23 @@ export function ClientsList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
-              {new Intl.NumberFormat("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              }).format(
-                totalInvested *
-                  (user?.role === "escritorio"
-                    ? 0.01
-                    : user?.role === "investor"
-                    ? 0.02
-                    : user?.role === "assessor_externo"
-                    ? 0.02
-                    : 0.03)
+              {loadingRate ? (
+                <span className="text-muted-foreground">Carregando...</span>
+              ) : (
+                new Intl.NumberFormat("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                }).format(monthlyCommission)
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {user?.role === "escritorio"
-                ? "1%"
-                : user?.role === "investor"
-                ? "2%"
-                : user?.role === "assessor_externo"
-                ? "2%"
-                : "3%"}{" "}
-              sobre base
+              {loadingRate ? (
+                "Calculando taxa..."
+              ) : commissionRate > 0 ? (
+                `${(commissionRate * 100).toFixed(2)}% sobre base`
+              ) : (
+                "Taxa não disponível"
+              )}
             </p>
           </CardContent>
         </Card>

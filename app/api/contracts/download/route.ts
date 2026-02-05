@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     } else if (user.id === contract.investor_id) {
       // Investidor pode baixar seus próprios contratos
       hasPermission = true;
-    } else if (isDistributor) {
+    } else if (isDistributor || isOffice) {
       // Buscar o perfil do investidor para verificar relacionamento
       const { data: investorProfile } = await supabase
         .from("profiles")
@@ -85,14 +85,18 @@ export async function GET(request: NextRequest) {
         .eq("id", contract.investor_id)
         .single()
       
-      console.log("🔍 [DEBUG] Perfil do investidor (download):", investorProfile);
-      
-      if (isAdvisor) {
-        // Assessor pode baixar contratos de seus próprios investidores
+      if (isAdvisor && !isOffice) {
         hasPermission = investorProfile?.parent_id === user.id;
       } else if (isOffice) {
-        // Escritório pode baixar contratos de investidores do seu office_id
         hasPermission = investorProfile?.office_id === user.id;
+        if (!hasPermission && investorProfile?.parent_id) {
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("office_id")
+            .eq("id", investorProfile.parent_id)
+            .single();
+          hasPermission = advisorProfile?.office_id === user.id;
+        }
       } else {
         // Distribuidor de nível superior: verificar se investidor está vinculado
         if (investorProfile?.distributor_id === user.id) {

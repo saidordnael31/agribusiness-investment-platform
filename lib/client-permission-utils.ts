@@ -2,13 +2,17 @@ import { createClient } from "@/lib/supabase/client"
 import { checkIsAdmin, checkIsAdvisor, checkIsDistributor } from "@/lib/permission-utils"
 import { getUserTypeFromId } from "@/lib/user-type-utils"
 
+type SupabaseClient = Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>
+
 /**
  * Valida se o usuário logado tem acesso aos dados de um usuário específico
  * Verifica hierarquia (parent_id, office_id) e ownership
+ * @param supabaseClient - Cliente Supabase opcional (obrigatório em API routes)
  */
 export async function validateUserAccess(
   loggedUserId: string,
-  targetUserId: string
+  targetUserId: string,
+  supabaseClient?: SupabaseClient
 ): Promise<boolean> {
   if (!loggedUserId || !targetUserId) {
     return false
@@ -19,7 +23,7 @@ export async function validateUserAccess(
     return true
   }
 
-  const supabase = createClient()
+  const supabase = supabaseClient ?? createClient()
 
   // Verificar se é admin
   const isAdmin = await checkIsAdmin(supabase, loggedUserId)
@@ -173,31 +177,38 @@ export async function validateInvestmentAccess(
 
 /**
  * Valida se o usuário logado é admin
+ * @param loggedUserId - ID do usuário logado
+ * @param supabaseClient - Cliente Supabase opcional (obrigatório em API routes no servidor para ter sessão)
  */
-export async function validateAdminAccess(loggedUserId: string): Promise<boolean> {
+export async function validateAdminAccess(
+  loggedUserId: string,
+  supabaseClient?: SupabaseClient
+): Promise<boolean> {
   if (!loggedUserId) {
     return false
   }
 
-  const supabase = createClient()
+  const supabase = supabaseClient ?? createClient()
   return await checkIsAdmin(supabase, loggedUserId)
 }
 
 /**
  * Valida se o usuário logado pode criar investimento para um usuário específico
+ * @param supabaseClient - Cliente Supabase opcional (obrigatório em API routes)
  */
 export async function validateCanCreateInvestmentForUser(
   loggedUserId: string,
-  targetUserId: string
+  targetUserId: string,
+  supabaseClient?: SupabaseClient
 ): Promise<boolean> {
   // Admin pode criar para qualquer um
-  const isAdmin = await validateAdminAccess(loggedUserId)
+  const isAdmin = await validateAdminAccess(loggedUserId, supabaseClient)
   if (isAdmin) {
     return true
   }
 
   // Verificar se tem acesso ao usuário alvo
-  return validateUserAccess(loggedUserId, targetUserId)
+  return validateUserAccess(loggedUserId, targetUserId, supabaseClient)
 }
 
 /**

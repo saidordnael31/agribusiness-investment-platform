@@ -40,7 +40,8 @@ import {
 import { formatCurrency } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import { COMMISSION_RATES } from "@/lib/commission-calculator"
+import { COMMISSION_RATES, calculateNewCommissionLogic } from "@/lib/commission-calculator"
+import { getCommissionRate } from "@/lib/commission-utils"
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 
@@ -318,9 +319,18 @@ export function ReportsManager() {
       const pendingTransactionVolume = pendingTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0)
 
       // Calcular comissões baseadas nos investimentos ativos
-      const totalCommissions = totalInvestments * (COMMISSION_RATES.assessor + COMMISSION_RATES.escritorio) // Total (3% assessor + 1% escritório)
-      const advisorCommissions = totalInvestments * COMMISSION_RATES.assessor // 3% para assessores
-      const officeCommissions = totalInvestments * COMMISSION_RATES.escritorio // 1% para escritórios
+      // NOTA: Estes são valores estimados simplificados para exibição rápida de estatísticas.
+      // Para cálculos precisos, use calculateNewCommissionLogic que considera:
+      // - Taxas dinâmicas do banco via user_type_id
+      // - Pro-rata e payout_start_days
+      // - Quinto dia útil para datas de pagamento
+      // 
+      // Estimativas usando taxas padrão (serão substituídas por cálculos reais quando possível)
+      const estimatedAdvisorRate = 0.03 // 3% padrão (será substituído por taxa do banco)
+      const estimatedOfficeRate = 0.01 // 1% padrão (será substituído por taxa do banco)
+      const totalCommissions = totalInvestments * (estimatedAdvisorRate + estimatedOfficeRate)
+      const advisorCommissions = totalInvestments * estimatedAdvisorRate
+      const officeCommissions = totalInvestments * estimatedOfficeRate
 
       // Calcular métricas de campanhas
       const activeCampaigns = campaigns.filter(c => c.is_active).length
@@ -496,7 +506,7 @@ export function ReportsManager() {
         // 1. Buscar perfis dos investidores para obter seus parent_id (que são os IDs dos assessores)
         const { data: investorProfiles, error: profilesError } = await supabase
           .from("profiles")
-          .select("id, parent_id")
+          .select("id, parent_id, user_type_id")
           .in("id", userIds)
 
         if (!profilesError && investorProfiles) {
@@ -516,7 +526,7 @@ export function ReportsManager() {
             // 3. Buscar dados completos dos assessores (incluindo office_id)
             const { data: advisors, error: advisorsError } = await supabase
               .from("profiles")
-              .select("id, full_name, email, office_id")
+              .select("id, full_name, email, office_id, user_type_id, role")
               .in("id", advisorIds)
 
             if (!advisorsError && advisors) {
@@ -536,7 +546,7 @@ export function ReportsManager() {
                 // 5. Buscar dados dos escritórios pelo office_id
                 const { data: offices, error: officesError } = await supabase
                   .from("profiles")
-                  .select("id, full_name, email")
+                  .select("id, full_name, email, user_type_id")
                   .in("id", officeIds)
 
                 if (!officesError && offices) {
@@ -561,186 +571,114 @@ export function ReportsManager() {
         }
       }
 
-      // Processar dados de comissões - gerar uma entrada para cada mês de pagamento
+      // Processar dados de comissões usando calculateNewCommissionLogic
       const processedCommissions: CommissionData[] = []
       
-      investments.forEach((investment: any) => {
-        const paymentDate = investment.payment_date ? new Date(investment.payment_date) : new Date(investment.created_at)
-        const now = new Date()
+      // Buscar perfis completos com user_type_id (já buscados anteriormente na linha 507)
+      const investorProfileMapForFetch = new Map<string, any>()
+      
+      // Usar investorProfiles já buscados anteriormente (definido no escopo da função)
+      // investorProfiles foi definido na linha 507 dentro do if (userIds.length > 0)
+      // Precisamos garantir que está acessível aqui
+      if (userIds.length > 0) {
+        const { data: investorProfilesData } = await supabase
+          .from("profiles")
+          .select("id, parent_id, user_type_id")
+          .in("id", userIds)
         
-        // Calcular taxas baseadas no prazo e liquidez
+        if (investorProfilesData) {
+          investorProfilesData.forEach((p: any) => {
+            investorProfileMapForFetch.set(p.id, p)
+          })
+        }
+      }
+      
+      for (const investment of investments) {
+        const paymentDate = investment.payment_date ? new Date(investment.payment_date) : new Date(investment.created_at)
         const investmentCommitmentPeriod = investment.commitment_period || 12
         const investmentProfitabilityLiquidity = investment.profitability_liquidity || 'mensal'
         
-        const rates = calculateCommissionRates(investmentCommitmentPeriod, investmentProfitabilityLiquidity)
-
-        // Determinar taxa de comissão baseada no tipo de usuário
-        let commissionRate = 0
-        if (investment.user_type) {
-          switch (investment.user_type) {
-            case 'investor':
-              commissionRate = rates.investor
-              break
-            case 'distributor':
-              commissionRate = COMMISSION_RATES.assessor // Assessor sempre ganha 3%
-              break
-            case 'admin':
-              commissionRate = COMMISSION_RATES.escritorio // Escritório sempre ganha 1%
-              break
-            default:
-              commissionRate = rates.investor
-          }
-        } else {
-          commissionRate = rates.investor // Default para investidor se perfil não encontrado
-        }
-
-        // Determinar tipo de liquidez usando função unificada
-        const liquidityType = determineLiquidityType(investment.profitability_liquidity)
-        const rentabilityType = liquidityType === 'mensal' ? 'monthly' : 'annual'
+        // Buscar perfis
+        const investorProfile = investorProfileMapForFetch.get(investment.user_id)
+        if (!investorProfile) continue
         
-        // Calcular comissão baseada no tipo de usuário
-        let monthlyCommission = 0
-        let officeCommission = 0
-        let advisorCommission = 0
+        const advisorInfo = advisorMap.get(investment.user_id)
+        const officeInfo = advisorInfo?.office_id ? officeMap.get(advisorInfo.office_id) : null
         
-        if (investment.user_type === 'investor') {
-          // Para investidores, calcular comissão baseada na liquidez
-          if (liquidityType === 'mensal') {
-            // Para liquidez mensal, usar taxa da tabela
-            const taxa = obterTaxa(investmentCommitmentPeriod, 'mensal')
-            monthlyCommission = investment.amount * (taxa / 100)
-          } else {
-            // Para liquidez não-mensal, simular pelo período correto
-            const periodMonths = getPeriodMonths(liquidityType)
-            monthlyCommission = simularInvestimento(investment.amount, periodMonths, liquidityType, investmentCommitmentPeriod)
-          }
-        } else {
-          // Para escritório e assessor, sempre mensal
-          monthlyCommission = investment.amount * commissionRate
-        }
+        // Calcular comissão usando função auxiliar
+        const commissionData = await calculateCommissionsForInvestment(
+          investment,
+          investorProfile,
+          advisorInfo || null,
+          officeInfo || null
+        )
         
-        // Calcular comissões do escritório e assessor (sempre mensais)
-        officeCommission = investment.amount * COMMISSION_RATES.escritorio // Escritório sempre 1%
-        advisorCommission = investment.amount * COMMISSION_RATES.assessor // Assessor sempre 3%
-
-        // Gerar uma entrada para cada mês do período de compromisso
-        for (let month = 1; month <= investmentCommitmentPeriod; month++) {
-          // Calcular data de vencimento para este mês baseada na data do investimento
-          let dueDateForMonth: Date
-          
-          // Calcular data de vencimento usando uma abordagem mais segura
-          dueDateForMonth = new Date(paymentDate)
-          
-          if (liquidityType === 'mensal') {
-            // Para liquidez mensal, adicionar meses sequencialmente
-            dueDateForMonth.setMonth(dueDateForMonth.getMonth() + month)
-          } else if (liquidityType === 'semestral') {
-            // Para liquidez semestral, adicionar 6 meses por vez
-            dueDateForMonth.setMonth(dueDateForMonth.getMonth() + (month * 6))
-          } else if (liquidityType === 'anual') {
-            // Para liquidez anual, adicionar 12 meses por vez
-            dueDateForMonth.setMonth(dueDateForMonth.getMonth() + (month * 12))
-          } else if (liquidityType === 'bienal') {
-            // Para liquidez bienal, adicionar 24 meses por vez
-            dueDateForMonth.setMonth(dueDateForMonth.getMonth() + (month * 24))
-          } else if (liquidityType === 'trienal') {
-            // Para liquidez trienal, adicionar 36 meses por vez
-            dueDateForMonth.setMonth(dueDateForMonth.getMonth() + (month * 36))
-          } else {
-            // Default para mensal
-            dueDateForMonth.setMonth(dueDateForMonth.getMonth() + month)
-          }
-
-          // Determinar status da comissão baseado na data de vencimento
-          let status: 'pending' | 'paid' | 'overdue' = 'pending'
-          
-          // Verificar se o pagamento já venceu baseado na data atual
-          const today = new Date()
-          today.setHours(0, 0, 0, 0) // Zerar horas para comparação apenas de data
-          const dueDateOnly = new Date(dueDateForMonth)
-          dueDateOnly.setHours(0, 0, 0, 0) // Zerar horas para comparação apenas de data
-          
-          
-          // Verificar se o pagamento já venceu
-          if (dueDateOnly < today) {
-            // Se já venceu, considerar atrasado
-            status = 'overdue'
-          } else {
-            // Se ainda não venceu (incluindo hoje), considerar pendente
-            status = 'pending'
-          }
-
-          // Calcular próxima data de pagamento (próximo mês)
-          let nextPaymentDate: Date
-          if (liquidityType === 'mensal') {
-            nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 1, dueDateForMonth.getDate())
-          } else if (liquidityType === 'semestral') {
-            nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 6, dueDateForMonth.getDate())
-          } else if (liquidityType === 'anual') {
-            nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 12, dueDateForMonth.getDate())
-          } else if (liquidityType === 'bienal') {
-            nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 24, dueDateForMonth.getDate())
-          } else if (liquidityType === 'trienal') {
-            nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 36, dueDateForMonth.getDate())
-          } else {
-            nextPaymentDate = new Date(dueDateForMonth.getFullYear(), dueDateForMonth.getMonth() + 1, dueDateForMonth.getDate())
-          }
-
-          // Buscar informações de assessor e escritório
-          // 1. Pegar o user_id do investimento (investidor)
-          // 2. Buscar o parent_id desse investidor no mapa advisorMap
-          // 3. O parent_id é o ID do assessor
-          // 4. Usar o office_id do assessor para buscar o escritório
-          const advisorInfo = advisorMap.get(investment.user_id)
-          const officeInfo = advisorInfo?.office_id ? officeMap.get(advisorInfo.office_id) : null
-          
-          // Debug: verificar se encontrou o assessor
-          if (!advisorInfo && investment.user_type === 'investor') {
-            console.log(`Assessor não encontrado para investidor ${investment.user_id} (${investment.full_name})`)
-          }
-          
-          // Calcular tempo de investimento (em meses desde o início)
-          const investmentStartDate = investment.payment_date ? new Date(investment.payment_date) : new Date(investment.created_at)
-          const investmentTimeMonths = Math.max(1, month) // Meses desde o início do investimento
-
-          // Calcular total pago: soma de todas as comissões (investidor + escritório + assessor)
-          const totalCommissionPaid = monthlyCommission + officeCommission + advisorCommission
-
-          processedCommissions.push({
-            id: `${investment.id}-${month}`, // ID único para cada mês
-            userId: investment.user_id,
-            userName: investment.full_name || 'Usuário sem nome',
-            userEmail: investment.email || '',
-            userType: investment.user_type || 'investor',
-            investmentId: investment.id,
-            investmentAmount: investment.amount,
-            commissionRate,
-            monthlyCommission,
-            totalCommission: totalCommissionPaid, // Total pago: investidor + escritório + assessor
-            paymentDate: dueDateForMonth.toISOString(),
-            nextPaymentDate: nextPaymentDate.toISOString(),
-            status,
-            monthsPassed: month,
-            remainingMonths: Math.max(0, investmentCommitmentPeriod - month),
-            profitability: investment.profitability_liquidity || 'N/A',
-            commitmentPeriod: investmentCommitmentPeriod,
-            rentabilityType,
-            resgateDays: rates.resgateDays,
-            resgateMonths: rates.resgateMonths,
-            liquidityType: rates.liquidityType,
-            investorRate: rates.investor,
-            officeRate: COMMISSION_RATES.escritorio, // Escritório sempre ganha 1%
-            advisorRate: COMMISSION_RATES.assessor, // Assessor sempre ganha 3%
-            officeCommission, // Comissão mensal do escritório
-            advisorCommission, // Comissão mensal do assessor
-            advisorName: advisorInfo?.full_name || 'N/A',
-            advisorEmail: advisorInfo?.email || 'N/A',
-            officeName: officeInfo?.full_name || 'N/A',
-            officeEmail: officeInfo?.email || 'N/A',
-            investmentStartDate: investmentStartDate.toISOString()
+        if (!commissionData) continue
+        
+        // Processar cada data de pagamento do monthlyBreakdown
+        if (commissionData.monthlyBreakdown && commissionData.paymentDueDates) {
+          commissionData.monthlyBreakdown.forEach((monthData: any, index: number) => {
+            if (index >= commissionData.paymentDueDates.length) return
+            
+            const dueDate = new Date(commissionData.paymentDueDates[index])
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const dueDateOnly = new Date(dueDate)
+            dueDateOnly.setHours(0, 0, 0, 0)
+            
+            let status: 'pending' | 'paid' | 'overdue' = 'pending'
+            if (dueDateOnly < today) {
+              status = 'overdue'
+            }
+            
+            // Próxima data de pagamento (próximo item do array ou calcular)
+            let nextPaymentDate: Date
+            if (index + 1 < commissionData.paymentDueDates.length) {
+              nextPaymentDate = new Date(commissionData.paymentDueDates[index + 1])
+            } else {
+              // Último pagamento, calcular próximo mês
+              nextPaymentDate = new Date(dueDate)
+              nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1)
+            }
+            
+            const investmentStartDate = paymentDate
+            
+            processedCommissions.push({
+              id: `${investment.id}-${index + 1}`,
+              userId: investment.user_id,
+              userName: investment.full_name || 'Usuário sem nome',
+              userEmail: investment.email || '',
+              userType: 'investor',
+              investmentId: investment.id,
+              investmentAmount: investment.amount,
+              commissionRate: commissionData.investorRate || 0,
+              monthlyCommission: monthData.investorCommission || 0,
+              totalCommission: (monthData.investorCommission || 0) + (monthData.advisorCommission || 0) + (monthData.officeCommission || 0),
+              paymentDate: dueDate.toISOString(),
+              nextPaymentDate: nextPaymentDate.toISOString(),
+              status,
+              monthsPassed: index + 1,
+              remainingMonths: Math.max(0, investmentCommitmentPeriod - (index + 1)),
+              profitability: investmentProfitabilityLiquidity,
+              commitmentPeriod: investmentCommitmentPeriod,
+              rentabilityType: investmentProfitabilityLiquidity.toLowerCase().includes('anual') ? 'annual' : 'monthly',
+              resgateDays: 0, // Será calculado se necessário
+              resgateMonths: investmentCommitmentPeriod,
+              liquidityType: investmentProfitabilityLiquidity.toLowerCase(),
+              investorRate: commissionData.investorRate || 0,
+              officeRate: commissionData.officeRate || 0,
+              advisorRate: commissionData.advisorRate || 0,
+              officeCommission: monthData.officeCommission || 0,
+              advisorCommission: monthData.advisorCommission || 0,
+              advisorName: advisorInfo?.full_name || 'N/A',
+              advisorEmail: advisorInfo?.email || 'N/A',
+              officeName: officeInfo?.full_name || 'N/A',
+              officeEmail: officeInfo?.email || 'N/A',
+              investmentStartDate: investmentStartDate.toISOString()
+            })
           })
         }
-      })
+      }
 
       setCommissions(processedCommissions)
     } catch (error) {
@@ -1315,7 +1253,7 @@ export function ReportsManager() {
           }
           
           const monthMap = advisorPaymentsByMonth.get(monthKey)!
-          const advisorKey = commission.advisorEmail || commission.advisorName
+          const advisorKey = (commission.advisorEmail || commission.advisorName || "N/A") as string
           const existing = monthMap.get(advisorKey)
           
           if (existing) {
@@ -1323,7 +1261,7 @@ export function ReportsManager() {
             existing.paymentCount += 1
           } else {
             monthMap.set(advisorKey, {
-              advisorName: commission.advisorName,
+              advisorName: commission.advisorName || 'N/A',
               advisorEmail: commission.advisorEmail || 'N/A',
               totalCommission: commission.advisorCommission,
               paymentCount: 1
@@ -1460,7 +1398,7 @@ export function ReportsManager() {
           }
           
           const monthMap = officePaymentsByMonth.get(monthKey)!
-          const officeKey = commission.officeEmail || commission.officeName
+          const officeKey = (commission.officeEmail || commission.officeName || "N/A") as string
           const existing = monthMap.get(officeKey)
           
           if (existing) {
@@ -1468,7 +1406,7 @@ export function ReportsManager() {
             existing.paymentCount += 1
           } else {
             monthMap.set(officeKey, {
-              officeName: commission.officeName,
+              officeName: commission.officeName || 'N/A',
               officeEmail: commission.officeEmail || 'N/A',
               totalCommission: commission.officeCommission,
               paymentCount: 1
@@ -2037,7 +1975,111 @@ export function ReportsManager() {
     })
   }
 
-  const exportToExcel = (type: string, fileName: string) => {
+  // Função auxiliar para calcular comissões usando calculateNewCommissionLogic
+  const calculateCommissionsForInvestment = async (
+    investment: any,
+    investorProfile: any,
+    advisorProfile: any | null,
+    officeProfile: any | null
+  ) => {
+    try {
+      const investmentPaymentDate = investment.payment_date || investment.created_at
+      
+      // Calcular comissão usando calculateNewCommissionLogic
+      let commissionCalc
+      
+      if (advisorProfile) {
+        // Investimento com assessor
+        commissionCalc = await calculateNewCommissionLogic({
+          id: investment.id,
+          user_id: investment.user_id,
+          amount: Number(investment.amount),
+          payment_date: investmentPaymentDate,
+          commitment_period: investment.commitment_period || 12,
+          liquidity: investment.profitability_liquidity,
+          investorName: investorProfile?.full_name || "Investidor",
+          investorUserTypeId: investorProfile?.user_type_id || null,
+          advisorId: advisorProfile?.id,
+          advisorName: advisorProfile?.full_name || "Assessor",
+          advisorRole: advisorProfile?.role,
+          advisorUserTypeId: advisorProfile?.user_type_id || null,
+          officeId: officeProfile?.id,
+          officeName: officeProfile?.full_name || "Escritório",
+          officeUserTypeId: officeProfile?.user_type_id || null,
+          isForAdvisor: true, // Para assessor: sem D+60
+        })
+      } else if (officeProfile) {
+        // Investidor direto do escritório (sem assessor)
+        commissionCalc = await calculateNewCommissionLogic({
+          id: investment.id,
+          user_id: investment.user_id,
+          amount: Number(investment.amount),
+          payment_date: investmentPaymentDate,
+          commitment_period: investment.commitment_period || 12,
+          liquidity: investment.profitability_liquidity,
+          investorName: investorProfile?.full_name || "Investidor",
+          investorUserTypeId: investorProfile?.user_type_id || null,
+          officeId: officeProfile?.id,
+          officeName: officeProfile?.full_name || "Escritório",
+          officeUserTypeId: officeProfile?.user_type_id || null,
+        })
+      } else {
+        // Sem assessor nem escritório: apenas comissão do investidor (D+60)
+        commissionCalc = await calculateNewCommissionLogic({
+          id: investment.id,
+          user_id: investment.user_id,
+          amount: Number(investment.amount),
+          payment_date: investmentPaymentDate,
+          commitment_period: investment.commitment_period || 12,
+          liquidity: investment.profitability_liquidity,
+          investorName: investorProfile?.full_name || "Investidor",
+          investorUserTypeId: investorProfile?.user_type_id || null,
+        })
+      }
+      
+      // Encontrar a próxima data de pagamento (primeira data futura)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      let nextPaymentDate: Date | null = null
+      if (commissionCalc.paymentDueDate && commissionCalc.paymentDueDate.length > 0) {
+        const futureDates = commissionCalc.paymentDueDate
+          .map(d => new Date(d))
+          .filter(d => {
+            d.setHours(0, 0, 0, 0)
+            return d >= today
+          })
+          .sort((a, b) => a.getTime() - b.getTime())
+        
+        if (futureDates.length > 0) {
+          nextPaymentDate = futureDates[0]
+        }
+      }
+      
+      // Calcular comissão total (soma de todas as comissões)
+      const totalCommission = (commissionCalc.investorCommission || 0) + 
+                              (commissionCalc.advisorCommission || 0) + 
+                              (commissionCalc.officeCommission || 0)
+      
+      return {
+        investorCommission: commissionCalc.investorCommission || 0,
+        advisorCommission: commissionCalc.advisorCommission || 0,
+        officeCommission: commissionCalc.officeCommission || 0,
+        totalCommission,
+        nextPaymentDate,
+        paymentDueDates: commissionCalc.paymentDueDate || [],
+        monthlyBreakdown: commissionCalc.monthlyBreakdown || [],
+        investorRate: commissionCalc.investorRate,
+        advisorRate: commissionCalc.advisorRate,
+        officeRate: commissionCalc.officeRate,
+      }
+    } catch (error) {
+      console.error("Erro ao calcular comissão:", error)
+      return null
+    }
+  }
+
+  const exportToExcel = async (type: string, fileName: string) => {
     if (!analyticsData) return
 
     const workbook = XLSX.utils.book_new()
@@ -2212,54 +2254,132 @@ export function ReportsManager() {
         break
 
       case "commissions":
-        // Calcular comissões detalhadas por usuário (apenas investimentos ativos)
+        // Buscar perfis completos com user_type_id para calcular comissões corretamente
         const activeInvestmentsOnly = detailedInvestments.filter((inv: any) => inv.status === "active")
-        const userCommissions = activeInvestmentsOnly.map((inv: any) => {
-          const user = inv.profiles
-          if (!user) return null
+        const supabase = createClient()
+        
+        // Buscar todos os perfis de investidores com user_type_id
+        const investorIds = activeInvestmentsOnly.map((inv: any) => inv.user_id)
+        const { data: investorProfilesFull } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, parent_id, office_id, user_type_id")
+          .in("id", investorIds)
+        
+        const investorProfileMap = new Map(
+          (investorProfilesFull || []).map((p: any) => [p.id, p])
+        )
+        
+        // Buscar assessores e escritórios
+        const advisorIds = Array.from(new Set(
+          (investorProfilesFull || [])
+            .map((p: any) => p.parent_id)
+            .filter((id: string | null) => !!id)
+        ))
+        
+        let advisorProfileMap = new Map()
+        let officeProfileMap = new Map()
+        
+        if (advisorIds.length > 0) {
+          const { data: advisorProfilesFull } = await supabase
+            .from("profiles")
+            .select("id, full_name, email, office_id, user_type_id, role")
+            .in("id", advisorIds)
           
-          const totalInvested = activeInvestmentsOnly
-            .filter((i: any) => i.user_id === inv.user_id)
-            .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
+          advisorProfileMap = new Map(
+            (advisorProfilesFull || []).map((a: any) => [a.id, a])
+          )
           
-          const monthlyCommission = totalInvested * COMMISSION_RATES.investidor // 2% taxa de administração
-          // Calcular próximo recebimento: 30 dias depois da data de pagamento
-          const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
-          const nextPayment = new Date(paymentDate)
-          nextPayment.setDate(paymentDate.getDate() + 30) // 30 dias depois do pagamento
+          const officeIds = Array.from(new Set(
+            (advisorProfilesFull || [])
+              .map((a: any) => a.office_id)
+              .filter((id: string | null) => !!id)
+          ))
           
-          // Calcular período e rentabilidade do investimento
-          const investmentPeriod = inv.commitment_period ? `${inv.commitment_period} meses` : "N/A"
-          const profitability = inv.profitability_liquidity || "N/A"
-          
-          return {
-            userId: inv.user_id,
-            userName: user.full_name || "N/A",
-            userEmail: user.email || "N/A",
-            userType: user.user_type || "N/A",
-            totalInvested,
-            monthlyCommission,
-            nextPaymentDate: nextPayment.toLocaleDateString("pt-BR"),
-            investmentCount: activeInvestmentsOnly.filter((i: any) => i.user_id === inv.user_id).length,
-            lastInvestmentDate: activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => {
-                const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
-                const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
-                return dateB.getTime() - dateA.getTime()
-              })[0]?.payment_date || activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at,
-            investmentPeriod,
-            profitability
+          if (officeIds.length > 0) {
+            const { data: officeProfilesFull } = await supabase
+              .from("profiles")
+              .select("id, full_name, email, user_type_id")
+              .in("id", officeIds)
+            
+            officeProfileMap = new Map(
+              (officeProfilesFull || []).map((o: any) => [o.id, o])
+            )
           }
-        }).filter(Boolean)
+        }
+        
+        // Calcular comissões usando calculateNewCommissionLogic
+        const userCommissions = await Promise.all(
+          activeInvestmentsOnly.map(async (inv: any) => {
+            const investorProfile = investorProfileMap.get(inv.user_id)
+            if (!investorProfile) return null
+            
+            const advisorProfile = investorProfile.parent_id 
+              ? advisorProfileMap.get(investorProfile.parent_id) 
+              : null
+            const officeProfile = advisorProfile?.office_id 
+              ? officeProfileMap.get(advisorProfile.office_id)
+              : investorProfile.office_id
+                ? officeProfileMap.get(investorProfile.office_id)
+                : null
+            
+            // Calcular comissão usando função auxiliar
+            const commissionData = await calculateCommissionsForInvestment(
+              inv,
+              investorProfile,
+              advisorProfile,
+              officeProfile
+            )
+            
+            if (!commissionData) return null
+            
+            // Agrupar por investidor para calcular totais
+            const investorInvestments = activeInvestmentsOnly.filter(
+              (i: any) => i.user_id === inv.user_id
+            )
+            
+            const totalInvested = investorInvestments.reduce(
+              (sum: number, i: any) => sum + (i.amount || 0), 
+              0
+            )
+            
+            // Usar comissão do investidor (investorCommission)
+            const monthlyCommission = commissionData.investorCommission
+            
+            return {
+              userId: inv.user_id,
+              userName: investorProfile.full_name || "N/A",
+              userEmail: investorProfile.email || "N/A",
+              userType: "investor",
+              totalInvested,
+              monthlyCommission,
+              nextPaymentDate: commissionData.nextPaymentDate
+                ? commissionData.nextPaymentDate.toLocaleDateString("pt-BR")
+                : "N/A",
+              investmentCount: investorInvestments.length,
+              lastInvestmentDate: investorInvestments
+                .sort((a: any, b: any) => {
+                  const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
+                  const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
+                  return dateB.getTime() - dateA.getTime()
+                })[0]?.payment_date || investorInvestments
+                .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at,
+              investmentPeriod: inv.commitment_period ? `${inv.commitment_period} meses` : "N/A",
+              profitability: inv.profitability_liquidity || "N/A"
+            }
+          })
+        )
+        
+        const validUserCommissions = userCommissions.filter((c: any) => c !== null)
 
         // Remover duplicatas e ordenar por comissão mensal
-        const uniqueUserCommissions = userCommissions.reduce((acc: any[], current: any) => {
+        const uniqueUserCommissions = validUserCommissions.reduce((acc: any[], current: any) => {
           const existing = acc.find(item => item.userId === current.userId)
           if (!existing) {
             acc.push(current)
+          } else {
+            // Somar comissões se já existe
+            existing.monthlyCommission += current.monthlyCommission
+            existing.totalInvested += current.totalInvested
           }
           return acc
         }, []).sort((a: any, b: any) => b.monthlyCommission - a.monthlyCommission)
@@ -2356,51 +2476,95 @@ export function ReportsManager() {
         XLSX.utils.book_append_sheet(workbook, ws11, "Todas as Comissões por Usuário")
 
         // Calcular comissões detalhadas por assessores
-        const advisorCommissions = activeInvestmentsOnly.map((inv: any) => {
-          const user = inv.profiles
-          if (!user || user.user_type !== "assessor") return null
+        // Agrupar investimentos por assessor
+        const investmentsByAdvisor = new Map<string, any[]>()
+        
+        activeInvestmentsOnly.forEach((inv: any) => {
+          const investorProfile = investorProfileMap.get(inv.user_id)
+          if (!investorProfile || !investorProfile.parent_id) return
           
-          const totalInvested = activeInvestmentsOnly
-            .filter((i: any) => i.user_id === inv.user_id)
-            .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
-          
-          const monthlyCommission = totalInvested * COMMISSION_RATES.assessor // 3% para assessores
-          const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
-          const nextPayment = new Date(paymentDate)
-          nextPayment.setDate(paymentDate.getDate() + 30)
-          
-          const investmentPeriod = inv.commitment_period ? `${inv.commitment_period} meses` : "N/A"
-          const profitability = inv.profitability_liquidity || "N/A"
-          
-          return {
-            userId: inv.user_id,
-            userName: user.full_name || "N/A",
-            userEmail: user.email || "N/A",
-            totalInvested,
-            monthlyCommission,
-            nextPaymentDate: nextPayment.toLocaleDateString("pt-BR"),
-            investmentCount: activeInvestmentsOnly.filter((i: any) => i.user_id === inv.user_id).length,
-            lastInvestmentDate: activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => {
-                const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
-                const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
-                return dateB.getTime() - dateA.getTime()
-              })[0]?.payment_date || activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at,
-            investmentPeriod,
-            profitability
+          const advisorId = investorProfile.parent_id
+          if (!investmentsByAdvisor.has(advisorId)) {
+            investmentsByAdvisor.set(advisorId, [])
           }
-        }).filter(Boolean)
-
-        const uniqueAdvisorCommissions = advisorCommissions.reduce((acc: any[], current: any) => {
-          const existing = acc.find(item => item.userId === current.userId)
-          if (!existing) {
-            acc.push(current)
-          }
-          return acc
-        }, []).sort((a: any, b: any) => b.monthlyCommission - a.monthlyCommission)
+          investmentsByAdvisor.get(advisorId)!.push(inv)
+        })
+        
+        const advisorCommissions = await Promise.all(
+          Array.from(investmentsByAdvisor.entries()).map(async ([advisorId, investments]) => {
+            const advisorProfile = advisorProfileMap.get(advisorId)
+            if (!advisorProfile) return null
+            
+            // Calcular totais do assessor
+            const totalInvested = investments.reduce(
+              (sum: number, i: any) => sum + (i.amount || 0), 
+              0
+            )
+            
+            // Calcular comissão total do assessor somando todas as comissões dos investimentos
+            let totalAdvisorCommission = 0
+            let nextPaymentDates: Date[] = []
+            
+            for (const inv of investments) {
+              const investorProfile = investorProfileMap.get(inv.user_id)
+              if (!investorProfile) continue
+              
+              const officeProfile = advisorProfile.office_id 
+                ? officeProfileMap.get(advisorProfile.office_id)
+                : null
+              
+              const commissionData = await calculateCommissionsForInvestment(
+                inv,
+                investorProfile,
+                advisorProfile,
+                officeProfile
+              )
+              
+              if (commissionData) {
+                totalAdvisorCommission += commissionData.advisorCommission
+                if (commissionData.nextPaymentDate) {
+                  nextPaymentDates.push(commissionData.nextPaymentDate)
+                }
+              }
+            }
+            
+            // Encontrar a próxima data de pagamento mais próxima
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const futureDates = nextPaymentDates
+              .filter(d => d >= today)
+              .sort((a, b) => a.getTime() - b.getTime())
+            
+            const nextPaymentDate = futureDates.length > 0 
+              ? futureDates[0].toLocaleDateString("pt-BR")
+              : "N/A"
+            
+            // Último investimento
+            const lastInvestment = investments.sort((a: any, b: any) => {
+              const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
+              const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
+              return dateB.getTime() - dateA.getTime()
+            })[0]
+            
+            return {
+              userId: advisorId,
+              userName: advisorProfile.full_name || "N/A",
+              userEmail: advisorProfile.email || "N/A",
+              totalInvested,
+              monthlyCommission: totalAdvisorCommission,
+              nextPaymentDate,
+              investmentCount: investments.length,
+              lastInvestmentDate: lastInvestment?.payment_date || lastInvestment?.created_at,
+              investmentPeriod: lastInvestment?.commitment_period ? `${lastInvestment.commitment_period} meses` : "N/A",
+              profitability: lastInvestment?.profitability_liquidity || "N/A"
+            }
+          })
+        )
+        
+        const validAdvisorCommissions = advisorCommissions.filter((c: any) => c !== null)
+        const uniqueAdvisorCommissions = validAdvisorCommissions.sort(
+          (a: any, b: any) => b.monthlyCommission - a.monthlyCommission
+        )
 
         // Planilha detalhada de comissões por assessores
         const advisorDetailedData = [
@@ -2408,7 +2572,7 @@ export function ReportsManager() {
             "Nome do Assessor",
             "Email",
             "Valor Investido",
-            "Comissão Mensal (3%)",
+            "Comissão Mensal",
             "Próximo Recebimento",
             "Qtd. Investimentos Ativos",
             "Período",
@@ -2431,51 +2595,108 @@ export function ReportsManager() {
         XLSX.utils.book_append_sheet(workbook, ws12, "Comissões por Assessores")
 
         // Calcular comissões detalhadas por escritórios
-        const officeCommissions = activeInvestmentsOnly.map((inv: any) => {
-          const user = inv.profiles
-          if (!user || user.user_type !== "escritorio") return null
+        // Agrupar investimentos por escritório
+        const investmentsByOffice = new Map<string, any[]>()
+        
+        activeInvestmentsOnly.forEach((inv: any) => {
+          const investorProfile = investorProfileMap.get(inv.user_id)
+          if (!investorProfile) return
           
-          const totalInvested = activeInvestmentsOnly
-            .filter((i: any) => i.user_id === inv.user_id)
-            .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
-          
-          const monthlyCommission = totalInvested * COMMISSION_RATES.escritorio // 1% para escritórios
-          const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
-          const nextPayment = new Date(paymentDate)
-          nextPayment.setDate(paymentDate.getDate() + 30)
-          
-          const investmentPeriod = inv.commitment_period ? `${inv.commitment_period} meses` : "N/A"
-          const profitability = inv.profitability_liquidity || "N/A"
-          
-          return {
-            userId: inv.user_id,
-            userName: user.full_name || "N/A",
-            userEmail: user.email || "N/A",
-            totalInvested,
-            monthlyCommission,
-            nextPaymentDate: nextPayment.toLocaleDateString("pt-BR"),
-            investmentCount: activeInvestmentsOnly.filter((i: any) => i.user_id === inv.user_id).length,
-            lastInvestmentDate: activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => {
-                const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
-                const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
-                return dateB.getTime() - dateA.getTime()
-              })[0]?.payment_date || activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at,
-            investmentPeriod,
-            profitability
+          // Escritório pode vir do assessor ou diretamente do investidor
+          let officeId: string | null = null
+          if (investorProfile.parent_id) {
+            const advisorProfile = advisorProfileMap.get(investorProfile.parent_id)
+            if (advisorProfile?.office_id) {
+              officeId = advisorProfile.office_id
+            }
           }
-        }).filter(Boolean)
-
-        const uniqueOfficeCommissions = officeCommissions.reduce((acc: any[], current: any) => {
-          const existing = acc.find(item => item.userId === current.userId)
-          if (!existing) {
-            acc.push(current)
+          if (!officeId && investorProfile.office_id) {
+            officeId = investorProfile.office_id
           }
-          return acc
-        }, []).sort((a: any, b: any) => b.monthlyCommission - a.monthlyCommission)
+          
+          if (!officeId) return
+          
+          if (!investmentsByOffice.has(officeId)) {
+            investmentsByOffice.set(officeId, [])
+          }
+          investmentsByOffice.get(officeId)!.push(inv)
+        })
+        
+        const officeCommissions = await Promise.all(
+          Array.from(investmentsByOffice.entries()).map(async ([officeId, investments]) => {
+            const officeProfile = officeProfileMap.get(officeId)
+            if (!officeProfile) return null
+            
+            // Calcular totais do escritório
+            const totalInvested = investments.reduce(
+              (sum: number, i: any) => sum + (i.amount || 0), 
+              0
+            )
+            
+            // Calcular comissão total do escritório somando todas as comissões dos investimentos
+            let totalOfficeCommission = 0
+            let nextPaymentDates: Date[] = []
+            
+            for (const inv of investments) {
+              const investorProfile = investorProfileMap.get(inv.user_id)
+              if (!investorProfile) continue
+              
+              const advisorProfile = investorProfile.parent_id 
+                ? advisorProfileMap.get(investorProfile.parent_id)
+                : null
+              
+              const commissionData = await calculateCommissionsForInvestment(
+                inv,
+                investorProfile,
+                advisorProfile,
+                officeProfile
+              )
+              
+              if (commissionData) {
+                totalOfficeCommission += commissionData.officeCommission
+                if (commissionData.nextPaymentDate) {
+                  nextPaymentDates.push(commissionData.nextPaymentDate)
+                }
+              }
+            }
+            
+            // Encontrar a próxima data de pagamento mais próxima
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const futureDates = nextPaymentDates
+              .filter(d => d >= today)
+              .sort((a, b) => a.getTime() - b.getTime())
+            
+            const nextPaymentDate = futureDates.length > 0 
+              ? futureDates[0].toLocaleDateString("pt-BR")
+              : "N/A"
+            
+            // Último investimento
+            const lastInvestment = investments.sort((a: any, b: any) => {
+              const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
+              const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
+              return dateB.getTime() - dateA.getTime()
+            })[0]
+            
+            return {
+              userId: officeId,
+              userName: officeProfile.full_name || "N/A",
+              userEmail: officeProfile.email || "N/A",
+              totalInvested,
+              monthlyCommission: totalOfficeCommission,
+              nextPaymentDate,
+              investmentCount: investments.length,
+              lastInvestmentDate: lastInvestment?.payment_date || lastInvestment?.created_at,
+              investmentPeriod: lastInvestment?.commitment_period ? `${lastInvestment.commitment_period} meses` : "N/A",
+              profitability: lastInvestment?.profitability_liquidity || "N/A"
+            }
+          })
+        )
+        
+        const validOfficeCommissions = officeCommissions.filter((c: any) => c !== null)
+        const uniqueOfficeCommissions = validOfficeCommissions.sort(
+          (a: any, b: any) => b.monthlyCommission - a.monthlyCommission
+        )
 
         // Planilha detalhada de comissões por escritórios
         const officeDetailedData = [
@@ -2483,7 +2704,7 @@ export function ReportsManager() {
             "Nome do Escritório",
             "Email",
             "Valor Investido",
-            "Comissão Mensal (1%)",
+            "Comissão Mensal",
             "Próximo Recebimento",
             "Qtd. Investimentos Ativos",
             "Período",
@@ -2527,7 +2748,7 @@ export function ReportsManager() {
     XLSX.writeFile(workbook, `${fileName}.xlsx`)
   }
 
-  const exportToPDF = (type: string, fileName: string) => {
+  const exportToPDF = async (type: string, fileName: string) => {
     if (!analyticsData) return
 
     const doc = new jsPDF('landscape') // Usar orientação paisagem para melhor aproveitamento
@@ -2890,7 +3111,7 @@ export function ReportsManager() {
       case "commissions":
         // Calcular comissões detalhadas por usuário (apenas investimentos ativos)
         const activeInvestmentsOnly = detailedInvestments.filter((inv: any) => inv.status === "active")
-        const userCommissions = activeInvestmentsOnly.map((inv: any) => {
+        const userCommissionsResults = await Promise.all(activeInvestmentsOnly.map(async (inv: any) => {
           const user = inv.profiles
           if (!user) return null
           
@@ -2898,7 +3119,12 @@ export function ReportsManager() {
             .filter((i: any) => i.user_id === inv.user_id)
             .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
           
-          const monthlyCommission = totalInvested * 0.02
+          // Buscar taxa de comissão do banco baseada no user_type_id do usuário
+          let commissionRate = 0.02 // Fallback padrão
+          if (user.user_type_id) {
+            commissionRate = await getCommissionRate(user.user_type_id, 12, "Mensal")
+          }
+          const monthlyCommission = totalInvested * commissionRate
           // Calcular próximo recebimento: 30 dias depois da data de pagamento
           const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
           const nextPayment = new Date(paymentDate)
@@ -2929,7 +3155,22 @@ export function ReportsManager() {
             investmentPeriod,
             profitability
           }
-        }).filter(Boolean)
+        }))
+        
+        const userCommissions = userCommissionsResults.filter(Boolean)
+
+        // Renomear para compatibilidade com código abaixo
+        const activeInvestmentsOnlyPDF = activeInvestmentsOnly;
+        const investorProfileMapPDF: Map<string, any> = new Map()
+        const advisorProfileMapPDF: Map<string, any> = new Map()
+        const officeProfileMapPDF: Map<string, any> = new Map()
+        
+        // Buscar perfis para os maps (simplificado para PDF)
+        for (const inv of activeInvestmentsOnly) {
+          if (inv.profiles?.user_type_id) {
+            investorProfileMapPDF.set(inv.user_id, inv.profiles)
+          }
+        }
 
         const uniqueUserCommissions = userCommissions.reduce((acc: any[], current: any) => {
           const existing = acc.find(item => item.userId === current.userId)
@@ -2941,8 +3182,8 @@ export function ReportsManager() {
 
         addSubtitle("Resumo de Comissões")
         addText(`Total: ${formatCurrency(analyticsData.commissions.total)}`)
-        addText(`Assessores (3%): ${formatCurrency(analyticsData.commissions.advisors)}`)
-        addText(`Escritórios (1%): ${formatCurrency(analyticsData.commissions.offices)}`)
+        addText(`Assessores: ${formatCurrency(analyticsData.commissions.advisors)}`)
+        addText(`Escritórios: ${formatCurrency(analyticsData.commissions.offices)}`)
         addText(`Recorrentes: ${formatCurrency(analyticsData.commissions.recurrent)}`)
         addText(`Taxa Média: ${analyticsData.commissions.avgCommissionRate}%`)
         
@@ -3016,52 +3257,91 @@ export function ReportsManager() {
           'Rentabilidade'
         ], userCommissionsTableData)
 
-        // Calcular comissões detalhadas por assessores
-        const advisorCommissions = activeInvestmentsOnly.map((inv: any) => {
-          const user = inv.profiles
-          if (!user || user.user_type !== "assessor") return null
+        // Calcular comissões detalhadas por assessores (PDF)
+        const investmentsByAdvisorPDF = new Map<string, any[]>()
+        
+        activeInvestmentsOnlyPDF.forEach((inv: any) => {
+          const investorProfile = investorProfileMapPDF.get(inv.user_id)
+          if (!investorProfile || !investorProfile.parent_id) return
           
-          const totalInvested = activeInvestmentsOnly
-            .filter((i: any) => i.user_id === inv.user_id)
-            .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
-          
-          const monthlyCommission = totalInvested * COMMISSION_RATES.assessor // 3% para assessores
-          const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
-          const nextPayment = new Date(paymentDate)
-          nextPayment.setDate(paymentDate.getDate() + 30)
-          
-          const investmentPeriod = inv.commitment_period ? `${inv.commitment_period} meses` : "N/A"
-          const profitability = inv.profitability_liquidity || "N/A"
-          
-          return {
-            userId: inv.user_id,
-            userName: user.full_name || "N/A",
-            userEmail: user.email || "N/A",
-            totalInvested,
-            monthlyCommission,
-            nextPaymentDate: nextPayment.toLocaleDateString("pt-BR"),
-            investmentCount: activeInvestmentsOnly.filter((i: any) => i.user_id === inv.user_id).length,
-            lastInvestmentDate: activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => {
-                const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
-                const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
-                return dateB.getTime() - dateA.getTime()
-              })[0]?.payment_date || activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at,
-            investmentPeriod,
-            profitability
+          const advisorId = investorProfile.parent_id
+          if (!investmentsByAdvisorPDF.has(advisorId)) {
+            investmentsByAdvisorPDF.set(advisorId, [])
           }
-        }).filter(Boolean)
-
-        const uniqueAdvisorCommissions = advisorCommissions.reduce((acc: any[], current: any) => {
-          const existing = acc.find(item => item.userId === current.userId)
-          if (!existing) {
-            acc.push(current)
-          }
-          return acc
-        }, []).sort((a: any, b: any) => b.monthlyCommission - a.monthlyCommission)
+          investmentsByAdvisorPDF.get(advisorId)!.push(inv)
+        })
+        
+        const advisorCommissionsPDF = await Promise.all(
+          Array.from(investmentsByAdvisorPDF.entries()).map(async ([advisorId, investments]) => {
+            const advisorProfile = advisorProfileMapPDF.get(advisorId)
+            if (!advisorProfile) return null
+            
+            const totalInvested = investments.reduce(
+              (sum: number, i: any) => sum + (i.amount || 0), 
+              0
+            )
+            
+            let totalAdvisorCommission = 0
+            let nextPaymentDates: Date[] = []
+            
+            for (const inv of investments) {
+              const investorProfile = investorProfileMapPDF.get(inv.user_id)
+              if (!investorProfile) continue
+              
+              const officeProfile = advisorProfile.office_id 
+                ? officeProfileMapPDF.get(advisorProfile.office_id)
+                : null
+              
+              const commissionData = await calculateCommissionsForInvestment(
+                inv,
+                investorProfile,
+                advisorProfile,
+                officeProfile
+              )
+              
+              if (commissionData) {
+                totalAdvisorCommission += commissionData.advisorCommission
+                if (commissionData.nextPaymentDate) {
+                  nextPaymentDates.push(commissionData.nextPaymentDate)
+                }
+              }
+            }
+            
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const futureDates = nextPaymentDates
+              .filter(d => d >= today)
+              .sort((a, b) => a.getTime() - b.getTime())
+            
+            const nextPaymentDate = futureDates.length > 0 
+              ? futureDates[0].toLocaleDateString("pt-BR")
+              : "N/A"
+            
+            const lastInvestment = investments.sort((a: any, b: any) => {
+              const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
+              const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
+              return dateB.getTime() - dateA.getTime()
+            })[0]
+            
+            return {
+              userId: advisorId,
+              userName: advisorProfile.full_name || "N/A",
+              userEmail: advisorProfile.email || "N/A",
+              totalInvested,
+              monthlyCommission: totalAdvisorCommission,
+              nextPaymentDate,
+              investmentCount: investments.length,
+              lastInvestmentDate: lastInvestment?.payment_date || lastInvestment?.created_at,
+              investmentPeriod: lastInvestment?.commitment_period ? `${lastInvestment.commitment_period} meses` : "N/A",
+              profitability: lastInvestment?.profitability_liquidity || "N/A"
+            }
+          })
+        )
+        
+        const validAdvisorCommissionsPDF = advisorCommissionsPDF.filter((c: any) => c !== null)
+        const uniqueAdvisorCommissions = validAdvisorCommissionsPDF.sort(
+          (a: any, b: any) => b.monthlyCommission - a.monthlyCommission
+        )
 
         checkNewPage()
         addSubtitle("Comissões Detalhadas por Assessores")
@@ -3081,59 +3361,110 @@ export function ReportsManager() {
           'Assessor', 
           'Email',
           'Valor Investido', 
-          'Comissão Mensal (3%)', 
+          'Comissão Mensal', 
           'Próximo Recebimento',
           'Qtd. Investimentos Ativos',
           'Período',
           'Rentabilidade'
         ], advisorTableData)
 
-        // Calcular comissões detalhadas por escritórios
-        const officeCommissions = activeInvestmentsOnly.map((inv: any) => {
-          const user = inv.profiles
-          if (!user || user.user_type !== "escritorio") return null
+        // Calcular comissões detalhadas por escritórios (PDF)
+        const investmentsByOfficePDF = new Map<string, any[]>()
+        
+        activeInvestmentsOnlyPDF.forEach((inv: any) => {
+          const investorProfile = investorProfileMapPDF.get(inv.user_id)
+          if (!investorProfile) return
           
-          const totalInvested = activeInvestmentsOnly
-            .filter((i: any) => i.user_id === inv.user_id)
-            .reduce((sum: number, i: any) => sum + (i.amount || 0), 0)
-          
-          const monthlyCommission = totalInvested * COMMISSION_RATES.escritorio // 1% para escritórios
-          const paymentDate = inv.payment_date ? new Date(inv.payment_date) : new Date(inv.created_at)
-          const nextPayment = new Date(paymentDate)
-          nextPayment.setDate(paymentDate.getDate() + 30)
-          
-          const investmentPeriod = inv.commitment_period ? `${inv.commitment_period} meses` : "N/A"
-          const profitability = inv.profitability_liquidity || "N/A"
-          
-          return {
-            userId: inv.user_id,
-            userName: user.full_name || "N/A",
-            userEmail: user.email || "N/A",
-            totalInvested,
-            monthlyCommission,
-            nextPaymentDate: nextPayment.toLocaleDateString("pt-BR"),
-            investmentCount: activeInvestmentsOnly.filter((i: any) => i.user_id === inv.user_id).length,
-            lastInvestmentDate: activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => {
-                const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
-                const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
-                return dateB.getTime() - dateA.getTime()
-              })[0]?.payment_date || activeInvestmentsOnly
-              .filter((i: any) => i.user_id === inv.user_id)
-              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at,
-            investmentPeriod,
-            profitability
+          let officeId: string | null = null
+          if (investorProfile.parent_id) {
+            const advisorProfile = advisorProfileMapPDF.get(investorProfile.parent_id)
+            if (advisorProfile?.office_id) {
+              officeId = advisorProfile.office_id
+            }
           }
-        }).filter(Boolean)
-
-        const uniqueOfficeCommissions = officeCommissions.reduce((acc: any[], current: any) => {
-          const existing = acc.find(item => item.userId === current.userId)
-          if (!existing) {
-            acc.push(current)
+          if (!officeId && investorProfile.office_id) {
+            officeId = investorProfile.office_id
           }
-          return acc
-        }, []).sort((a: any, b: any) => b.monthlyCommission - a.monthlyCommission)
+          
+          if (!officeId) return
+          
+          if (!investmentsByOfficePDF.has(officeId)) {
+            investmentsByOfficePDF.set(officeId, [])
+          }
+          investmentsByOfficePDF.get(officeId)!.push(inv)
+        })
+        
+        const officeCommissionsPDF = await Promise.all(
+          Array.from(investmentsByOfficePDF.entries()).map(async ([officeId, investments]) => {
+            const officeProfile = officeProfileMapPDF.get(officeId)
+            if (!officeProfile) return null
+            
+            const totalInvested = investments.reduce(
+              (sum: number, i: any) => sum + (i.amount || 0), 
+              0
+            )
+            
+            let totalOfficeCommission = 0
+            let nextPaymentDates: Date[] = []
+            
+            for (const inv of investments) {
+              const investorProfile = investorProfileMapPDF.get(inv.user_id)
+              if (!investorProfile) continue
+              
+              const advisorProfile = investorProfile.parent_id 
+                ? advisorProfileMapPDF.get(investorProfile.parent_id)
+                : null
+              
+              const commissionData = await calculateCommissionsForInvestment(
+                inv,
+                investorProfile,
+                advisorProfile,
+                officeProfile
+              )
+              
+              if (commissionData) {
+                totalOfficeCommission += commissionData.officeCommission
+                if (commissionData.nextPaymentDate) {
+                  nextPaymentDates.push(commissionData.nextPaymentDate)
+                }
+              }
+            }
+            
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const futureDates = nextPaymentDates
+              .filter(d => d >= today)
+              .sort((a, b) => a.getTime() - b.getTime())
+            
+            const nextPaymentDate = futureDates.length > 0 
+              ? futureDates[0].toLocaleDateString("pt-BR")
+              : "N/A"
+            
+            const lastInvestment = investments.sort((a: any, b: any) => {
+              const dateA = a.payment_date ? new Date(a.payment_date) : new Date(a.created_at)
+              const dateB = b.payment_date ? new Date(b.payment_date) : new Date(b.created_at)
+              return dateB.getTime() - dateA.getTime()
+            })[0]
+            
+            return {
+              userId: officeId,
+              userName: officeProfile.full_name || "N/A",
+              userEmail: officeProfile.email || "N/A",
+              totalInvested,
+              monthlyCommission: totalOfficeCommission,
+              nextPaymentDate,
+              investmentCount: investments.length,
+              lastInvestmentDate: lastInvestment?.payment_date || lastInvestment?.created_at,
+              investmentPeriod: lastInvestment?.commitment_period ? `${lastInvestment.commitment_period} meses` : "N/A",
+              profitability: lastInvestment?.profitability_liquidity || "N/A"
+            }
+          })
+        )
+        
+        const validOfficeCommissionsPDF = officeCommissionsPDF.filter((c: any) => c !== null)
+        const uniqueOfficeCommissions = validOfficeCommissionsPDF.sort(
+          (a: any, b: any) => b.monthlyCommission - a.monthlyCommission
+        )
 
         checkNewPage()
         addSubtitle("Comissões Detalhadas por Escritórios")
@@ -3153,7 +3484,7 @@ export function ReportsManager() {
           'Escritório', 
           'Email',
           'Valor Investido', 
-          'Comissão Mensal (1%)', 
+          'Comissão Mensal', 
           'Próximo Recebimento',
           'Qtd. Investimentos Ativos',
           'Período',

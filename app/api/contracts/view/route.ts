@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     } else if (user.id === contract.investor_id) {
       // Investidor pode ver seus próprios contratos
       hasPermission = true;
-    } else if (isDistributor) {
+    } else if (isDistributor || isOffice) {
       // Buscar o perfil do investidor para verificar relacionamento
       const { data: investorProfile } = await supabase
         .from("profiles")
@@ -87,18 +87,21 @@ export async function GET(request: NextRequest) {
         .single()
       
       console.log("🔍 [DEBUG] Perfil do investidor:", investorProfile);
-      console.log("🔍 [DEBUG] Comparação distributor_id:", {
-        investor_distributor_id: investorProfile?.distributor_id,
-        logged_user_id: user.id,
-        match: investorProfile?.distributor_id === user.id
-      });
       
-      if (isAdvisor) {
+      if (isAdvisor && !isOffice) {
         // Assessor pode ver contratos de seus próprios investidores
         hasPermission = investorProfile?.parent_id === user.id;
       } else if (isOffice) {
-        // Escritório pode ver contratos de investidores do seu office_id
+        // Escritório pode ver contratos de investidores vinculados diretamente ou via assessores
         hasPermission = investorProfile?.office_id === user.id;
+        if (!hasPermission && investorProfile?.parent_id) {
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("office_id")
+            .eq("id", investorProfile.parent_id)
+            .single();
+          hasPermission = advisorProfile?.office_id === user.id;
+        }
       } else {
         // Distribuidor de nível superior: verificar se investidor está vinculado
         if (investorProfile?.distributor_id === user.id) {

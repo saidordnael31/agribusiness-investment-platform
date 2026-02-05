@@ -102,29 +102,15 @@ export function UserManager() {
             Gerencie investidores e distribuidores da plataforma
           </p>
         </div>
-        <Dialog open={showCreateUserModal} onOpenChange={setShowCreateUserModal}>
-          <DialogTrigger asChild>
-            <Button className="flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              Cadastrar Usuário
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Cadastrar Novo Usuário</DialogTitle>
-              <DialogDescription>
-                Cadastre um novo usuário na plataforma.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto pr-2">
-              {showCreateUserModal && (
-                <AdminRegisterForm 
-                  closeModal={() => setShowCreateUserModal(false)} 
-                />
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button 
+          className="flex items-center gap-2"
+          onClick={() => {
+            window.location.href = "/users/create";
+          }}
+        >
+          <UserPlus className="w-4 h-4" />
+          Cadastrar Usuário
+        </Button>
       </div>
 
       <Dialog open={showQRModal} onOpenChange={setShowQRModal}>

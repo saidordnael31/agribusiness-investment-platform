@@ -117,7 +117,7 @@ export function AdminCommissionsDetail() {
       // Perfis dos investidores (para achar assessor e escritório)
       const { data: investorProfiles, error: investorProfilesError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, parent_id, office_id")
+        .select("id, full_name, email, parent_id, office_id, user_type_id")
         .in("id", investorIds)
 
       if (investorProfilesError) {
@@ -141,7 +141,7 @@ export function AdminCommissionsDetail() {
       if (advisorIds.length > 0) {
         const { data: advisorsData, error: advisorsError } = await supabase
           .from("profiles")
-          .select("id, full_name, email, role, office_id")
+          .select("id, full_name, email, role, office_id, user_type_id")
           .in("id", advisorIds)
 
         if (advisorsError) {
@@ -170,7 +170,7 @@ export function AdminCommissionsDetail() {
       if (officeIds.length > 0) {
         const { data: officesData, error: officesError } = await supabase
           .from("profiles")
-          .select("id, full_name, email, role")
+          .select("id, full_name, email, role, user_type_id")
           .in("id", officeIds)
 
         if (officesError) {
@@ -212,7 +212,7 @@ export function AdminCommissionsDetail() {
         try {
           if (advisor) {
             // 1) Calcular fluxo para assessor (sem D+60, pró‑rata)
-            const advisorCalc = calculateNewCommissionLogic({
+            const advisorCalc = await calculateNewCommissionLogic({
               id: investment.id,
               user_id: investment.user_id,
               amount: Number(investment.amount),
@@ -220,9 +220,11 @@ export function AdminCommissionsDetail() {
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
               investorName: investor.full_name || "Investidor",
+              investorUserTypeId: investor.user_type_id || null,
               advisorId: advisor.id,
               advisorName: advisor.full_name || "Assessor",
               advisorRole: advisor.role,
+              advisorUserTypeId: advisor.user_type_id || null,
               isForAdvisor: true,
             })
 
@@ -232,7 +234,7 @@ export function AdminCommissionsDetail() {
             let officeName: string | undefined
 
             if (office) {
-              const officeCalc = calculateNewCommissionLogic({
+              const officeCalc = await calculateNewCommissionLogic({
                 id: investment.id,
                 user_id: investment.user_id,
                 amount: Number(investment.amount),
@@ -240,8 +242,10 @@ export function AdminCommissionsDetail() {
                 commitment_period: investment.commitment_period || 12,
                 liquidity: investment.profitability_liquidity,
                 investorName: investor.full_name || "Investidor",
+                investorUserTypeId: investor.user_type_id || null,
                 officeId: office.id,
                 officeName: office.full_name || "Escritório",
+                officeUserTypeId: office.user_type_id || null,
               })
               officeCommission = officeCalc.officeCommission
               officeId = office.id
@@ -256,7 +260,7 @@ export function AdminCommissionsDetail() {
             }
           } else if (office) {
             // Investidor direto do escritório (sem assessor)
-            const officeCalc = calculateNewCommissionLogic({
+            const officeCalc = await calculateNewCommissionLogic({
               id: investment.id,
               user_id: investment.user_id,
               amount: Number(investment.amount),
@@ -264,8 +268,10 @@ export function AdminCommissionsDetail() {
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
               investorName: investor.full_name || "Investidor",
+              investorUserTypeId: investor.user_type_id || null,
               officeId: office.id,
               officeName: office.full_name || "Escritório",
+              officeUserTypeId: office.user_type_id || null,
             })
 
             baseCalc = {
@@ -276,7 +282,7 @@ export function AdminCommissionsDetail() {
             }
           } else {
             // Sem assessor nem escritório: apenas comissão do investidor (D+60)
-            const investorCalc = calculateNewCommissionLogic({
+            const investorCalc = await calculateNewCommissionLogic({
               id: investment.id,
               user_id: investment.user_id,
               amount: Number(investment.amount),
@@ -284,6 +290,7 @@ export function AdminCommissionsDetail() {
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
               investorName: investor.full_name || "Investidor",
+              investorUserTypeId: investor.user_type_id || null,
             })
 
             baseCalc = {
@@ -307,6 +314,7 @@ export function AdminCommissionsDetail() {
         processed.push({
           ...baseCalc,
           investorEmail: investor.email || "",
+          // As taxas já vêm calculadas em baseCalc (advisorRate, officeRate, investorRate)
           advisorEmail: advisor?.email || undefined,
           advisorRole: advisor?.role ?? null,
           officeEmail: office?.email || undefined,
@@ -449,15 +457,15 @@ export function AdminCommissionsDetail() {
       }
     }
 
-    // Fallback: usar comissão mensal cheia
-    const officeRate = COMMISSION_RATES.escritorio
-    const advisorBaseRate =
-      commission.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor
-    const investorRate = COMMISSION_RATES.investidor
+    // Fallback: usar taxas do cálculo (vêm do banco via calculateNewCommissionLogic)
+    // Se não houver taxas calculadas, usar valores padrão como último recurso
+    const officeRate = commission.officeRate || COMMISSION_RATES.escritorio
+    const advisorRate = commission.advisorRate || COMMISSION_RATES.assessor
+    const investorRate = commission.investorRate || COMMISSION_RATES.investidor
 
     return {
       officeAmount: commission.amount * officeRate,
-      advisorAmount: commission.amount * advisorBaseRate,
+      advisorAmount: commission.amount * advisorRate,
       investorAmount: commission.amount * investorRate,
     }
   }
@@ -661,18 +669,18 @@ export function AdminCommissionsDetail() {
     if (paymentIndex !== 0) return ""
 
     let amount = 0
+    // Usar taxas do cálculo (vêm do banco via calculateNewCommissionLogic)
     let rate = 0
 
     if (kind === "office") {
       amount = officeAmount
-      rate = COMMISSION_RATES.escritorio
+      rate = commission.officeRate || COMMISSION_RATES.escritorio // Fallback se não houver
     } else if (kind === "advisor") {
       amount = advisorAmount
-      rate =
-        commission.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor
+      rate = commission.advisorRate || COMMISSION_RATES.assessor // Fallback se não houver
     } else {
       amount = investorAmount
-      rate = COMMISSION_RATES.investidor
+      rate = commission.investorRate || COMMISSION_RATES.investidor // Fallback se não houver
     }
 
     if (!amount || amount <= 0 || !commission.amount || commission.amount <= 0 || rate <= 0) {

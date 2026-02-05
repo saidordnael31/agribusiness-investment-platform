@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { getCommissionRate } from "@/lib/commission-utils"
 
 interface Office {
   id: string
@@ -133,14 +134,18 @@ export function HierarchyManager() {
       if (investmentsError) throw investmentsError
 
       // Processar dados dos escritórios
-      const processedOffices: Office[] = (officesData || []).map((office) => {
+      const processedOffices: Office[] = await Promise.all((officesData || []).map(async (office) => {
         const officeAdvisors = (advisorsData || []).filter((advisor) => advisor.office_id === office.id)
         const officeInvestments = (investmentsData || []).filter((inv) =>
           officeAdvisors.some((advisor) => advisor.id === inv.advisor_id),
         )
 
         const totalInvested = officeInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
-        const monthlyCommission = totalInvested * 0.01 // 1% ao mês para escritório
+        // Buscar taxa de comissão do escritório do banco
+        const officeCommissionRate = office.user_type_id 
+          ? await getCommissionRate(office.user_type_id, 12, "Mensal")
+          : 0.01 // Fallback se não houver user_type_id
+        const monthlyCommission = totalInvested * officeCommissionRate
 
         return {
           id: office.id,
@@ -153,15 +158,19 @@ export function HierarchyManager() {
           status: office.status === "approved" ? "active" : "inactive",
           createdAt: office.created_at || new Date().toISOString(),
         }
-      })
+      }))
 
       // Processar dados dos assessores
-      const processedAdvisors: Advisor[] = (advisorsData || []).map((advisor) => {
+      const processedAdvisors: Advisor[] = await Promise.all((advisorsData || []).map(async (advisor) => {
         const advisorInvestments = (investmentsData || []).filter((inv) => inv.advisor_id === advisor.id)
         const office = officesData?.find((o) => o.id === advisor.office_id)
 
         const totalInvested = advisorInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
-        const monthlyCommission = totalInvested * 0.03 // 3% ao mês para assessor
+        // Buscar taxa de comissão do assessor do banco
+        const advisorCommissionRate = advisor.user_type_id 
+          ? await getCommissionRate(advisor.user_type_id, 12, "Mensal")
+          : 0.03 // Fallback se não houver user_type_id
+        const monthlyCommission = totalInvested * advisorCommissionRate
 
         return {
           id: advisor.id,
@@ -175,13 +184,26 @@ export function HierarchyManager() {
           status: advisor.status === "approved" ? "active" : "inactive",
           createdAt: advisor.created_at || new Date().toISOString(),
         }
-      })
+      }))
 
       // Processar fluxos de comissão
-      const processedFlows: CommissionFlow[] = (investmentsData || []).map((investment) => {
+      const processedFlows: CommissionFlow[] = await Promise.all((investmentsData || []).map(async (investment) => {
         const advisor = advisorsData?.find((a) => a.id === investment.advisor_id)
         const office = officesData?.find((o) => o.id === advisor?.office_id)
-        const monthlyCommission = (investment.amount || 0) * 0.02 // Média ponderada por role
+        // Calcular média ponderada das taxas de comissão
+        let avgRate = 0.02 // Fallback padrão
+        if (advisor?.user_type_id && office?.user_type_id) {
+          const [advisorRate, officeRate] = await Promise.all([
+            getCommissionRate(advisor.user_type_id, 12, "Mensal"),
+            getCommissionRate(office.user_type_id, 12, "Mensal")
+          ])
+          avgRate = (advisorRate + officeRate) / 2
+        } else if (advisor?.user_type_id) {
+          avgRate = await getCommissionRate(advisor.user_type_id, 12, "Mensal")
+        } else if (office?.user_type_id) {
+          avgRate = await getCommissionRate(office.user_type_id, 12, "Mensal")
+        }
+        const monthlyCommission = (investment.amount || 0) * avgRate
 
         return {
           id: investment.id,
@@ -195,7 +217,7 @@ export function HierarchyManager() {
           status: investment.status === "active" ? "active" : "paused",
           startDate: investment.payment_date || investment.created_at || new Date().toISOString(),
         }
-      })
+      }))
 
       setOffices(processedOffices)
       setAdvisors(processedAdvisors)

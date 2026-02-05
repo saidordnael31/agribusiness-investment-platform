@@ -91,19 +91,44 @@ export function ComparisonCalculator() {
           return
         }
 
-        // Buscar os tipos filhos para encontrar o investidor
         const childUserTypes = await Promise.all(
           childUserTypeIds.map(id => getUserTypeFromId(id))
         )
 
-        // Encontrar o primeiro tipo que é "investor"
-        const investorType = childUserTypes.find(type => type?.user_type === "investor")
-        
+        // Encontrar investidor nos filhos diretos (assessor -> investidor)
+        let investorType = childUserTypes.find(type => type?.user_type === "investor")
+
+        // Se não encontrou (ex: escritório -> apenas assessores), buscar nos netos (escritório -> assessor -> investidor)
+        if (!investorType) {
+          for (const child of childUserTypes) {
+            if (!child?.id) continue
+            const grandchildIds = await getUserTypeHierarchy(child.id)
+            if (grandchildIds.length === 0) continue
+            const grandchildTypes = await Promise.all(
+              grandchildIds.map(id => getUserTypeFromId(id))
+            )
+            investorType = grandchildTypes.find(type => type?.user_type === "investor")
+            if (investorType) break
+          }
+        }
+
+        // Fallback: buscar tipo "investor" na tabela (para escritório/assessor)
+        if (!investorType) {
+          const supabase = createClient()
+          const { data: investorRow } = await supabase
+            .from("user_types")
+            .select("id")
+            .eq("user_type", "investor")
+            .limit(1)
+            .maybeSingle()
+          if (investorRow) {
+            setInvestorUserTypeId(investorRow.id)
+            return
+          }
+        }
+
         if (investorType) {
-          console.log("[ComparisonCalculator] Investidor encontrado:", investorType.id)
           setInvestorUserTypeId(investorType.id)
-        } else {
-          console.warn("[ComparisonCalculator] Nenhum investidor encontrado na hierarquia")
         }
       } catch (error) {
         console.error("[ComparisonCalculator] Erro ao buscar user_type_id do investidor:", error)

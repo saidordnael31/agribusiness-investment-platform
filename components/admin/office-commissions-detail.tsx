@@ -163,7 +163,7 @@ export function OfficeCommissionsDetail() {
       console.log('[ESCRITÓRIO] Buscando assessores com office_id =', user.id);
       const { data: advisors, error: advisorsError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, office_id")
+        .select("id, full_name, email, office_id, user_type_id")
         .eq("office_id", user.id)
         .eq("user_type_id", advisorUserType.id)
 
@@ -190,7 +190,7 @@ export function OfficeCommissionsDetail() {
       console.log('[ESCRITÓRIO] Buscando investidores com office_id =', user.id);
       const { data: allInvestorProfiles, error: investorsError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, parent_id, office_id")
+        .select("id, full_name, email, parent_id, office_id, user_type_id")
         .eq("office_id", user.id)
         .eq("user_type_id", investorUserType.id)
 
@@ -221,7 +221,7 @@ export function OfficeCommissionsDetail() {
           const advisorIds = advisors.map(a => a.id);
           const { data: investorsByParent } = await supabase
             .from("profiles")
-            .select("id, full_name, email, parent_id, office_id")
+            .select("id, full_name, email, parent_id, office_id, user_type_id")
             .in("parent_id", advisorIds)
             .eq("user_type_id", investorUserType.id)
           
@@ -239,7 +239,7 @@ export function OfficeCommissionsDetail() {
           const advisorIds = advisors.map(a => a.id);
           const { data: investorsByParent } = await supabase
             .from("profiles")
-            .select("id, full_name, email, parent_id, office_id")
+            .select("id, full_name, email, parent_id, office_id, user_type_id")
             .in("parent_id", advisorIds)
             .eq("user_type_id", investorUserType.id)
           
@@ -345,7 +345,7 @@ export function OfficeCommissionsDetail() {
         if (advisor && advisorId) {
           // Investimento com assessor: calcular comissão do assessor e do escritório
           // Vamos calcular a comissão do assessor primeiro (sem D+60)
-          const advisorCommissionCalc = calculateNewCommissionLogic({
+          const advisorCommissionCalc = await calculateNewCommissionLogic({
             id: investment.id,
             user_id: investment.user_id,
             amount: Number(investment.amount),
@@ -353,14 +353,16 @@ export function OfficeCommissionsDetail() {
             commitment_period: investment.commitment_period || 12,
             liquidity: investment.profitability_liquidity,
             investorName: investorProfile?.full_name || "Investidor",
+            investorUserTypeId: investorProfile?.user_type_id || null,
             advisorId: advisorId,
             advisorName: advisor?.full_name || "Assessor",
             advisorRole: advisor?.role,
+            advisorUserTypeId: advisor?.user_type_id || null,
             isForAdvisor: true, // Sem D+60 para assessor
           })
           
           // Agora calcular a comissão do escritório (sem D+60 também)
-          const officeCommissionCalc = calculateNewCommissionLogic({
+          const officeCommissionCalc = await calculateNewCommissionLogic({
             id: investment.id,
             user_id: investment.user_id,
             amount: Number(investment.amount),
@@ -368,8 +370,10 @@ export function OfficeCommissionsDetail() {
             commitment_period: investment.commitment_period || 12,
             liquidity: investment.profitability_liquidity,
             investorName: investorProfile?.full_name || "Investidor",
+            investorUserTypeId: investorProfile?.user_type_id || null,
             officeId: user.id,
             officeName: profile?.full_name || "Escritório",
+            officeUserTypeId: profile?.user_type_id || null,
             // Sem isForAdvisor, então sem D+60 para escritório também
           })
           
@@ -380,7 +384,7 @@ export function OfficeCommissionsDetail() {
           }
         } else {
           // Investidor direto do escritório (sem assessor): calcular apenas comissão do escritório
-          const officeCommissionCalc = calculateNewCommissionLogic({
+          const officeCommissionCalc = await calculateNewCommissionLogic({
             id: investment.id,
             user_id: investment.user_id,
             amount: Number(investment.amount),
@@ -388,8 +392,10 @@ export function OfficeCommissionsDetail() {
             commitment_period: investment.commitment_period || 12,
             liquidity: investment.profitability_liquidity,
             investorName: investorProfile?.full_name || "Investidor",
+            investorUserTypeId: investorProfile?.user_type_id || null,
             officeId: user.id,
             officeName: profile?.full_name || "Escritório",
+            officeUserTypeId: profile?.user_type_id || null,
             // Sem isForAdvisor, então sem D+60 para escritório também
           })
           

@@ -354,7 +354,7 @@ export function DynamicCommissionCalculator({
 
       for (const investment of investments) {
         // Calcular comissão normal
-        const commissionCalc = calculateNewCommissionLogic({
+        const commissionCalc = await calculateNewCommissionLogic({
           id: investment.id,
           user_id: investment.user_id,
           amount: Number(investment.amount),

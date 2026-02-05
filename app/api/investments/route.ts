@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Validação de permissões
     if (userId) {
       // Se userId for fornecido, validar acesso a esse usuário
-      const hasAccess = await validateUserAccess(user.id, userId)
+      const hasAccess = await validateUserAccess(user.id, userId, supabase)
       if (!hasAccess) {
         return NextResponse.json(
           { success: false, error: "Acesso negado: você não tem permissão para ver investimentos deste usuário" },
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // Se userId não for fornecido, apenas admin pode ver todos os investimentos
-      const isAdmin = await validateAdminAccess(user.id)
+      const isAdmin = await validateAdminAccess(user.id, supabase)
       if (!isAdmin) {
         return NextResponse.json(
           { success: false, error: "Acesso negado: apenas administradores podem ver todos os investimentos" },
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const canCreate = await validateCanCreateInvestmentForUser(user.id, investmentData.userId)
+    const canCreate = await validateCanCreateInvestmentForUser(user.id, investmentData.userId, supabase)
     if (!canCreate) {
       return NextResponse.json(
         { success: false, error: "Acesso negado: você não tem permissão para criar investimentos para este usuário" },

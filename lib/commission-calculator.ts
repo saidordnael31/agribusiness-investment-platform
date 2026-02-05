@@ -1,4 +1,4 @@
-import { getCommissionRate } from "./commission-utils"
+import { getCommissionRate, getPayoutStartDays } from "./commission-utils"
 
 /**
  * Sistema de cálculo de comissões baseado em rentabilidades do banco
@@ -439,10 +439,9 @@ export function getCommissionPeriod(cutoffDate: Date): { startDate: Date; endDat
  * @param cutoffDate Data do corte atual (dia 20)
  * @returns true se o investimento pode entrar no corte atual (já passaram 60 dias)
  */
-export function canInvestorEnterCurrentCutoff(paymentDate: Date, cutoffDate: Date): boolean {
-  // Calcular data de início do período de comissionamento (D+60)
+export function canInvestorEnterCurrentCutoff(paymentDate: Date, cutoffDate: Date, payoutStartDays: number = 60): boolean {
   const commissionStartDate = new Date(paymentDate);
-  commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + 60);
+  commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + payoutStartDays);
   commissionStartDate.setUTCHours(0, 0, 0, 0);
   
   // Normalizar cutoffDate para UTC meia-noite
@@ -456,6 +455,25 @@ export function canInvestorEnterCurrentCutoff(paymentDate: Date, cutoffDate: Dat
   // O investimento só pode entrar no corte atual se a data de início do comissionamento
   // (D+60) já passou ou é igual à data do corte
   return commissionStartDate <= cutoffDateUTC;
+}
+
+/**
+ * Retorna o primeiro corte elegível (dia 20 do período que "fechou" D+60).
+ * Pró-rata: depósito → este corte.
+ */
+export function getFirstEligibleCutoff(
+  paymentDate: Date,
+  firstInvestmentCutoff: Date,
+  payoutStartDays: number,
+  commitmentPeriod: number = 36
+): Date | null {
+  for (let k = 0; k < commitmentPeriod; k++) {
+    const d = new Date(firstInvestmentCutoff);
+    d.setUTCMonth(d.getUTCMonth() + k);
+    d.setUTCHours(0, 0, 0, 0);
+    if (canInvestorEnterCurrentCutoff(paymentDate, d, payoutStartDays)) return d;
+  }
+  return null;
 }
 
 /**
@@ -490,6 +508,39 @@ export function calculateProportionalCommission(
   return (monthlyCommission / 30) * daysInPeriod;
 }
 
+/** Converte data para YYYY-MM-DD no fuso local (evita divergências de timezone) */
+export function toDateStringLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Retorna o índice do próximo pagamento (primeiro futuro ou último se todos passados).
+ * Usa comparação YYYY-MM-DD para consistência entre export, Minhas Comissões e dashboard.
+ */
+export function getNextPaymentIndex(
+  paymentDueDate: (Date | string)[],
+  referenceDate: Date = new Date()
+): number {
+  if (!paymentDueDate || paymentDueDate.length === 0) return 0;
+  const todayStr = toDateStringLocal(referenceDate);
+  let bestIndex = -1;
+  let bestStr: string | null = null;
+  for (let i = 0; i < paymentDueDate.length; i++) {
+    const d = typeof paymentDueDate[i] === "string" ? new Date(paymentDueDate[i]) : paymentDueDate[i] as Date;
+    const dStr = toDateStringLocal(d);
+    if (dStr >= todayStr) {
+      if (!bestStr || dStr < bestStr) {
+        bestStr = dStr;
+        bestIndex = i;
+      }
+    }
+  }
+  return bestIndex >= 0 ? bestIndex : paymentDueDate.length - 1;
+}
+
 /**
  * Interface para comissão calculada com nova lógica
  */
@@ -515,6 +566,17 @@ export interface NewCommissionCalculation {
   advisorRate?: number; // Taxa real do assessor (em decimal, ex: 0.03 para 3%)
   officeRate?: number; // Taxa real do escritório (em decimal, ex: 0.01 para 1%)
   investorRate?: number; // Taxa real do investidor (em decimal)
+  payoutStartDays?: number; // D+X após depósito para início da rentabilidade
+  investorRentabilityBreakdown?: {
+    mensal: number; // valor mensal (taxa * amount)
+    payoutStartDays: number;
+    diasNoPrimeiroPeriodo: number; // dias entre payout_start e fim do primeiro ciclo
+    proRataFracao: number; // fração do mês (dias/30)
+    valorProRataPrimeiro: number;
+    valorAcumuladoD60?: number; // acumulado durante D+60 (incluído na primeira comissão)
+    totalDiasRentabilidade: number; // dias totais com rentabilidade no compromisso
+    valorTotal: number;
+  };
   advisorId?: string;
   advisorName?: string;
   officeId?: string;
@@ -675,9 +737,8 @@ export async function calculateNewCommissionLogic(
       : "Mensal" // Fallback
     : "Mensal" // Fallback
   
-  // Buscar taxas de comissão do banco
-  // Para assessor e escritório: sempre usar liquidez mensal (comissões são sempre mensais)
-  // Para investidor: usar a liquidez real do investimento para calcular a rentabilidade correta
+  // Buscar taxas e payout_start_days
+  const payoutStartDays = await getPayoutStartDays(investorUserTypeId)
   const [advisorRate, officeRate, investorRate] = await Promise.all([
     getCommissionRate(advisorUserTypeId, commitmentPeriod, "Mensal"),
     getCommissionRate(officeUserTypeId, commitmentPeriod, "Mensal"),
@@ -701,15 +762,17 @@ export async function calculateNewCommissionLogic(
     investorCommission: number;
   }>;
   
-  // Função auxiliar para calcular todas as datas de pagamento (5º dia útil de cada mês)
-  const calculatePaymentDueDates = (startCutoffDate: Date, months: number): Date[] => {
+  // Função auxiliar para calcular datas de pagamento (5º dia útil)
+  // cycleMonths: 1=mensal (todos os meses), 6=semestral, 12=anual, 24=bienal, 36=trienal
+  // Quando > 1, só inclui datas no fim de cada ciclo (ex: trienal = 1 data em 36 meses)
+  const calculatePaymentDueDates = (startCutoffDate: Date, months: number, cycleMonths: number = 1): Date[] => {
     const dates: Date[] = [];
-    // IMPORTANTE: Usar métodos UTC para evitar problemas de timezone
     let currentYear = startCutoffDate.getUTCFullYear();
     let currentMonth = startCutoffDate.getUTCMonth();
     
-    // Primeira data: 5º dia útil do mês seguinte ao primeiro corte
     for (let i = 0; i < months; i++) {
+      // Só adicionar datas no fim de cada ciclo de liquidez
+      if (cycleMonths > 1 && (i + 1) % cycleMonths !== 0) continue;
       const paymentMonth = currentMonth + 1 + i;
       let year = currentYear;
       let month = paymentMonth;
@@ -842,38 +905,32 @@ export async function calculateNewCommissionLogic(
       advisorCommission = investment.amount * proportionalRateAdvisor;
       officeCommission = investment.amount * proportionalRateOffice;
     
-    // INVESTIDORES: Com D+60 + 30 dias corridos
-    // IMPORTANTE: Verificar se o investimento pode entrar no corte atual (D+60)
-    const commissionStartDate = new Date(paymentDate);
-    commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + 60);
-    commissionStartDate.setUTCHours(0, 0, 0, 0);
-    
-    // Verificar se o investimento pode entrar no corte atual
-    const canEnterCutoff = canInvestorEnterCurrentCutoff(paymentDate, cutoffDate);
-    
+    // INVESTIDORES: D+60 define quando começa a RECEBER.
+    // 1ª comissão: pró-rata contínuo de D+1 até o 1º corte elegível (dia 20 do período que fechou D+60).
+    const canEnterCutoff = canInvestorEnterCurrentCutoff(paymentDate, cutoffDate, payoutStartDays);
     if (canEnterCutoff) {
-      // Se pode entrar no corte atual, calcular comissão proporcional
-      // Calcular quantos dias do período de comissionamento já passaram desde D+60 até o corte atual
       const cutoffDateUTC = new Date(Date.UTC(
         cutoffDate.getUTCFullYear(),
         cutoffDate.getUTCMonth(),
         cutoffDate.getUTCDate(),
         0, 0, 0, 0
       ));
-      
-      // Calcular dias desde D+60 até o corte atual (máximo 30 dias para o primeiro período)
-      const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
-      const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
-      
-      investorCommission = calculateProportionalCommission(investment.amount, investorRate, daysInPeriod);
+      const paymentDateNextDay = new Date(Date.UTC(
+        paymentDate.getUTCFullYear(),
+        paymentDate.getUTCMonth(),
+        paymentDate.getUTCDate(),
+        0, 0, 0, 0
+      ));
+      paymentDateNextDay.setUTCDate(paymentDateNextDay.getUTCDate() + 1);
+      const diasDepositoAteCorte = Math.max(0, Math.floor((cutoffDateUTC.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      investorCommission = calculateProportionalCommission(investment.amount, investorRate, diasDepositoAteCorte);
     } else {
-      // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
       investorCommission = 0;
     }
     
-    // Calcular todas as datas de pagamento (uma por mês até o término do investimento)
-    // Usar o corte inicial para calcular as datas de pagamento, não o corte atual
-    paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
+    // ASSESSOR/ESCRITÓRIO: configuração fixa = sempre recebem MENSALMENTE
+    // Datas de pagamento mensais (não seguem liquidez do investidor)
+    paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod, 1);
     
     // Período de comissionamento: do dia da entrada até o corte atual (para cálculo)
       commissionPeriod = {
@@ -881,85 +938,133 @@ export async function calculateNewCommissionLogic(
         endDate: new Date(cutoffDate),
       };
       
-      // Calcular todas as datas de pagamento primeiro (para usar como base)
-      paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
-      
-    // Calcular comissão mensal completa para cada mês futuro
-    // Comissão mensal = valor * taxa mensal (assessorBaseRate para assessor, 1% para escritório, 2% para investidor)
+    // Comissão mensal completa
     const monthlyAdvisorCommission = investment.amount * advisorBaseRate;
     const monthlyOfficeCommission = investment.amount * officeRate;
     const monthlyInvestorCommission = investment.amount * investorRate;
+
+    // Primeiro índice onde o investidor pode receber (primeiro corte após D+60)
+    const getCutoffForIndex = (idx: number) => {
+      const d = new Date(cutoffPeriod.cutoffDate);
+      d.setUTCMonth(d.getUTCMonth() + idx);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    };
+    let firstInvestorPaymentIndex = -1;
+    for (let k = 0; k < commitmentPeriod; k++) {
+      const cutoffK = getCutoffForIndex(k);
+      if (canInvestorEnterCurrentCutoff(paymentDate, cutoffK, payoutStartDays)) {
+        firstInvestorPaymentIndex = k;
+        break;
+      }
+    }
+    // 1º pagamento: pró-rata depósito → 1º corte elegível (ex: 06/01 → 20/03)
+    const firstInvestorCommission = firstInvestorPaymentIndex >= 0 ? (() => {
+      const cutoffK = getCutoffForIndex(firstInvestorPaymentIndex);
+      const cutoffUTC = new Date(Date.UTC(cutoffK.getUTCFullYear(), cutoffK.getUTCMonth(), cutoffK.getUTCDate(), 0, 0, 0, 0));
+      const paymentDateNextDay = new Date(Date.UTC(paymentDate.getUTCFullYear(), paymentDate.getUTCMonth(), paymentDate.getUTCDate() + 1, 0, 0, 0, 0));
+      const diasDepositoAteCorte = Math.max(0, Math.floor((cutoffUTC.getTime() - paymentDateNextDay.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      return calculateProportionalCommission(investment.amount, investorRate, diasDepositoAteCorte);
+    })() : 0;
       
-      // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
-      // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
-      //    pago no 5º dia útil do mês seguinte ao corte
-      // 2. Meses futuros: comissão mensal completa (30 dias = 3% do valor),
-      //    sempre mostrando o mês em que a comissão é paga
+      // monthlyBreakdown: uma entrada por MÊS (assessor/escritório recebem sempre mensalmente)
+      // REGRA: Ciclo sempre fecha dia 20. Último ciclo (21/11→20/12) é cheio. Pró-rata final (21/12→05/01) = pagamento extra 07/01
       monthlyBreakdown = [];
-      
-      // Adicionar período atual (proporcional) - primeiro mês
-      const firstPaymentDate = paymentDueDate[0];
-      const monthName = monthNames[firstPaymentDate.getMonth()];
-      monthlyBreakdown.push({
-        month: monthName,
-        monthNumber: firstPaymentDate.getMonth() + 1,
-        year: firstPaymentDate.getFullYear(),
-        advisorCommission, // Comissão proporcional calculada acima
-        officeCommission, // Comissão proporcional calculada acima
-        investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
-      });
-      
-      // Adicionar períodos futuros (comissão mensal completa)
-      // Cada data de pagamento corresponde a um mês no breakdown
-      // Começar do segundo pagamento (índice 1) porque o primeiro já foi adicionado
-      for (let i = 1; i < paymentDueDate.length; i++) {
-        const paymentDateMonth = paymentDueDate[i];
-        const futureMonthName = monthNames[paymentDateMonth.getMonth()];
-        
+      const lastCutoffFull = getCutoffForIndex(commitmentPeriod - 1);
+      const fimCompromissoDate = new Date(paymentDate);
+      fimCompromissoDate.setUTCMonth(fimCompromissoDate.getUTCMonth() + commitmentPeriod);
+      fimCompromissoDate.setUTCDate(fimCompromissoDate.getUTCDate() - 1);
+      fimCompromissoDate.setUTCHours(0, 0, 0, 0);
+      const lastCutoffUTC = new Date(Date.UTC(lastCutoffFull.getUTCFullYear(), lastCutoffFull.getUTCMonth(), lastCutoffFull.getUTCDate(), 0, 0, 0, 0));
+      const temProRataFinal = fimCompromissoDate > lastCutoffUTC;
+      for (let i = 0; i < paymentDueDate.length; i++) {
+        const pd = paymentDueDate[i];
+        const monthName = monthNames[pd.getMonth()];
+        const isFirst = i === 0;
+        const isLast = i === paymentDueDate.length - 1;
+        const adv = isFirst ? advisorCommission : monthlyAdvisorCommission;
+        const off = isFirst ? officeCommission : monthlyOfficeCommission;
+        let inv: number;
+        if (liquidityCycleMonths === 1) {
+          if (i < firstInvestorPaymentIndex) {
+            inv = 0;
+          } else if (i === firstInvestorPaymentIndex) {
+            inv = firstInvestorCommission;
+          } else {
+            inv = monthlyInvestorCommission;
+          }
+        } else {
+          // Para liquidez não-mensal: investidor recebe apenas no fim de cada ciclo
+          // Ex: semestral = recebe nos meses 6, 12, 18, 24, 30, 36
+          const monthIndex = i + 1; // mês 1-indexed (1-36)
+          const isEndOfCycle = monthIndex % liquidityCycleMonths === 0 || isLast;
+          if (isEndOfCycle) {
+            // Calcular acumulado deste ciclo com juros compostos
+            const cicloNum = Math.floor((monthIndex - 1) / liquidityCycleMonths) + 1;
+            const inicioCiclo = (cicloNum - 1) * liquidityCycleMonths + 1;
+            const fimCiclo = Math.min(cicloNum * liquidityCycleMonths, commitmentPeriod);
+            
+            // Capital inicial do ciclo: sempre o valor original do investimento
+            // (o valor que rendeu é retirado e começa novamente a cada ciclo)
+            let saldoCiclo = investment.amount;
+            let acumuladoCiclo = 0;
+            
+            // Primeiro mês do ciclo: pode ter pró-rata se for o primeiro ciclo
+            const firstMesToCompound = firstInvestorPaymentIndex + 2; // Após o período já coberto por firstInvestorCommission
+            if (cicloNum === 1 && inicioCiclo === 1) {
+              // Primeiro ciclo: pró-rata de D+1 até 1º corte elegível (já incluído em firstInvestorCommission)
+              const primeiroMes = firstInvestorCommission;
+              acumuladoCiclo += primeiroMes;
+              saldoCiclo += primeiroMes; // Juros compostos: capitaliza
+            } else {
+              // Outros ciclos: primeiro mês é mensal completo
+              const primeiroMes = saldoCiclo * investorRate;
+              acumuladoCiclo += primeiroMes;
+              saldoCiclo += primeiroMes;
+            }
+            
+            // Meses seguintes do ciclo (com juros compostos)
+            for (let mes = (cicloNum === 1 && inicioCiclo === 1 ? Math.max(inicioCiclo + 1, firstMesToCompound) : inicioCiclo + 1); mes <= fimCiclo; mes++) {
+              const rendimentoMes = saldoCiclo * investorRate;
+              acumuladoCiclo += rendimentoMes;
+              saldoCiclo += rendimentoMes; // Capitaliza para o próximo mês
+            }
+            
+            inv = acumuladoCiclo;
+          } else {
+            inv = 0;
+          }
+        }
         monthlyBreakdown.push({
-          month: futureMonthName,
-          monthNumber: paymentDateMonth.getMonth() + 1,
-          year: paymentDateMonth.getFullYear(),
-          advisorCommission: monthlyAdvisorCommission, // Comissão mensal completa (3%)
-          officeCommission: monthlyOfficeCommission, // Comissão mensal completa (1%)
-          investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
+          month: monthName,
+          monthNumber: pd.getMonth() + 1,
+          year: pd.getFullYear(),
+          advisorCommission: adv,
+          officeCommission: off,
+          investorCommission: inv,
         });
       }
-      
-      // Ajustar o fluxo do INVESTIDOR para respeitar D+60 e liquidez
-      // - D+60: já considerado em investorCommission (primeiro período, pró-rata)
-      // - Liquidez: mensal/semestral/anual/bienal/trienal => paga apenas no fim do ciclo, somando o que acumulou
-      if (paymentDueDate.length > 0) {
-        const investorPerMonth = new Array<number>(paymentDueDate.length).fill(0);
-        let cycleAcc = 0;
-        
-        for (let i = 0; i < paymentDueDate.length; i++) {
-          if (i === 0) {
-            // Primeiro período: usar o valor pró-rata calculado com D+60
-            cycleAcc += investorCommission;
-          } else {
-            // Períodos seguintes: acumular mês cheio
-            cycleAcc += monthlyInvestorCommission;
-          }
-          
-          // Fim de ciclo de liquidez: pagar tudo que acumulou
-          if ((i + 1) % liquidityCycleMonths === 0) {
-            investorPerMonth[i] = cycleAcc;
-            cycleAcc = 0;
-          }
-        }
-        
-        // Se sobrou algo acumulado (ex.: compromisso não fecha ciclo exato), paga no último mês
-        if (cycleAcc > 0) {
-          investorPerMonth[investorPerMonth.length - 1] += cycleAcc;
-        }
-        
-        // Aplicar no breakdown
-        monthlyBreakdown = monthlyBreakdown.map((m, idx) => ({
-          ...m,
-          investorCommission: investorPerMonth[idx] || 0,
-        }));
+      if (liquidityCycleMonths === 1 && temProRataFinal && firstInvestorPaymentIndex >= 0) {
+        const lastPeriodStart = new Date(lastCutoffUTC);
+        lastPeriodStart.setUTCDate(lastPeriodStart.getUTCDate() + 1);
+        const diasFinal = Math.max(0, Math.floor((fimCompromissoDate.getTime() - lastPeriodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        const invFinal = calculateProportionalCommission(investment.amount, investorRate, diasFinal);
+        const lastPd = paymentDueDate[paymentDueDate.length - 1];
+        const dataProRataFinal = new Date(lastPd);
+        dataProRataFinal.setUTCDate(dataProRataFinal.getUTCDate() + 1);
+        while (!isBusinessDay(dataProRataFinal)) dataProRataFinal.setUTCDate(dataProRataFinal.getUTCDate() + 1);
+        paymentDueDate.push(dataProRataFinal);
+        monthlyBreakdown.push({
+          month: monthNames[dataProRataFinal.getMonth()],
+          monthNumber: dataProRataFinal.getMonth() + 1,
+          year: dataProRataFinal.getFullYear(),
+          advisorCommission: 0,
+          officeCommission: 0,
+          investorCommission: invFinal,
+        });
       }
+      const firstPaymentDate = paymentDueDate[0];
+      const monthName = monthNames[firstPaymentDate.getMonth()];
       
       periodLabel = monthName;
       
@@ -970,8 +1075,7 @@ export async function calculateNewCommissionLogic(
     description = `Comissão de ${roleName} calculada sobre investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
       `Taxa de comissão: ${(roleRate * 100).toFixed(0)}% ao mês. ` +
       `A comissão é calculada proporcionalmente aos dias desde a entrada do investimento até o próximo corte (dia 20). ` +
-      `A partir do segundo mês, a comissão será fixa de ${(roleRate * 100).toFixed(0)}% ao mês. ` +
-      `Pagamento mensal no 5º dia útil de cada mês durante ${commitmentPeriod} meses.`;
+      `Pagamento mensal no 5º dia útil (${paymentDueDate.length} ${paymentDueDate.length === 1 ? 'data' : 'datas'}) durante ${commitmentPeriod} meses.`;
     } else {
     // REGRA PARA ESCRITÓRIO: Sem D+60, cálculo proporcional aos dias acumulados até o corte atual (igual assessores)
     
@@ -1011,43 +1115,53 @@ export async function calculateNewCommissionLogic(
     advisorCommission = investment.amount * proportionalRateAdvisor;
     officeCommission = investment.amount * proportionalRateOffice;
     
-    // INVESTIDORES: Com D+60 + 30 dias corridos
-    // IMPORTANTE: Verificar se o investimento pode entrar no corte atual (D+60)
-    const commissionStartDate = new Date(paymentDate);
-    commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + 60);
-    commissionStartDate.setUTCHours(0, 0, 0, 0);
-    
-    // Verificar se o investimento pode entrar no corte atual
-    const canEnterCutoff = canInvestorEnterCurrentCutoff(paymentDate, cutoffDate);
-    
-    if (canEnterCutoff) {
-      // Se pode entrar no corte atual, calcular comissão proporcional
-      // Calcular quantos dias do período de comissionamento já passaram desde D+60 até o corte atual
-      const cutoffDateUTC = new Date(Date.UTC(
-        cutoffDate.getUTCFullYear(),
-        cutoffDate.getUTCMonth(),
-        cutoffDate.getUTCDate(),
+    // INVESTIDORES: D+60 define quando começa a RECEBER.
+    // 1ª comissão: pró-rata contínuo de D+1 até o 1º corte elegível (dia 20 do período que fechou D+60).
+    const canEnterCutoffOffice = canInvestorEnterCurrentCutoff(paymentDate, cutoffDate, payoutStartDays);
+    if (canEnterCutoffOffice) {
+      const cutoffDateUTCOff = new Date(Date.UTC(cutoffDate.getUTCFullYear(), cutoffDate.getUTCMonth(), cutoffDate.getUTCDate(), 0, 0, 0, 0));
+      const paymentDateNextDayOffice = new Date(Date.UTC(
+        paymentDate.getUTCFullYear(),
+        paymentDate.getUTCMonth(),
+        paymentDate.getUTCDate(),
         0, 0, 0, 0
       ));
-      
-      // Calcular dias desde D+60 até o corte atual (máximo 30 dias para o primeiro período)
-      const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
-      const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
-      
-      investorCommission = calculateProportionalCommission(investment.amount, investorRate, daysInPeriod);
+      paymentDateNextDayOffice.setUTCDate(paymentDateNextDayOffice.getUTCDate() + 1);
+      const diasDepositoAteCorteOffice = Math.max(0, Math.floor((cutoffDateUTCOff.getTime() - paymentDateNextDayOffice.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      investorCommission = calculateProportionalCommission(investment.amount, investorRate, diasDepositoAteCorteOffice);
     } else {
-      // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
       investorCommission = 0;
     }
     
-    // Calcular todas as datas de pagamento primeiro (para usar como base)
-    paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod);
+    // ESCRITÓRIO: configuração fixa = sempre recebe MENSALMENTE
+    paymentDueDate = calculatePaymentDueDates(cutoffPeriod.cutoffDate, commitmentPeriod, 1);
     
-    // Calcular comissão mensal completa para cada mês futuro
-    // Comissão mensal = valor * taxa mensal (vem do banco via rentabilidade)
+    // Calcular comissão mensal completa
     const monthlyAdvisorCommission = investment.amount * advisorRate;
     const monthlyOfficeCommission = investment.amount * officeRate;
     const monthlyInvestorCommission = investment.amount * investorRate;
+
+    const getCutoffForIndexOffice = (idx: number) => {
+      const d = new Date(cutoffPeriod.cutoffDate);
+      d.setUTCMonth(d.getUTCMonth() + idx);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    };
+    let firstInvestorPaymentIndexOffice = -1;
+    for (let k = 0; k < commitmentPeriod; k++) {
+      if (canInvestorEnterCurrentCutoff(paymentDate, getCutoffForIndexOffice(k), payoutStartDays)) {
+        firstInvestorPaymentIndexOffice = k;
+        break;
+      }
+    }
+    // 1º pagamento: pró-rata depósito → 1º corte elegível (ex: 06/01 → 20/03)
+    const firstInvestorCommissionOffice = firstInvestorPaymentIndexOffice >= 0 ? (() => {
+      const cutoffK = getCutoffForIndexOffice(firstInvestorPaymentIndexOffice);
+      const cutoffUTC = new Date(Date.UTC(cutoffK.getUTCFullYear(), cutoffK.getUTCMonth(), cutoffK.getUTCDate(), 0, 0, 0, 0));
+      const paymentDateNextDayOffice = new Date(Date.UTC(paymentDate.getUTCFullYear(), paymentDate.getUTCMonth(), paymentDate.getUTCDate() + 1, 0, 0, 0, 0));
+      const diasDepositoAteCorte = Math.max(0, Math.floor((cutoffUTC.getTime() - paymentDateNextDayOffice.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      return calculateProportionalCommission(investment.amount, investorRate, diasDepositoAteCorte);
+    })() : 0;
     
     // Período de comissionamento: do dia da entrada até o corte atual (para cálculo)
     commissionPeriod = {
@@ -1055,71 +1169,104 @@ export async function calculateNewCommissionLogic(
       endDate: new Date(cutoffDate),
     };
     
-    // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
-    // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
-    //    pago no 5º dia útil do mês seguinte ao corte
-    // 2. Meses futuros: comissão mensal completa (30 dias = taxa mensal),
-    //    sempre mostrando o mês em que a comissão é paga
+    // monthlyBreakdown: uma entrada por MÊS (escritório recebe sempre mensalmente)
+    // REGRA: Último ciclo é cheio. Pró-rata final (21/12→05/01) = pagamento extra
     monthlyBreakdown = [];
-    
-    // Adicionar período atual (proporcional) - primeiro mês
-    const firstPaymentDate = paymentDueDate[0];
-    const monthName = monthNames[firstPaymentDate.getMonth()];
-    monthlyBreakdown.push({
-      month: monthName,
-      monthNumber: firstPaymentDate.getMonth() + 1,
-      year: firstPaymentDate.getFullYear(),
-      advisorCommission, // Comissão proporcional calculada acima
-      officeCommission, // Comissão proporcional calculada acima
-      investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
-    });
-    
-    // Adicionar períodos futuros (comissão mensal completa)
-    // Cada data de pagamento corresponde a um mês no breakdown
-    // Começar do segundo pagamento (índice 1) porque o primeiro já foi adicionado
-    for (let i = 1; i < paymentDueDate.length; i++) {
-      const paymentDateMonth = paymentDueDate[i];
-      const futureMonthName = monthNames[paymentDateMonth.getMonth()];
-      
+    const lastCutoffFullOffice = getCutoffForIndexOffice(commitmentPeriod - 1);
+    const fimCompromissoDateOffice = new Date(paymentDate);
+    fimCompromissoDateOffice.setUTCMonth(fimCompromissoDateOffice.getUTCMonth() + commitmentPeriod);
+    fimCompromissoDateOffice.setUTCDate(fimCompromissoDateOffice.getUTCDate() - 1);
+    fimCompromissoDateOffice.setUTCHours(0, 0, 0, 0);
+    const lastCutoffUTCOffice = new Date(Date.UTC(lastCutoffFullOffice.getUTCFullYear(), lastCutoffFullOffice.getUTCMonth(), lastCutoffFullOffice.getUTCDate(), 0, 0, 0, 0));
+    const temProRataFinalOffice = fimCompromissoDateOffice > lastCutoffUTCOffice;
+    for (let i = 0; i < paymentDueDate.length; i++) {
+      const pd = paymentDueDate[i];
+      const monthName = monthNames[pd.getMonth()];
+      const isFirst = i === 0;
+      const isLast = i === paymentDueDate.length - 1;
+      const adv = isFirst ? advisorCommission : monthlyAdvisorCommission;
+      const off = isFirst ? officeCommission : monthlyOfficeCommission;
+        let inv: number;
+        if (liquidityCycleMonths === 1) {
+          if (i < firstInvestorPaymentIndexOffice) {
+            inv = 0;
+          } else if (i === firstInvestorPaymentIndexOffice) {
+            inv = firstInvestorCommissionOffice;
+          } else {
+            inv = monthlyInvestorCommission;
+          }
+        } else {
+          // Para liquidez não-mensal: investidor recebe apenas no fim de cada ciclo
+          // Ex: semestral = recebe nos meses 6, 12, 18, 24, 30, 36
+          const monthIndex = i + 1; // mês 1-indexed (1-36)
+          const isEndOfCycle = monthIndex % liquidityCycleMonths === 0 || isLast;
+          if (isEndOfCycle) {
+            // Calcular acumulado deste ciclo com juros compostos
+            const cicloNum = Math.floor((monthIndex - 1) / liquidityCycleMonths) + 1;
+            const inicioCiclo = (cicloNum - 1) * liquidityCycleMonths + 1;
+            const fimCiclo = Math.min(cicloNum * liquidityCycleMonths, commitmentPeriod);
+            
+            // Capital inicial do ciclo: sempre o valor original do investimento
+            // (o valor que rendeu é retirado e começa novamente a cada ciclo)
+            let saldoCiclo = investment.amount;
+            let acumuladoCiclo = 0;
+            
+            // Primeiro mês do ciclo: pode ter pró-rata se for o primeiro ciclo
+            const firstMesToCompoundOff = firstInvestorPaymentIndexOffice + 2;
+            if (cicloNum === 1 && inicioCiclo === 1) {
+              // Primeiro ciclo: pró-rata de D+1 até 1º corte elegível (já incluído em firstInvestorCommissionOffice)
+              const primeiroMes = firstInvestorCommissionOffice;
+              acumuladoCiclo += primeiroMes;
+              saldoCiclo += primeiroMes; // Juros compostos: capitaliza
+            } else {
+              // Outros ciclos: primeiro mês é mensal completo
+              const primeiroMes = saldoCiclo * investorRate;
+              acumuladoCiclo += primeiroMes;
+              saldoCiclo += primeiroMes;
+            }
+            
+            // Meses seguintes do ciclo (com juros compostos)
+            for (let mes = (cicloNum === 1 && inicioCiclo === 1 ? Math.max(inicioCiclo + 1, firstMesToCompoundOff) : inicioCiclo + 1); mes <= fimCiclo; mes++) {
+              const rendimentoMes = saldoCiclo * investorRate;
+              acumuladoCiclo += rendimentoMes;
+              saldoCiclo += rendimentoMes; // Capitaliza para o próximo mês
+            }
+            
+            inv = acumuladoCiclo;
+          } else {
+            inv = 0;
+          }
+        }
       monthlyBreakdown.push({
-        month: futureMonthName,
-        monthNumber: paymentDateMonth.getMonth() + 1,
-        year: paymentDateMonth.getFullYear(),
-        advisorCommission: monthlyAdvisorCommission, // Comissão mensal completa (3%)
-        officeCommission: monthlyOfficeCommission, // Comissão mensal completa (1%)
-        investorCommission: 0, // será ajustado pela lógica de liquidez abaixo
+        month: monthName,
+        monthNumber: pd.getMonth() + 1,
+        year: pd.getFullYear(),
+        advisorCommission: adv,
+        officeCommission: off,
+        investorCommission: inv,
       });
     }
-    
-    // Ajustar o fluxo do INVESTIDOR para respeitar D+60 e liquidez
-    if (paymentDueDate.length > 0) {
-      const investorPerMonth = new Array<number>(paymentDueDate.length).fill(0);
-      let cycleAcc = 0;
-      
-      for (let i = 0; i < paymentDueDate.length; i++) {
-        if (i === 0) {
-          // Primeiro período (pró-rata com D+60)
-          cycleAcc += investorCommission;
-        } else {
-          // Meses seguintes: mês cheio
-          cycleAcc += monthlyInvestorCommission;
-        }
-        
-        if ((i + 1) % liquidityCycleMonths === 0) {
-          investorPerMonth[i] = cycleAcc;
-          cycleAcc = 0;
-        }
-      }
-      
-      if (cycleAcc > 0) {
-        investorPerMonth[investorPerMonth.length - 1] += cycleAcc;
-      }
-      
-      monthlyBreakdown = monthlyBreakdown.map((m, idx) => ({
-        ...m,
-        investorCommission: investorPerMonth[idx] || 0,
-      }));
+    if (liquidityCycleMonths === 1 && temProRataFinalOffice && firstInvestorPaymentIndexOffice >= 0) {
+      const lastPeriodStartOffice = new Date(lastCutoffUTCOffice);
+      lastPeriodStartOffice.setUTCDate(lastPeriodStartOffice.getUTCDate() + 1);
+      const diasFinalOffice = Math.max(0, Math.floor((fimCompromissoDateOffice.getTime() - lastPeriodStartOffice.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const invFinalOffice = calculateProportionalCommission(investment.amount, investorRate, diasFinalOffice);
+      const lastPdOffice = paymentDueDate[paymentDueDate.length - 1];
+      const dataProRataFinalOffice = new Date(lastPdOffice);
+      dataProRataFinalOffice.setUTCDate(dataProRataFinalOffice.getUTCDate() + 1);
+      while (!isBusinessDay(dataProRataFinalOffice)) dataProRataFinalOffice.setUTCDate(dataProRataFinalOffice.getUTCDate() + 1);
+      paymentDueDate.push(dataProRataFinalOffice);
+      monthlyBreakdown.push({
+        month: monthNames[dataProRataFinalOffice.getMonth()],
+        monthNumber: dataProRataFinalOffice.getMonth() + 1,
+        year: dataProRataFinalOffice.getFullYear(),
+        advisorCommission: 0,
+        officeCommission: 0,
+        investorCommission: invFinalOffice,
+      });
     }
+    const firstPaymentDate = paymentDueDate[0];
+    const monthName = monthNames[firstPaymentDate.getMonth()];
     
     periodLabel = monthName;
       
@@ -1130,8 +1277,7 @@ export async function calculateNewCommissionLogic(
     description = `Comissão de ${roleName} calculada sobre investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. ` +
       `Taxa de comissão: ${(roleRate * 100).toFixed(0)}% ao mês. ` +
       `A comissão é calculada proporcionalmente aos dias desde a entrada do investimento até o próximo corte (dia 20). ` +
-      `A partir do segundo mês, a comissão será fixa de ${(roleRate * 100).toFixed(0)}% ao mês. ` +
-      `Pagamento mensal no 5º dia útil de cada mês durante ${commitmentPeriod} meses.`;
+      `Pagamento mensal no 5º dia útil (${paymentDueDate.length} ${paymentDueDate.length === 1 ? 'data' : 'datas'}) durante ${commitmentPeriod} meses.`;
   }
   
   // Determinar qual taxa usar para retornar (assessor ou escritório)
@@ -1145,6 +1291,56 @@ export async function calculateNewCommissionLogic(
     }
   }
   
+  // Calcular breakdown da rentabilidade do investidor: mensal, payout_start_days, dias, pro-rata, valor
+  // Nova lógica: 1º pagamento = pró-rata contínuo depósito → 1º corte elegível (sem split Acumulado D+60)
+  const mensalInvestor = investment.amount * investorRate
+  const valorAcumuladoD60Breakdown = 0
+  const commissionStartDate = new Date(paymentDate)
+  commissionStartDate.setUTCDate(commissionStartDate.getUTCDate() + payoutStartDays)
+  commissionStartDate.setUTCHours(0, 0, 0, 0)
+  const firstDayToCount = new Date(commissionStartDate)
+  firstDayToCount.setUTCDate(firstDayToCount.getUTCDate() + 1) // Dia seguinte ao início (D+payoutStartDays+1)
+  const fimCompromisso = new Date(paymentDate)
+  fimCompromisso.setUTCMonth(fimCompromisso.getUTCMonth() + commitmentPeriod)
+  fimCompromisso.setUTCHours(0, 0, 0, 0)
+  const totalDiasRentabilidade = Math.max(0, Math.floor((fimCompromisso.getTime() - firstDayToCount.getTime()) / (1000 * 60 * 60 * 24)))
+  const getFirstEligibleCutoff = () => {
+    for (let k = 0; k < commitmentPeriod; k++) {
+      const d = new Date(cutoffPeriod.cutoffDate)
+      d.setUTCMonth(d.getUTCMonth() + k)
+      d.setUTCHours(0, 0, 0, 0)
+      if (canInvestorEnterCurrentCutoff(paymentDate, d, payoutStartDays)) return d
+    }
+    return null
+  }
+  const firstEligibleCutoff = getFirstEligibleCutoff()
+  const cutoffDateUTC = firstEligibleCutoff
+    ? new Date(Date.UTC(firstEligibleCutoff.getUTCFullYear(), firstEligibleCutoff.getUTCMonth(), firstEligibleCutoff.getUTCDate(), 0, 0, 0, 0))
+    : new Date(Date.UTC(cutoffPeriod.cutoffDate.getUTCFullYear(), cutoffPeriod.cutoffDate.getUTCMonth(), cutoffPeriod.cutoffDate.getUTCDate(), 0, 0, 0, 0))
+  const paymentDateNextDayBreakdown = new Date(Date.UTC(
+    paymentDate.getUTCFullYear(),
+    paymentDate.getUTCMonth(),
+    paymentDate.getUTCDate() + 1,
+    0, 0, 0, 0
+  ))
+  const diasNoPrimeiroPeriodo = firstEligibleCutoff
+    ? Math.max(0, Math.floor((cutoffDateUTC.getTime() - paymentDateNextDayBreakdown.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+    : 0
+  const proRataFracao = diasNoPrimeiroPeriodo / 30
+  const valorProRataPrimeiro = mensalInvestor * (diasNoPrimeiroPeriodo / 30)
+
+  const totalFromBreakdown = (monthlyBreakdown || []).reduce((s, m) => s + (m.investorCommission || 0), 0)
+  const investorRentabilityBreakdown = {
+    mensal: mensalInvestor,
+    payoutStartDays,
+    diasNoPrimeiroPeriodo,
+    proRataFracao,
+    valorProRataPrimeiro,
+    valorAcumuladoD60: valorAcumuladoD60Breakdown,
+    totalDiasRentabilidade,
+    valorTotal: totalFromBreakdown,
+  }
+
   return {
     investmentId: investment.id,
     investorId: investment.user_id,
@@ -1160,6 +1356,8 @@ export async function calculateNewCommissionLogic(
     advisorRate: finalAdvisorRate,
     officeRate: officeRate,
     investorRate: investorRate,
+    payoutStartDays,
+    investorRentabilityBreakdown,
     advisorId: investment.advisorId,
     advisorName: investment.advisorName,
     officeId: investment.officeId,

@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     } else if (user.id === investorId) {
       // Investidor pode ver seus próprios contratos
       hasPermission = true;
-    } else if (isDistributor) {
+    } else if (isDistributor || isOffice) {
       // Buscar o perfil do investidor para verificar relacionamento
       const { data: investorProfile } = await supabase
         .from("profiles")
@@ -74,12 +74,20 @@ export async function GET(request: NextRequest) {
       
       console.log("🔍 [DEBUG] Perfil do investidor:", investorProfile);
       
-      if (isAdvisor) {
+      if (isAdvisor && !isOffice) {
         // Assessor pode ver contratos de seus próprios investidores
         hasPermission = investorProfile?.parent_id === user.id;
       } else if (isOffice) {
-        // Escritório pode ver contratos de investidores do seu office_id
+        // Escritório pode ver contratos de investidores vinculados diretamente ou via assessores
         hasPermission = investorProfile?.office_id === user.id;
+        if (!hasPermission && investorProfile?.parent_id) {
+          const { data: advisorProfile } = await supabase
+            .from("profiles")
+            .select("office_id")
+            .eq("id", investorProfile.parent_id)
+            .single();
+          hasPermission = advisorProfile?.office_id === user.id;
+        }
       } else {
         // Distribuidor de nível superior: verificar se investidor está vinculado a seus escritórios/assessores
         if (investorProfile?.office_id) {
@@ -173,12 +181,15 @@ export async function GET(request: NextRequest) {
     // Buscar informações dos usuários que fizeram upload
     const contractsWithUploaderInfo = await Promise.all(
       contracts.map(async (contract) => {
-        const { data: uploaderProfile } = await supabase
-          .from("profiles")
-          .select("full_name, email")
-          .eq("id", contract.uploaded_by)
-          .single()
-
+        let uploaderProfile = null
+        if (contract.uploaded_by) {
+          const { data } = await supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", contract.uploaded_by)
+            .maybeSingle()
+          uploaderProfile = data
+        }
         return {
           ...contract,
           uploaded_by_profile: uploaderProfile || { full_name: "Usuário removido", email: "N/A" }

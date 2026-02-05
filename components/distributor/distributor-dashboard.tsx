@@ -1511,7 +1511,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     calculateCommissions().catch((error) => {
       console.error("Erro ao calcular comissões:", error);
     });
-  }, [myInvestors, user]);
+  }, [myInvestors, myAdvisors, currentUserType, user]);
 
   const visibleSteps = getVisibleSteps();
   const isLastStep = currentStep === visibleSteps.length - 1;
@@ -1601,7 +1601,9 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         if (profile?.user_type_id) {
           const { getUserTypeFromId } = await import("@/lib/user-type-utils");
           const userType = await getUserTypeFromId(profile.user_type_id);
-          setCurrentUserType(userType?.user_type || null);
+          const userTypeValue = userType?.user_type || null;
+          console.log(`[OFFICE DEBUG] currentUserType definido como: ${userTypeValue}`, { userTypeId: profile.user_type_id, userType });
+          setCurrentUserType(userTypeValue);
         }
       } catch (error) {
         console.error("Erro ao buscar user_type:", error);
@@ -1618,6 +1620,14 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       fetchMyAdvisors(user?.id);
     }
   }, [user]);
+
+  // Recarregar dados quando currentUserType mudar (especialmente importante para escritórios)
+  useEffect(() => {
+    if (currentUserType && user?.id) {
+      fetchMyInvestors(user.id);
+      fetchMyAdvisors(user.id);
+    }
+  }, [currentUserType]);
 
   useEffect(() => {
     if (currentUserType === "distributor" && user?.id) {
@@ -1834,6 +1844,17 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         const { getUserTypeFromId } = await import("@/lib/user-type-utils");
         const userType = await getUserTypeFromId(loggedUserProfile.user_type_id);
         isOffice = userType?.user_type === "office";
+        console.log(`[OFFICE DEBUG fetchMyInvestors] Verificação isOffice:`, { 
+          user_type_id: loggedUserProfile.user_type_id, 
+          userType: userType, 
+          isOffice 
+        });
+      }
+      
+      // Fallback: verificar também pelo currentUserType se disponível
+      if (!isOffice && currentUserType === "office") {
+        isOffice = true;
+        console.log(`[OFFICE DEBUG fetchMyInvestors] isOffice definido via currentUserType fallback`);
       }
 
       // Buscar user_type_id de "investor" na tabela user_types
@@ -1849,22 +1870,211 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      // Se for escritório, buscar por office_id, senão buscar por parent_id
-      const query = isOffice
-          ? supabase
-              .from("profiles")
-              .select("*")
-            .eq("user_type_id", investorUserType.id)
-              .eq("office_id", distributorId)
-              .order("created_at", { ascending: false })
-          : supabase
-              .from("profiles")
-              .select("*")
-            .eq("user_type_id", investorUserType.id)
-              .eq("parent_id", distributorId)
-              .order("created_at", { ascending: false });
+      // Se for escritório, buscar por múltiplas formas (office_id, parent_id via assessores, distributor_id)
+      console.log(`[OFFICE DEBUG] Buscando investidores - isOffice: ${isOffice}, distributorId: ${distributorId}, investorUserTypeId: ${investorUserType.id}`);
+      
+      let profiles: any[] = [];
+      let profilesError: { message: string } | null = null;
+      
+      if (isOffice) {
+        // 1. Investidores com office_id = escritório
+        const { data: investorsByOffice, error: officeError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_type_id", investorUserType.id)
+          .eq("office_id", distributorId);
+        if (!officeError && investorsByOffice?.length) {
+          profiles.push(...(investorsByOffice || []));
+        }
+        console.log(`[OFFICE DEBUG] Investidores por office_id: ${investorsByOffice?.length || 0}`);
 
-      const { data: profiles, error: profilesError } = await query;
+        // 2. Buscar assessores do escritório
+        const { data: escritorioProfile } = await supabase
+          .from("profiles")
+          .select("user_type_id")
+          .eq("id", distributorId)
+          .single();
+        
+        let advisorTypeIds: number[] = [];
+        if (escritorioProfile?.user_type_id) {
+          const { data: relations } = await supabase.rpc(
+            "get_user_type_relations_all",
+            { p_user_type_id: escritorioProfile.user_type_id }
+          );
+          const advisorRelations = (relations || []).filter(
+            (r: any) => r.role === "parent" && (r.child_user_type === "advisor" || r.child_user_type === "assessor")
+          );
+          advisorTypeIds = [...new Set(advisorRelations.map((r: any) => r.child_user_type_id))];
+        }
+        if (advisorTypeIds.length === 0) {
+          const { data: defAdvisor } = await supabase
+            .from("user_types")
+            .select("id")
+            .eq("user_type", "advisor")
+            .limit(1)
+            .single();
+          if (defAdvisor) advisorTypeIds = [defAdvisor.id];
+        }
+        
+        let advisorIds: string[] = [];
+        if (advisorTypeIds.length > 0) {
+          const [officeResult, parentResult] = await Promise.all([
+            supabase.from("profiles").select("id").in("user_type_id", advisorTypeIds).eq("office_id", distributorId),
+            supabase.from("profiles").select("id").in("user_type_id", advisorTypeIds).eq("parent_id", distributorId),
+          ]);
+          const advisorsByOffice = officeResult.data || [];
+          const advisorsByParent = parentResult.data || [];
+          const allAdvisors = [...advisorsByOffice, ...advisorsByParent];
+          const uniqueAdvisorIds = [...new Set(allAdvisors.map((a: any) => a.id))];
+          
+          if (uniqueAdvisorIds.length > 0) {
+            advisorIds = uniqueAdvisorIds;
+            console.log(`[OFFICE DEBUG] Assessores encontrados: ${advisorIds.length}`, advisorIds);
+            
+            // 3. Investidores vinculados aos assessores (parent_id)
+              const { data: investorsByAdvisors, error: advisorsInvestorsError } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("user_type_id", investorUserType.id)
+                .in("parent_id", advisorIds);
+              
+              if (advisorsInvestorsError) {
+                console.error(`[OFFICE DEBUG] Erro ao buscar por parent_id (assessores):`, advisorsInvestorsError);
+              } else {
+                profiles.push(...(investorsByAdvisors || []));
+              }
+              console.log(`[OFFICE DEBUG] Investidores por parent_id (assessores): ${investorsByAdvisors?.length || 0}`);
+          }
+        }
+        if (advisorIds.length === 0 && advisorTypeIds.length > 0) {
+          console.log(`[OFFICE DEBUG] Nenhum assessor encontrado para o escritório`);
+        }
+        
+        // 4. Buscar por distributor_id e filtrar
+        const { data: userProfile } = await supabase
+          .from("profiles")
+          .select("distributor_id")
+          .eq("id", distributorId)
+          .single();
+        
+        console.log(`[OFFICE DEBUG] Perfil do escritório:`, userProfile);
+        
+        // 4a. Investidores com parent_id = escritório (captação direta pelo escritório)
+        const { data: investorsByParentOffice, error: parentOfficeErr } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_type_id", investorUserType.id)
+          .eq("parent_id", distributorId);
+        if (!parentOfficeErr && investorsByParentOffice?.length) {
+          profiles.push(...(investorsByParentOffice || []));
+          console.log(`[OFFICE DEBUG] Investidores por parent_id (escritório direto): ${investorsByParentOffice.length}`);
+        }
+        // 4b. Fallback: tentar com user_type legado (compatibilidade)
+        if (profiles.length === 0 && advisorIds.length > 0) {
+          const { data: legacyByParent, error: legacyErr } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_type", "investor")
+            .in("parent_id", advisorIds);
+          if (!legacyErr && legacyByParent?.length) {
+            profiles.push(...legacyByParent);
+            console.log(`[OFFICE DEBUG] Investidores por parent_id (user_type legado): ${legacyByParent.length}`);
+          }
+        }
+        if (profiles.length === 0) {
+          const [legacyOfficeRes, legacyParentOfficeRes] = await Promise.all([
+            supabase.from("profiles").select("*").eq("user_type", "investor").eq("office_id", distributorId),
+            supabase.from("profiles").select("*").eq("user_type", "investor").eq("parent_id", distributorId),
+          ]);
+          if (!legacyOfficeRes.error && legacyOfficeRes.data?.length) {
+            profiles.push(...legacyOfficeRes.data);
+            console.log(`[OFFICE DEBUG] Investidores por office_id (user_type legado): ${legacyOfficeRes.data.length}`);
+          }
+          if (!legacyParentOfficeRes.error && legacyParentOfficeRes.data?.length) {
+            profiles.push(...legacyParentOfficeRes.data);
+            console.log(`[OFFICE DEBUG] Investidores por parent_id=escritório (user_type legado): ${legacyParentOfficeRes.data.length}`);
+          }
+        }
+
+        if (userProfile?.distributor_id) {
+          // IMPORTANTE: Usar user_type ao invés de user_type_id para manter compatibilidade (como no modal de detalhes)
+          const { data: allInvestorsByDistributor, error: distributorError } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_type", "investor")
+            .eq("distributor_id", userProfile.distributor_id);
+          
+          console.log(`[OFFICE DEBUG] Total de investidores do distribuidor: ${allInvestorsByDistributor?.length || 0}`);
+          
+          if (!distributorError && allInvestorsByDistributor) {
+            // Filtrar apenas os que pertencem a este escritório
+            const filtered = allInvestorsByDistributor.filter((inv: any) => {
+              // Investidor vinculado diretamente ao escritório
+              if (inv.office_id === distributorId) {
+                console.log(`[OFFICE DEBUG] Investidor ${inv.id} vinculado diretamente ao escritório (office_id)`);
+                return true;
+              }
+              // Investidor vinculado a um assessor deste escritório
+              if (inv.parent_id && advisorIds.includes(inv.parent_id)) {
+                console.log(`[OFFICE DEBUG] Investidor ${inv.id} vinculado ao assessor ${inv.parent_id}`);
+                return true;
+              }
+              return false;
+            });
+            profiles.push(...filtered);
+            console.log(`[OFFICE DEBUG] Investidores por distributor_id (filtrados): ${filtered.length}`);
+            if (filtered.length > 0) {
+              console.log(`[OFFICE DEBUG] IDs dos investidores filtrados:`, filtered.map((i: any) => i.id));
+            }
+          } else if (distributorError) {
+            console.error(`[OFFICE DEBUG] Erro ao buscar por distributor_id:`, distributorError);
+          }
+        } else {
+          console.log(`[OFFICE DEBUG] Escritório não tem distributor_id configurado`);
+        }
+        
+        // Remover duplicatas
+        const uniqueProfiles = profiles.filter((profile, index, self) =>
+          index === self.findIndex(p => p.id === profile.id)
+        );
+        profiles = uniqueProfiles;
+        
+        // Debug: buscar TODOS os investidores para ver o que existe no banco
+        const { data: allInvestors, error: allInvestorsError } = await supabase
+          .from("profiles")
+          .select("id, full_name, office_id, parent_id, distributor_id, user_type_id")
+          .eq("user_type_id", investorUserType.id)
+          .limit(100);
+        
+        if (!allInvestorsError && allInvestors) {
+          console.log(`[OFFICE DEBUG] TODOS os investidores no banco (primeiros 100):`, allInvestors.map(i => ({ 
+            id: i.id, 
+            name: i.full_name, 
+            office_id: i.office_id, 
+            parent_id: i.parent_id,
+            distributor_id: i.distributor_id,
+            matches_office: i.office_id === distributorId,
+            matches_distributor: i.distributor_id === userProfile?.distributor_id
+          })));
+        }
+      } else {
+        // Para assessores, buscar por parent_id
+        const { data: profilesData, error: err } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_type_id", investorUserType.id)
+          .eq("parent_id", distributorId)
+          .order("created_at", { ascending: false });
+        
+        if (err) {
+          profilesError = err;
+          console.error(`[OFFICE DEBUG] Erro ao buscar investidores:`, err);
+        } else {
+          profiles = profilesData || [];
+        }
+      }
+      
+      console.log(`[OFFICE DEBUG] Total de investidores únicos encontrados: ${profiles.length}`);
 
       const advisorInfoMap: Record<string, { name: string; email: string | null }> = {};
 
@@ -1899,19 +2109,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
         const profileIds = profiles.map((p) => p.id);
 
-        // Validar acesso aos investidores antes de buscar investimentos
-        const { validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
-        const isAdmin = await validateAdminAccess(user.id);
-        
-        const validProfileIds = [];
-        for (const profileId of profileIds) {
-          if (isAdmin || await validateUserAccess(user.id, profileId)) {
-            validProfileIds.push(profileId);
-          }
-        }
+        // Para escritório/assessor: dados já filtrados por office_id/parent_id - acesso implícito.
+        // Evita N+1: validateUserAccess faz várias queries por investidor (54 investidores = 300+ req).
+        const validProfileIds = profileIds;
         
         if (validProfileIds.length === 0) {
           console.warn("[DistributorDashboard] Nenhum investidor válido encontrado");
+          setMyInvestors([]);
           return;
         }
 
@@ -1956,6 +2160,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
       if (profilesError) {
         console.error("Erro ao buscar investidores:", profilesError);
+        setMyInvestors([]);
         return;
       }
 
@@ -2169,6 +2374,17 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         const { getUserTypeFromId } = await import("@/lib/user-type-utils");
         const userType = await getUserTypeFromId(loggedUserProfile.user_type_id);
         isOffice = userType?.user_type === "office";
+        console.log(`[OFFICE DEBUG fetchMyAdvisors] Verificação isOffice:`, { 
+          user_type_id: loggedUserProfile.user_type_id, 
+          userType: userType, 
+          isOffice 
+        });
+      }
+      
+      // Fallback: verificar também pelo currentUserType se disponível
+      if (!isOffice && currentUserType === "office") {
+        isOffice = true;
+        console.log(`[OFFICE DEBUG fetchMyAdvisors] isOffice definido via currentUserType fallback`);
       }
 
       // Buscar assessores usando user_type_id ao invés de user_type/role
@@ -2185,22 +2401,106 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      // Se for escritório, buscar por office_id, senão buscar por parent_id
-      const query = isOffice
-          ? supabase
-              .from("profiles")
-              .select("*")
-            .eq("user_type_id", advisorUserType.id)
-              .eq("office_id", distributorId)
-              .order("created_at", { ascending: false })
-          : supabase
-              .from("profiles")
-              .select("*")
-            .eq("user_type_id", advisorUserType.id)
-              .eq("parent_id", distributorId)
-              .order("created_at", { ascending: false });
-
-      const { data: profiles, error: profilesError } = await query;
+      // Se for escritório, buscar por office_id e parent_id
+      console.log(`[OFFICE DEBUG] Buscando assessores - isOffice: ${isOffice}, distributorId: ${distributorId}, advisorUserTypeId: ${advisorUserType.id}`);
+      
+      let profiles: any[] = [];
+      let profilesError: { message: string } | null = null;
+      
+      if (isOffice) {
+        console.log(`[OFFICE DEBUG] Buscando assessores para escritório ${distributorId}`);
+        
+        // Buscar TODOS os tipos de assessores relacionados ao escritório (como no modal de detalhes)
+        const { data: escritorioProfile } = await supabase
+          .from("profiles")
+          .select("user_type_id")
+          .eq("id", distributorId)
+          .single();
+        
+        let uniqueAdvisorUserTypeIds: number[] = [];
+        if (escritorioProfile?.user_type_id) {
+          const { data: escritorioRelations, error: relationsError } = await supabase.rpc(
+            'get_user_type_relations_all',
+            { p_user_type_id: escritorioProfile.user_type_id }
+          );
+          
+          if (!relationsError && escritorioRelations) {
+            // Filtrar relações onde o escritório é pai (role: "parent") - esses são os tipos de assessores
+            const advisorRelations = escritorioRelations.filter(
+              (rel: any) => rel.role === "parent"
+            ) || [];
+            
+            uniqueAdvisorUserTypeIds = [...new Set(advisorRelations.map((rel: any) => rel.child_user_type_id))];
+            console.log(`[OFFICE DEBUG] Tipos de assessores relacionados ao escritório:`, uniqueAdvisorUserTypeIds);
+          }
+        }
+        
+        // Se não encontrou tipos relacionados, usar o tipo padrão de advisor
+        if (uniqueAdvisorUserTypeIds.length === 0) {
+          uniqueAdvisorUserTypeIds = [advisorUserType.id];
+          console.log(`[OFFICE DEBUG] Usando tipo padrão de advisor: ${advisorUserType.id}`);
+        }
+        
+        // Query 1: Assessores com office_id = escritório
+        const { data: advisorsByOffice, error: officeError } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("user_type_id", uniqueAdvisorUserTypeIds)
+          .eq("office_id", distributorId)
+          .order("created_at", { ascending: false });
+        
+        // Query 2: Assessores com parent_id = escritório
+        const { data: advisorsByParent, error: parentError } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("user_type_id", uniqueAdvisorUserTypeIds)
+          .eq("parent_id", distributorId)
+          .order("created_at", { ascending: false });
+        
+        if (officeError) {
+          console.error(`[OFFICE DEBUG] Erro ao buscar assessores por office_id:`, officeError);
+        }
+        if (parentError) {
+          console.error(`[OFFICE DEBUG] Erro ao buscar assessores por parent_id:`, parentError);
+        }
+        
+        // Combinar e remover duplicatas
+        const allAdvisors = [
+          ...(advisorsByOffice || []),
+          ...(advisorsByParent || [])
+        ];
+        
+        const advisorsMap = new Map();
+        allAdvisors.forEach((advisor: any) => {
+          advisorsMap.set(advisor.id, advisor);
+        });
+        
+        profiles = Array.from(advisorsMap.values());
+        
+        console.log(`[OFFICE DEBUG] Total de assessores encontrados: ${profiles.length}`, profiles.map(p => ({ 
+          id: p.id, 
+          name: p.full_name, 
+          office_id: p.office_id, 
+          parent_id: p.parent_id 
+        })));
+      } else {
+        // Para distribuidores, buscar por parent_id
+        const { data: profilesData, error: err } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_type_id", advisorUserType.id)
+          .eq("parent_id", distributorId)
+          .order("created_at", { ascending: false });
+        
+        if (err) {
+          profilesError = err;
+          console.error(`[OFFICE DEBUG] Erro ao buscar assessores:`, err);
+        } else {
+          profiles = profilesData || [];
+        }
+      }
+      
+      console.log(`[OFFICE DEBUG] Total de assessores encontrados: ${profiles.length}`);
 
       if (profilesError) {
         console.error("Erro ao buscar assessores:", profilesError);
@@ -2219,16 +2519,8 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      // Validar acesso aos assessores antes de buscar seus investidores
-      const { validateUserAccess, validateAdminAccess } = await import("@/lib/client-permission-utils");
-      const isAdmin = await validateAdminAccess(user.id);
-      
-      const validProfileIds = [];
-      for (const profileId of profileIds) {
-        if (isAdmin || await validateUserAccess(user.id, profileId)) {
-          validProfileIds.push(profileId);
-        }
-      }
+      // Dados já filtrados por office_id/parent_id - acesso implícito. Evita N+1 (7 assessores = 40+ req).
+      const validProfileIds = profileIds;
       
       if (validProfileIds.length === 0) {
         setMyAdvisors([]);
@@ -2259,22 +2551,15 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       }
 
       const investorIds = advisorInvestors?.map((inv) => inv.id) ?? [];
-
-      // Validar acesso aos investidores antes de buscar investimentos
-      const validInvestorIds = [];
-      for (const investorId of investorIds) {
-        if (isAdmin || await validateUserAccess(user.id, investorId)) {
-          validInvestorIds.push(investorId);
-        }
-      }
+      // Investidores já filtrados por parent_id nos assessores - acesso implícito. Evita N+1.
 
       let investorInvestments: { user_id: string; amount: number }[] = [];
-      if (validInvestorIds.length > 0) {
+      if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
           .select("user_id, amount")
           .eq("status", "active")
-          .in("user_id", validInvestorIds);
+          .in("user_id", investorIds);
 
         if (investmentsError) {
           console.error("Erro ao buscar investimentos dos investidores:", investmentsError);
@@ -4039,8 +4324,23 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
     100
   );
 
+  const isLoadingDashboard =
+    loadingInvestors ||
+    ((currentUserType === "office" || currentUserType === "distributor") && loadingAdvisors);
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen relative">
+      {/* Indicador de carregamento do dashboard */}
+      {isLoadingDashboard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#011627]/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 rounded-xl bg-[#01223F]/95 px-8 py-6 shadow-xl border border-[#003562]">
+            <Loader2 className="h-12 w-12 animate-spin text-[#00BC6E]" />
+            <p className="text-white font-medium">Carregando dados do dashboard...</p>
+            <p className="text-white/70 text-sm">Aguarde um momento</p>
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto px-4 py-6 md:py-8">
         {/* Welcome Section */}
         <div className="mb-6 md:mb-8">
@@ -4125,7 +4425,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               </CardHeader>
               <CardContent className="relative z-10">
                 <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
-                  {currentUserType === "office" ? myAdvisors.length : 0}
+                  {myAdvisors.length}
                 </div>
                 <p className="text-xs text-white/70 mt-1">
                   Assessores cadastrados por você
