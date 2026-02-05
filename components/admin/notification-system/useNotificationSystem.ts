@@ -7,7 +7,7 @@ import { formatCurrency } from "@/lib/utils"
 
 export interface Notification {
   id: string
-  type: "withdrawal_request" | "campaign_expiry" | "performance_goal" | "recurrence_risk" | "system_alert"
+  type: "withdrawal_request" | "campaign_expiry" | "performance_goal" | "recurrence_risk" | "system_alert" | "d60_reached" | "payment_day"
   title: string
   message: string
   priority: "low" | "medium" | "high" | "critical"
@@ -26,6 +26,10 @@ export interface Notification {
     quotaType?: string
     commitmentPeriod?: number
     monthlyReturnRate?: number
+    investmentId?: string
+    d60Date?: string
+    daysSinceD60?: number
+    paymentDate?: string
   }
   actions?: {
     approve?: boolean
@@ -130,6 +134,16 @@ export function useNotificationSystem() {
   }
 
   const handleNotificationAction = async (notificationId: string, action: string) => {
+    // Para notificações de D+60 e payment_day, apenas marcar como lida
+    if (action === "acknowledge") {
+      toast({
+        title: "Notificação confirmada",
+        description: "A notificação foi marcada como lida.",
+      })
+      await refetch()
+      return
+    }
+
     if (action === 'approve') {
       const notification = notifications.find(n => n.id === notificationId)
       if (notification) {
@@ -144,21 +158,23 @@ export function useNotificationSystem() {
       return
     }
 
-    try {
-      const realId = notificationId.replace(/^investment_/, '')
-      await processInvestmentAction(realId, 'reject')
+    if (action === 'reject') {
+      try {
+        const realId = notificationId.replace(/^investment_/, '')
+        await processInvestmentAction(realId, 'reject')
 
-      toast({
-        title: "Investimento rejeitado!",
-        description: "O investimento foi rejeitado e removido com sucesso.",
-      })
-    } catch (error) {
-      console.error('Error handling notification action:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao processar a ação. Tente novamente.",
-        variant: "destructive"
-      })
+        toast({
+          title: "Investimento rejeitado!",
+          description: "O investimento foi rejeitado e removido com sucesso.",
+        })
+      } catch (error) {
+        console.error('Error handling notification action:', error)
+        toast({
+          title: "Erro",
+          description: "Erro ao processar a ação. Tente novamente.",
+          variant: "destructive"
+        })
+      }
     }
   }
 

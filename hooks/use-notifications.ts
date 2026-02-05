@@ -37,6 +37,8 @@ interface PendingInvestment {
 export function useNotifications() {
   const [pendingTransactions, setPendingTransactions] = useState<PendingTransaction[]>([])
   const [pendingInvestments, setPendingInvestments] = useState<PendingInvestment[]>([])
+  const [d60Investments, setD60Investments] = useState<any[]>([])
+  const [paymentDayInvestments, setPaymentDayInvestments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,7 +47,7 @@ export function useNotifications() {
       setLoading(true)
       setError(null)
 
-      // Buscar apenas investimentos pendentes da tabela investments
+      // Buscar investimentos pendentes
       const investmentsResponse = await fetch('/api/investments?status=pending')
       const investmentsData = await investmentsResponse.json()
 
@@ -54,6 +56,29 @@ export function useNotifications() {
       }
 
       setPendingInvestments(investmentsData.data || [])
+
+      // Buscar investimentos que atingiram D+60
+      try {
+        const d60Response = await fetch('/api/notifications/d60-check')
+        const d60Data = await d60Response.json()
+        if (d60Data.success) {
+          setD60Investments(d60Data.data || [])
+        }
+      } catch (err) {
+        console.error('Error fetching D+60 investments:', err)
+      }
+
+      // Buscar investimentos para pagamento no 5º dia útil
+      try {
+        const paymentResponse = await fetch('/api/notifications/payment-day-check')
+        const paymentData = await paymentResponse.json()
+        if (paymentData.success && paymentData.isPaymentDay) {
+          setPaymentDayInvestments(paymentData.data || [])
+        }
+      } catch (err) {
+        console.error('Error fetching payment day investments:', err)
+      }
+
       // Limpar transações pendentes já que focamos apenas em investments
       setPendingTransactions([])
     } catch (err) {
@@ -100,10 +125,10 @@ export function useNotifications() {
   const notifications = useMemo(() => {
     const notificationsList: Array<{
       id: string
-      type: "withdrawal_request"
+      type: "withdrawal_request" | "d60_reached" | "payment_day"
       title: string
       message: string
-      priority: "high" | "medium"
+      priority: "high" | "medium" | "critical"
       recipients: string[]
       recipientType: "admin"
       status: "pending"
@@ -114,8 +139,12 @@ export function useNotifications() {
         quotaType: string
         commitmentPeriod?: number
         monthlyReturnRate?: number
+        investmentId?: string
+        d60Date?: string
+        daysSinceD60?: number
+        paymentDate?: string
       }
-      actions: { approve: boolean; reject: boolean }
+      actions?: { approve: boolean; reject: boolean; acknowledge?: boolean }
     }> = []
 
     // Notificações de investimentos pendentes da tabela investments
@@ -139,17 +168,69 @@ export function useNotifications() {
           quotaType: investment.quota_type,
           commitmentPeriod: investment.commitment_period,
           monthlyReturnRate: investment.monthly_return_rate,
+          investmentId: investment.id,
         },
         actions: { approve: true, reject: true },
       })
     })
 
+    // Notificações de investimentos que atingiram D+60
+    d60Investments.forEach((investment: any) => {
+      notificationsList.push({
+        id: `d60_${investment.id}`,
+        type: "d60_reached" as const,
+        title: `D+60 Atingido - ${investment.investor_name}`,
+        message: `Investimento de ${investment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} atingiu D+60 em ${new Date(investment.d60_date).toLocaleDateString('pt-BR')}. Investidor pode começar a receber comissões.`,
+        priority: "high" as const,
+        recipients: ["admin@agrinvest.com"],
+        recipientType: "admin" as const,
+        status: "pending" as const,
+        createdAt: new Date().toISOString(),
+        relatedData: {
+          investorName: investment.investor_name,
+          amount: investment.amount,
+          quotaType: investment.quota_type,
+          commitmentPeriod: investment.commitment_period,
+          monthlyReturnRate: investment.monthly_return_rate,
+          investmentId: investment.id,
+          d60Date: investment.d60_date,
+          daysSinceD60: investment.days_since_d60,
+        },
+        actions: { acknowledge: true },
+      })
+    })
+
+    // Notificações de pagamento no 5º dia útil
+    if (paymentDayInvestments.length > 0) {
+      const totalAmount = paymentDayInvestments.reduce((sum, inv) => sum + inv.amount, 0)
+      const investorsCount = paymentDayInvestments.length
+
+      notificationsList.push({
+        id: `payment_day_${new Date().toISOString().split('T')[0]}`,
+        type: "payment_day" as const,
+        title: `5º Dia Útil - Pagamentos Devidos`,
+        message: `Hoje é o 5º dia útil do mês. ${investorsCount} investimento(s) totalizando ${totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} devem receber pagamento.`,
+        priority: "critical" as const,
+        recipients: ["admin@agrinvest.com"],
+        recipientType: "admin" as const,
+        status: "pending" as const,
+        createdAt: new Date().toISOString(),
+        relatedData: {
+          amount: totalAmount,
+          paymentDate: new Date().toISOString().split('T')[0],
+        },
+        actions: { acknowledge: true },
+      })
+    }
+
     return notificationsList
-  }, [pendingInvestments])
+  }, [pendingInvestments, d60Investments, paymentDayInvestments])
 
   return {
     pendingTransactions,
     pendingInvestments,
+    d60Investments,
+    paymentDayInvestments,
     notifications,
     loading,
     error,

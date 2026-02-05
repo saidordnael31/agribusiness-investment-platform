@@ -262,6 +262,30 @@ export function NotificationSystem() {
                                   </span>
                                 </div>
                               )}
+                              {(notification.relatedData as any).d60Date && (
+                                <div>
+                                  <span className="text-muted-foreground">D+60 em:</span>
+                                  <span className="ml-1 font-medium">
+                                    {new Date((notification.relatedData as any).d60Date).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                              )}
+                              {(notification.relatedData as any).daysSinceD60 !== undefined && (
+                                <div>
+                                  <span className="text-muted-foreground">Dias desde D+60:</span>
+                                  <span className="ml-1 font-medium">
+                                    {(notification.relatedData as any).daysSinceD60} dias
+                                  </span>
+                                </div>
+                              )}
+                              {(notification.relatedData as any).paymentDate && (
+                                <div>
+                                  <span className="text-muted-foreground">Data de Pagamento:</span>
+                                  <span className="ml-1 font-medium">
+                                    {new Date((notification.relatedData as any).paymentDate).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -293,6 +317,17 @@ export function NotificationSystem() {
                               >
                                 <XCircle className="w-3 h-3 mr-1" />
                                 Rejeitar
+                              </Button>
+                            )}
+                            {notification.actions.acknowledge && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-blue-600 border-blue-600 bg-transparent"
+                                onClick={() => handleNotificationAction(notification.id, "acknowledge")}
+                              >
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Confirmar Leitura
                               </Button>
                             )}
                           </div>
@@ -336,6 +371,8 @@ export function NotificationSystem() {
                         <option value="campaign_expiry">Expiração de Campanha</option>
                         <option value="performance_achieved">Meta Atingida</option>
                         <option value="recurrence_at_risk">Recorrência em Risco</option>
+                        <option value="d60_reached">D+60 Atingido</option>
+                        <option value="payment_day">5º Dia Útil (Pagamento)</option>
                       </select>
                     </div>
                   </div>
@@ -546,7 +583,7 @@ export function NotificationSystem() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {["withdrawal_request", "campaign_expiry", "performance_goal", "recurrence_risk"].map((type) => {
+                  {["withdrawal_request", "campaign_expiry", "performance_goal", "recurrence_risk", "d60_reached", "payment_day"].map((type) => {
                     const count = notifications.filter((n) => n.type === type).length
                     const percentage = notifications.length > 0 ? (count / notifications.length) * 100 : 0
 
