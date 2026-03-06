@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
             </div>
             
             <div style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://agrinvest.app'}/login" class="button">
+              <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.agrinvest.app'}/login" class="button">
                 Acessar Plataforma
               </a>
             </div>
@@ -250,7 +250,7 @@ SENHA TEMPORÁRIA: ${password}
 ⚠️ IMPORTANTE: Esta é uma senha temporária.
 O usuário será obrigado a alterar esta senha no primeiro login.
 
-Acesse: ${process.env.NEXT_PUBLIC_SITE_URL || 'https://agrinvest.app'}/login
+Acesse: ${process.env.NEXT_PUBLIC_SITE_URL || 'https://www.agrinvest.app'}/login
 ========================================
 `;
         
