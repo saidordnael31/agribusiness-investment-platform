@@ -26,41 +26,49 @@ export function UploadReceiptModal({
   onSuccess
 }: UploadReceiptModalProps) {
   const { toast } = useToast()
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
 
-  const handleFileSelect = (file: File) => {
-    // Validar tipo de arquivo
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
-    if (!allowedTypes.includes(file.type)) {
-      toast({
-        title: "Tipo de arquivo inválido",
-        description: "Apenas arquivos JPG, PNG e PDF são permitidos.",
-        variant: "destructive"
-      })
-      return
-    }
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return
 
-    // Validar tamanho (máximo 10MB)
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf', 'image/webp']
     const maxSize = 10 * 1024 * 1024 // 10MB
-    if (file.size > maxSize) {
+    const validFiles: File[] = []
+    const errors: string[] = []
+
+    Array.from(files).forEach((file) => {
+      // Validar tipo de arquivo
+      if (!allowedTypes.includes(file.type)) {
+        errors.push(`${file.name}: Tipo de arquivo não permitido`)
+        return
+      }
+
+      // Validar tamanho
+      if (file.size > maxSize) {
+        errors.push(`${file.name}: Arquivo muito grande (máximo 10MB)`)
+        return
+      }
+
+      validFiles.push(file)
+    })
+
+    if (errors.length > 0) {
       toast({
-        title: "Arquivo muito grande",
-        description: "O arquivo deve ter no máximo 10MB.",
+        title: "Alguns arquivos foram rejeitados",
+        description: errors.join(', '),
         variant: "destructive"
       })
-      return
     }
 
-    setSelectedFile(file)
+    if (validFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...validFiles])
+    }
   }
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      handleFileSelect(file)
-    }
+    handleFileSelect(e.target.files)
   }
 
   const handleDrag = (e: React.DragEvent) => {
@@ -78,17 +86,14 @@ export function UploadReceiptModal({
     e.stopPropagation()
     setDragActive(false)
     
-    const file = e.dataTransfer.files?.[0]
-    if (file) {
-      handleFileSelect(file)
-    }
+    handleFileSelect(e.dataTransfer.files)
   }
 
   const handleUpload = async () => {
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
       toast({
         title: "Comprovante obrigatório",
-        description: "Selecione um comprovante antes de enviar.",
+        description: "Selecione pelo menos um comprovante antes de enviar.",
         variant: "destructive"
       })
       return
@@ -97,40 +102,61 @@ export function UploadReceiptModal({
     setIsUploading(true)
 
     try {
-      const formData = new FormData()
-      formData.append('investmentId', investmentId)
-      formData.append('receipt', selectedFile)
+      let successCount = 0
+      let errorCount = 0
 
-      const response = await fetch('/api/investments/upload-receipt', {
-        method: 'POST',
-        body: formData
-      })
+      // Upload de múltiplos arquivos
+      for (const file of selectedFiles) {
+        try {
+          const formData = new FormData()
+          formData.append('investmentId', investmentId)
+          formData.append('receipt', file)
 
-      const data = await response.json()
+          const response = await fetch('/api/investments/upload-receipt', {
+            method: 'POST',
+            body: formData
+          })
 
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao enviar comprovante')
+          const data = await response.json()
+
+          if (data.success) {
+            successCount++
+          } else {
+            errorCount++
+            console.error(`Erro ao enviar ${file.name}:`, data.error)
+          }
+        } catch (error) {
+          errorCount++
+          console.error(`Erro ao enviar ${file.name}:`, error)
+        }
       }
 
-      toast({
-        title: "Comprovante enviado!",
-        description: "O comprovante foi enviado com sucesso e aguarda aprovação.",
-      })
-
-      onSuccess()
-      onClose()
-      setSelectedFile(null)
+      if (successCount > 0) {
+        toast({
+          title: "Comprovante(s) enviado(s)!",
+          description: `${successCount} comprovante(s) enviado(s) com sucesso${errorCount > 0 ? `. ${errorCount} falharam.` : '.'}`,
+        })
+        onSuccess()
+        onClose()
+        setSelectedFiles([])
+      } else {
+        throw new Error('Nenhum comprovante pôde ser enviado')
+      }
 
     } catch (error) {
-      console.error('Erro ao enviar comprovante:', error)
+      console.error('Erro ao enviar comprovantes:', error)
       toast({
         title: "Erro",
-        description: error instanceof Error ? error.message : "Erro ao enviar comprovante. Tente novamente.",
+        description: error instanceof Error ? error.message : "Erro ao enviar comprovantes. Tente novamente.",
         variant: "destructive"
       })
     } finally {
       setIsUploading(false)
     }
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   const formatFileSize = (bytes: number) => {
@@ -150,7 +176,7 @@ export function UploadReceiptModal({
             Enviar Comprovante
           </DialogTitle>
           <DialogDescription>
-            Envie um comprovante para este investimento. O comprovante será analisado antes da aprovação.
+            Envie um ou mais comprovantes para este investimento. Os comprovantes serão analisados antes da aprovação.
           </DialogDescription>
         </DialogHeader>
 
@@ -167,60 +193,70 @@ export function UploadReceiptModal({
           <div className="space-y-2">
             <Label htmlFor="receipt">Comprovante de Pagamento</Label>
             
-            {!selectedFile ? (
-              <div
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  dragActive 
-                    ? 'border-blue-500 bg-blue-50' 
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
+            <div
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                dragActive 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm text-gray-600 mb-2">
+                Arraste os comprovantes aqui ou clique para selecionar
+              </p>
+              <p className="text-xs text-gray-500">
+                JPG, PNG, WEBP ou PDF (máximo 10MB cada)
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                💡 Você pode selecionar múltiplos arquivos de uma vez
+              </p>
+              <Input
+                id="receipt"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,.pdf"
+                multiple
+                onChange={handleFileInputChange}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => document.getElementById('receipt')?.click()}
               >
-                <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm text-gray-600 mb-2">
-                  Arraste o comprovante aqui ou clique para selecionar
-                </p>
-                <p className="text-xs text-gray-500">
-                  JPG, PNG ou PDF (máximo 10MB)
-                </p>
-                <Input
-                  id="receipt"
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={handleFileInputChange}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => document.getElementById('receipt')?.click()}
-                >
-                  Selecionar Arquivo
-                </Button>
-              </div>
-            ) : (
-              <div className="border rounded-lg p-3 bg-green-50 border-green-200">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-green-600" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-green-800">{selectedFile.name}</p>
-                    <p className="text-xs text-green-600">{formatFileSize(selectedFile.size)}</p>
+                Selecionar Arquivo(s)
+              </Button>
+            </div>
+
+            {/* Lista de arquivos selecionados */}
+            {selectedFiles.length > 0 && (
+              <div className="space-y-2 mt-4">
+                <p className="text-sm font-medium">Arquivos selecionados ({selectedFiles.length}):</p>
+                {selectedFiles.map((file, index) => (
+                  <div key={index} className="border rounded-lg p-3 bg-green-50 border-green-200">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-green-600" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-800">{file.name}</p>
+                        <p className="text-xs text-green-600">{formatFileSize(file.size)}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Remover
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedFile(null)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    Remover
-                  </Button>
-                </div>
+                ))}
               </div>
             )}
           </div>
@@ -232,10 +268,10 @@ export function UploadReceiptModal({
           </Button>
           <Button 
             onClick={handleUpload} 
-            disabled={!selectedFile || isUploading}
+            disabled={selectedFiles.length === 0 || isUploading}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            {isUploading ? "Enviando..." : "Enviar Comprovante"}
+            {isUploading ? "Enviando..." : `Enviar ${selectedFiles.length > 1 ? `${selectedFiles.length} Comprovantes` : 'Comprovante'}`}
           </Button>
         </DialogFooter>
       </DialogContent>

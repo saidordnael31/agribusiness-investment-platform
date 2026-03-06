@@ -253,11 +253,6 @@ export function ReceiptViewer({ receipt, isOpen, onClose }: ReceiptViewerProps) 
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(receipt.status)}`}>
-                {getStatusLabel(receipt.status)}
-              </span>
-            </div>
           </div>
 
           {/* Botões de ação */}

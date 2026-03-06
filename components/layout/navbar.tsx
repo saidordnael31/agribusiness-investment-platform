@@ -455,6 +455,15 @@ export function Navbar() {
               </>
             ) : (
               <div className="flex items-center space-x-2">
+                <Link href="/contatos">
+                  <Button
+                    variant="ghost"
+                    className="cursor-pointer text-white hover:text-white/80 hover:bg-white/10"
+                    size="sm"
+                  >
+                    Contatos
+                  </Button>
+                </Link>
                 <Link href="/login">
                   <Button
                     variant="outline"

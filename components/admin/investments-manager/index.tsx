@@ -9,13 +9,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { UploadReceiptModal } from "../upload-receipt-modal"
 import { ReceiptViewer } from "../receipt-viewer"
+import { EditInvestmentModal } from "../edit-investment-modal"
 import { 
   Search, 
   Filter, 
   Download, 
   RefreshCw, 
   Upload,
-  Eye
+  Eye,
+  Edit
 } from "lucide-react"
 import { useInvestmentsManager } from "./useInvestmentsManager"
 
@@ -66,6 +68,11 @@ export function InvestmentsManager() {
     handleUploadReceipt,
     handleViewReceipt,
     handleApprovalSuccess,
+    handleEditInvestment,
+    editModalOpen,
+    selectedInvestmentForEdit,
+    closeEditModal,
+    handleEditSuccess,
     getStatusBadge,
     getQuotaTypeBadge,
     exportInvestments,
@@ -119,6 +126,7 @@ export function InvestmentsManager() {
                   <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="active">Ativo</SelectItem>
                   <SelectItem value="withdrawn">Resgatado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -212,6 +220,7 @@ export function InvestmentsManager() {
                     <TableHead>Taxa Mensal</TableHead>
                     <TableHead>Período</TableHead>
                     <TableHead>Data</TableHead>
+                    <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -289,6 +298,19 @@ export function InvestmentsManager() {
                               ? formatDateSafe(investment.payment_date)
                               : <span className="text-muted-foreground">Não depositado</span>
                             }
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditInvestment(investment)}
+                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                              <Edit className="w-3 h-3 mr-1" />
+                              Editar
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -457,6 +479,14 @@ export function InvestmentsManager() {
           onClose={closeReceiptViewer}
         />
       )}
+
+      {/* Modal de edição de investimento */}
+      <EditInvestmentModal
+        isOpen={editModalOpen}
+        onClose={closeEditModal}
+        investment={selectedInvestmentForEdit}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   )
 }

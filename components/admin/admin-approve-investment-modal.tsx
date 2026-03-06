@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { CheckCircle, Eye, Calendar, FileText, Loader2 } from "lucide-react"
+import { CheckCircle, Eye, Calendar, FileText, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
 
 interface AdminApproveInvestmentModalProps {
@@ -34,15 +34,16 @@ export function AdminApproveInvestmentModal({
     name: string
     email: string
   } | null>(null)
-  const [receipt, setReceipt] = useState<{
+  const [receipts, setReceipts] = useState<Array<{
     id: string
     file_name: string
     file_path: string
     file_type: string
     status: string
     created_at: string
-  } | null>(null)
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
+    signed_url?: string
+  }>>([])
+  const [currentReceiptIndex, setCurrentReceiptIndex] = useState(0)
 
   useEffect(() => {
     if (isOpen && investmentId) {
@@ -52,8 +53,8 @@ export function AdminApproveInvestmentModal({
       setPaymentDate("")
       setInvestorEmail("")
       setAdvisorInfo(null)
-      setReceipt(null)
-      setReceiptUrl(null)
+      setReceipts([])
+      setCurrentReceiptIndex(0)
     }
   }, [isOpen, investmentId])
 
@@ -152,61 +153,55 @@ export function AdminApproveInvestmentModal({
         setPaymentDate("Não informada")
       }
 
-      // Buscar comprovante
-      const { data: receipts, error: receiptsError } = await supabase
+      // Buscar TODOS os comprovantes
+      const { data: receiptsData, error: receiptsError } = await supabase
         .from("pix_receipts")
         .select("id, file_name, file_path, file_type, status, created_at")
         .eq("transaction_id", investmentId)
         .order("created_at", { ascending: false })
-        .limit(1)
 
       if (receiptsError) {
-        console.error("Erro ao buscar comprovante:", receiptsError)
+        console.error("Erro ao buscar comprovantes:", receiptsError)
         toast({
           title: "Aviso",
-          description: "Erro ao buscar comprovante. Tente novamente.",
+          description: "Erro ao buscar comprovantes. Tente novamente.",
           variant: "destructive"
         })
-      } else if (receipts && receipts.length > 0) {
-        const latestReceipt = receipts[0]
-        setReceipt(latestReceipt)
+      } else if (receiptsData && receiptsData.length > 0) {
+        // Buscar URLs assinadas para todos os comprovantes
+        const receiptsWithUrls = await Promise.all(
+          receiptsData.map(async (receipt) => {
+            try {
+              const receiptResponse = await fetch(`/api/pix-receipts/view?receiptId=${receipt.id}`)
+              const receiptData = await receiptResponse.json()
 
-        // Tentar gerar URL assinada usando a API (mais confiável)
-        try {
-          const receiptResponse = await fetch(`/api/pix-receipts/view?receiptId=${latestReceipt.id}`)
-          const receiptData = await receiptResponse.json()
+              if (receiptData.success && receiptData.data?.signed_url) {
+                return { ...receipt, signed_url: receiptData.data.signed_url }
+              } else {
+                // Fallback: tentar gerar URL diretamente
+                const { data: urlData } = await supabase.storage
+                  .from("pix_receipts")
+                  .createSignedUrl(receipt.file_path, 3600)
 
-          if (receiptData.success && receiptData.data?.signed_url) {
-            setReceiptUrl(receiptData.data.signed_url)
-          } else {
-            // Fallback: tentar gerar URL diretamente
-            const { data: urlData, error: urlError } = await supabase.storage
-              .from("pix_receipts")
-              .createSignedUrl(latestReceipt.file_path, 3600)
-
-            if (urlError) {
-              console.error("Erro ao gerar URL do comprovante:", urlError)
-              toast({
-                title: "Aviso",
-                description: "Erro ao carregar comprovante. Use o botão para abrir manualmente.",
-                variant: "destructive"
-              })
-            } else if (urlData?.signedUrl) {
-              setReceiptUrl(urlData.signedUrl)
+                if (urlData?.signedUrl) {
+                  return { ...receipt, signed_url: urlData.signedUrl }
+                }
+              }
+            } catch (apiError) {
+              console.error(`Erro ao buscar URL do comprovante ${receipt.id}:`, apiError)
             }
-          }
-        } catch (apiError) {
-          console.error("Erro ao buscar URL do comprovante via API:", apiError)
-          // Tentar fallback direto
-          const { data: urlData, error: urlError } = await supabase.storage
-            .from("pix_receipts")
-            .createSignedUrl(latestReceipt.file_path, 3600)
+            return receipt
+          })
+        )
 
-          if (urlError) {
-            console.error("Erro ao gerar URL do comprovante:", urlError)
-          } else if (urlData?.signedUrl) {
-            setReceiptUrl(urlData.signedUrl)
-          }
+        setReceipts(receiptsWithUrls.filter(r => r.signed_url))
+        setCurrentReceiptIndex(0)
+
+        if (receiptsWithUrls.length > 1) {
+          toast({
+            title: `${receiptsWithUrls.length} comprovantes encontrados`,
+            description: "Use as setas para navegar entre os comprovantes.",
+          })
         }
       }
     } catch (error) {
@@ -261,7 +256,10 @@ export function AdminApproveInvestmentModal({
     }
   }
 
-  const handleViewReceipt = async () => {
+  const handleViewReceipt = async (index?: number) => {
+    const receiptIndex = index !== undefined ? index : currentReceiptIndex
+    const receipt = receipts[receiptIndex]
+
     if (!receipt) {
       toast({
         title: "Aviso",
@@ -272,7 +270,7 @@ export function AdminApproveInvestmentModal({
     }
 
     try {
-      let urlToOpen = receiptUrl
+      let urlToOpen = receipt.signed_url
 
       // Se não temos URL, tentar buscar via API
       if (!urlToOpen) {
@@ -281,8 +279,10 @@ export function AdminApproveInvestmentModal({
 
         if (result.success && result.data?.signed_url) {
           urlToOpen = result.data.signed_url
-          // Salvar a URL para uso futuro
-          setReceiptUrl(urlToOpen)
+          // Atualizar o comprovante com a URL
+          const updatedReceipts = [...receipts]
+          updatedReceipts[receiptIndex] = { ...receipt, signed_url: urlToOpen }
+          setReceipts(updatedReceipts)
         } else {
           throw new Error(result.error || "Não foi possível obter a URL do comprovante")
         }
@@ -413,44 +413,78 @@ export function AdminApproveInvestmentModal({
                 <Label className="flex items-center gap-2">
                   <Eye className="w-4 h-4" />
                   Visualização do Comprovante
+                  {receipts.length > 1 && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({currentReceiptIndex + 1} de {receipts.length})
+                    </span>
+                  )}
                 </Label>
-                {receipt && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleViewReceipt}
-                    className="flex items-center gap-2"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Abrir em Nova Aba
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {receipts.length > 1 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentReceiptIndex((prev) => 
+                          prev > 0 ? prev - 1 : receipts.length - 1
+                        )}
+                        className="h-8 w-8"
+                        disabled={fetchingData}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentReceiptIndex((prev) => 
+                          prev < receipts.length - 1 ? prev + 1 : 0
+                        )}
+                        className="h-8 w-8"
+                        disabled={fetchingData}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </>
+                  )}
+                  {receipts.length > 0 && receipts[currentReceiptIndex] && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewReceipt()}
+                      className="flex items-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Abrir em Nova Aba
+                    </Button>
+                  )}
+                </div>
               </div>
               {fetchingData ? (
                 <div className="flex items-center justify-center h-[400px] bg-gray-50 rounded-lg border">
                   <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    <span>Carregando comprovante...</span>
+                    <span>Carregando comprovante(s)...</span>
                   </div>
                 </div>
-              ) : receiptUrl ? (
+              ) : receipts.length > 0 && receipts[currentReceiptIndex] ? (
                 <div className="bg-gray-50 rounded-lg border overflow-hidden">
-                  {receipt?.file_type?.startsWith('image/') ? (
+                  {receipts[currentReceiptIndex].file_type?.startsWith('image/') ? (
                     <div className="relative w-full h-[400px] flex items-center justify-center bg-gray-100">
                       <img
-                        src={receiptUrl}
-                        alt={receipt.file_name}
+                        src={receipts[currentReceiptIndex].signed_url}
+                        alt={receipts[currentReceiptIndex].file_name}
                         className="max-w-full max-h-full object-contain"
+                        key={receipts[currentReceiptIndex].id}
                         onError={(e) => {
                           const target = e.target as HTMLImageElement
                           target.style.display = 'none'
                           const parent = target.parentElement
-                          if (parent) {
+                          if (parent && receipts[currentReceiptIndex].signed_url) {
                             parent.innerHTML = `
                               <div class="flex flex-col items-center justify-center h-full p-4 text-center">
                                 <FileText class="w-12 h-12 text-muted-foreground mb-2" />
                                 <p class="text-sm text-muted-foreground">Erro ao carregar imagem</p>
-                                <a href="${receiptUrl}" target="_blank" class="mt-2 text-sm text-blue-600 hover:underline">
+                                <a href="${receipts[currentReceiptIndex].signed_url}" target="_blank" class="mt-2 text-sm text-blue-600 hover:underline">
                                   Abrir em nova aba
                                 </a>
                               </div>
@@ -459,19 +493,20 @@ export function AdminApproveInvestmentModal({
                         }}
                       />
                     </div>
-                  ) : receipt?.file_type === 'application/pdf' ? (
+                  ) : receipts[currentReceiptIndex].file_type === 'application/pdf' ? (
                     <div className="w-full h-[400px] flex flex-col">
                       <iframe
-                        src={receiptUrl}
+                        src={receipts[currentReceiptIndex].signed_url}
                         className="w-full h-full border-0"
-                        title={receipt.file_name}
+                        title={receipts[currentReceiptIndex].file_name}
+                        key={receipts[currentReceiptIndex].id}
                       />
                       <div className="p-2 bg-gray-100 border-t flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground truncate">{receipt.file_name}</span>
+                        <span className="text-xs text-muted-foreground truncate">{receipts[currentReceiptIndex].file_name}</span>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={handleViewReceipt}
+                          onClick={() => handleViewReceipt()}
                           className="flex items-center gap-1 h-7 text-xs"
                         >
                           <Eye className="w-3 h-3" />
@@ -485,11 +520,11 @@ export function AdminApproveInvestmentModal({
                       <p className="text-sm text-muted-foreground mb-2">
                         Tipo de arquivo não suportado para visualização
                       </p>
-                      <p className="text-xs text-muted-foreground mb-3 truncate w-full">{receipt.file_name}</p>
+                      <p className="text-xs text-muted-foreground mb-3 truncate w-full">{receipts[currentReceiptIndex].file_name}</p>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleViewReceipt}
+                        onClick={() => handleViewReceipt()}
                         className="flex items-center gap-2"
                       >
                         <Eye className="w-4 h-4" />
@@ -497,22 +532,6 @@ export function AdminApproveInvestmentModal({
                       </Button>
                     </div>
                   )}
-                </div>
-              ) : receipt ? (
-                <div className="flex flex-col items-center justify-center h-[400px] bg-yellow-50 rounded-lg border border-yellow-200 p-4 text-center">
-                  <FileText className="w-12 h-12 text-yellow-600 mb-2" />
-                  <span className="text-sm text-yellow-800">
-                    Erro ao carregar comprovante. Tente abrir manualmente.
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleViewReceipt}
-                    className="mt-3 flex items-center gap-2"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Tentar abrir
-                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-[400px] bg-gray-50 rounded-lg border p-4 text-center">

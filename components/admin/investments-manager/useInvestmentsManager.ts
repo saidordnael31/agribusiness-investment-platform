@@ -10,7 +10,8 @@ export interface Investment {
   amount: number
   monthly_return_rate: number
   commitment_period: number
-  status: 'pending' | 'active' | 'withdrawn'
+  profitability_liquidity?: string
+  status: 'pending' | 'active' | 'withdrawn' | 'cancelled'
   created_at: string
   updated_at: string
   payment_date?: string | null
@@ -115,6 +116,8 @@ export function useInvestmentsManager() {
   })
   const [receiptViewerOpen, setReceiptViewerOpen] = useState(false)
   const [selectedReceipt, setSelectedReceipt] = useState<SelectedReceipt | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [selectedInvestmentForEdit, setSelectedInvestmentForEdit] = useState<Investment | null>(null)
   const [filters, setFilters] = useState<InvestmentFilters>({
     status: "all",
     quotaType: "all",
@@ -239,6 +242,20 @@ export function useInvestmentsManager() {
     fetchInvestments(currentPage, filters)
   }
 
+  const handleEditInvestment = (investment: Investment) => {
+    setSelectedInvestmentForEdit(investment)
+    setEditModalOpen(true)
+  }
+
+  const closeEditModal = () => {
+    setEditModalOpen(false)
+    setSelectedInvestmentForEdit(null)
+  }
+
+  const handleEditSuccess = () => {
+    fetchInvestments(currentPage, filters)
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -247,6 +264,8 @@ export function useInvestmentsManager() {
         return { variant: "secondary" as const, className: "bg-green-100 text-green-800 border-green-200", label: "Ativo" }
       case 'withdrawn':
         return { variant: "secondary" as const, className: "bg-gray-100 text-gray-800 border-gray-200", label: "Resgatado" }
+      case 'cancelled':
+        return { variant: "secondary" as const, className: "bg-red-100 text-red-800 border-red-200", label: "Cancelado" }
       default:
         return { variant: "secondary" as const, className: "", label: status }
     }
@@ -408,6 +427,8 @@ export function useInvestmentsManager() {
     exportOptions,
     receiptViewerOpen,
     selectedReceipt,
+    editModalOpen,
+    selectedInvestmentForEdit,
     filters,
     setExportModalOpen,
     setExportOptions,
@@ -417,6 +438,9 @@ export function useInvestmentsManager() {
     handleUploadReceipt,
     handleViewReceipt,
     handleApprovalSuccess,
+    handleEditInvestment,
+    closeEditModal,
+    handleEditSuccess,
     getStatusBadge,
     getQuotaTypeBadge,
     exportInvestments,

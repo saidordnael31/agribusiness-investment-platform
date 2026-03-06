@@ -48,6 +48,8 @@ import {
   Mail,
   ZoomIn,
   ZoomOut,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { CommissionSimulator } from "./commission-simulator";
 import { SalesChart } from "./sales-chart";
@@ -462,11 +464,13 @@ export function DistributorDashboard() {
   const [savingNotes, setSavingNotes] = useState<string | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
-  const [selectedReceipt, setSelectedReceipt] = useState<{
-    investmentId: string;
+  const [allReceipts, setAllReceipts] = useState<Array<{
+    id: string;
     receiptUrl: string;
     fileName: string;
-  } | null>(null);
+    fileType: string;
+  }>>([]);
+  const [currentReceiptIndex, setCurrentReceiptIndex] = useState(0);
   const [receiptZoom, setReceiptZoom] = useState(1);
   const receiptContainerRef = useRef<HTMLDivElement | null>(null);
   const [isDraggingReceipt, setIsDraggingReceipt] = useState(false);
@@ -2840,30 +2844,52 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      // Tentar todos os comprovantes até encontrar um que funcione
-      for (let i = 0; i < data.data.length; i++) {
-        const receipt = data.data[i];
-        
-        const viewResponse = await fetch(`/api/pix-receipts/view?receiptId=${receipt.id}`);
-        const viewData = await viewResponse.json();
+      // Buscar URLs de todos os comprovantes
+      const receiptsWithUrls: Array<{
+        id: string;
+        receiptUrl: string;
+        fileName: string;
+        fileType: string;
+      }> = [];
 
-        if (viewData.success && viewData.data.signed_url) {
-          setSelectedReceipt({
-            investmentId,
-            receiptUrl: viewData.data.signed_url,
-            fileName: receipt.file_name
-          });
-          setReceiptModalOpen(true);
-          return; // Sair do loop se encontrou um comprovante válido
+      for (const receipt of data.data) {
+        try {
+          const viewResponse = await fetch(`/api/pix-receipts/view?receiptId=${receipt.id}`);
+          const viewData = await viewResponse.json();
+
+          if (viewData.success && viewData.data.signed_url) {
+            receiptsWithUrls.push({
+              id: receipt.id,
+              receiptUrl: viewData.data.signed_url,
+              fileName: receipt.file_name,
+              fileType: receipt.file_type || receipt.mime_type || 'image/jpeg'
+            });
+          }
+        } catch (err) {
+          console.error(`Erro ao buscar URL do comprovante ${receipt.id}:`, err);
         }
       }
+
+      if (receiptsWithUrls.length === 0) {
+        toast({
+          title: "Erro ao visualizar comprovantes",
+          description: "Nenhum dos comprovantes encontrados pôde ser visualizado. Verifique se os arquivos existem no storage.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Armazenar todos os comprovantes e abrir o modal
+      setAllReceipts(receiptsWithUrls);
+      setCurrentReceiptIndex(0);
+      setReceiptModalOpen(true);
       
-      // Se chegou aqui, nenhum comprovante funcionou
-      toast({
-        title: "Erro ao visualizar comprovante",
-        description: "Nenhum dos comprovantes encontrados pôde ser visualizado. Verifique se os arquivos existem no storage.",
-        variant: "destructive"
-      });
+      if (receiptsWithUrls.length > 1) {
+        toast({
+          title: `${receiptsWithUrls.length} comprovantes encontrados`,
+          description: "Use as setas para navegar entre os comprovantes.",
+        });
+      }
     } catch (error: any) {
       console.error("❌ ERRO GERAL ao buscar comprovante:", error);
       console.error("Stack trace:", error.stack);
@@ -5467,20 +5493,55 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <DialogTitle className="flex items-center gap-2">
                 <Eye className="w-5 h-5" />
                 Comprovante de Pagamento
+                {allReceipts.length > 1 && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({currentReceiptIndex + 1} de {allReceipts.length})
+                  </span>
+                )}
               </DialogTitle>
               <DialogDescription>
-                Visualize o comprovante de pagamento do investimento
+                Visualize o(s) comprovante(s) de pagamento do investimento
               </DialogDescription>
             </DialogHeader>
 
-            {selectedReceipt && (
+            {allReceipts.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Arquivo: {selectedReceipt.fileName}
+                    Arquivo: {allReceipts[currentReceiptIndex].fileName}
                   </p>
                   <div className="flex gap-2 items-center">
-                    {!isPdfUrl(selectedReceipt.receiptUrl) && (
+                    {/* Navegação entre comprovantes */}
+                    {allReceipts.length > 1 && (
+                      <div className="flex items-center gap-1 mr-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setCurrentReceiptIndex((prev) => 
+                            prev > 0 ? prev - 1 : allReceipts.length - 1
+                          )}
+                          className="h-8 w-8"
+                          disabled={loadingReceipt}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-xs text-muted-foreground px-2">
+                          {currentReceiptIndex + 1} / {allReceipts.length}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setCurrentReceiptIndex((prev) => 
+                            prev < allReceipts.length - 1 ? prev + 1 : 0
+                          )}
+                          className="h-8 w-8"
+                          disabled={loadingReceipt}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {!isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl) && (
                       <div className="flex items-center gap-1 mr-4">
                         <Button
                           variant="outline"
@@ -5510,7 +5571,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(selectedReceipt.receiptUrl, '_blank')}
+                      onClick={() => window.open(allReceipts[currentReceiptIndex].receiptUrl, '_blank')}
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Baixar
@@ -5518,7 +5579,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setReceiptModalOpen(false)}
+                      onClick={() => {
+                        setReceiptModalOpen(false);
+                        setAllReceipts([]);
+                        setCurrentReceiptIndex(0);
+                      }}
                     >
                       Fechar
                     </Button>
@@ -5528,49 +5593,51 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                 <div
                   ref={receiptContainerRef}
                   className={`border rounded-lg overflow-auto max-h-[70vh] select-none ${
-                    isPdfUrl(selectedReceipt.receiptUrl)
+                    isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl)
                       ? ""
                       : isDraggingReceipt
                         ? "cursor-grabbing"
                         : "cursor-grab"
                   }`}
                   onMouseDown={
-                    isPdfUrl(selectedReceipt.receiptUrl)
+                    isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl)
                       ? undefined
                       : handleReceiptMouseDown
                   }
                   onMouseMove={
-                    isPdfUrl(selectedReceipt.receiptUrl)
+                    isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl)
                       ? undefined
                       : handleReceiptMouseMove
                   }
                   onMouseUp={
-                    isPdfUrl(selectedReceipt.receiptUrl)
+                    isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl)
                       ? undefined
                       : handleReceiptMouseUp
                   }
                   onMouseLeave={
-                    isPdfUrl(selectedReceipt.receiptUrl)
+                    isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl)
                       ? undefined
                       : handleReceiptMouseUp
                   }
                 >
-                  {isPdfUrl(selectedReceipt.receiptUrl) ? (
+                  {isPdfUrl(allReceipts[currentReceiptIndex].receiptUrl) ? (
                     <iframe
-                      src={selectedReceipt.receiptUrl}
+                      src={allReceipts[currentReceiptIndex].receiptUrl}
                       className="w-full h-96"
-                      title="Comprovante PDF"
+                      title={`Comprovante PDF ${currentReceiptIndex + 1}`}
+                      key={allReceipts[currentReceiptIndex].id}
                     />
                   ) : (
                     <div className="flex items-center justify-center min-h-[40vh] p-4">
                       <img
-                        src={selectedReceipt.receiptUrl}
-                        alt="Comprovante de pagamento"
+                        src={allReceipts[currentReceiptIndex].receiptUrl}
+                        alt={`Comprovante de pagamento ${currentReceiptIndex + 1}`}
                         className="object-contain max-w-none"
                         style={{
                           width: `${receiptZoom * 100}%`,
                           height: "auto",
                         }}
+                        key={allReceipts[currentReceiptIndex].id}
                       />
                     </div>
                   )}
