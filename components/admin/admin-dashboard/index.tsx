@@ -144,6 +144,7 @@ export function AdminDashboard() {
             <TabsTrigger value="investments" className="text-xs sm:text-sm">Investimentos</TabsTrigger>
             <TabsTrigger value="clients-without-investments" className="text-xs sm:text-sm">Clientes sem Investimentos</TabsTrigger>
             <TabsTrigger value="contracts" className="text-xs sm:text-sm">Contratos</TabsTrigger>
+            <TabsTrigger value="commissions" className="text-xs sm:text-sm">Comissões</TabsTrigger>
             <TabsTrigger value="akintec" className="text-xs sm:text-sm">Akintec</TabsTrigger>
             <TabsTrigger value="hierarchy" className="text-xs sm:text-sm">Hierarquia</TabsTrigger>
             <TabsTrigger value="recurrence" className="text-xs sm:text-sm">Recorrência</TabsTrigger>
@@ -152,7 +153,6 @@ export function AdminDashboard() {
             <TabsTrigger value="promotions" className="text-xs sm:text-sm">Promoções</TabsTrigger>
             <TabsTrigger value="bonifications" className="text-xs sm:text-sm">Bonificações</TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm">Usuários</TabsTrigger>
-            <TabsTrigger value="commissions" className="text-xs sm:text-sm">Comissões</TabsTrigger>
             <TabsTrigger value="reports" className="text-xs sm:text-sm">Relatórios</TabsTrigger>
           </TabsList>
         </div>

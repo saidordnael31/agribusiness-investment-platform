@@ -33,12 +33,17 @@ import {
   Search,
   Users,
   DollarSign,
+  Calendar,
 } from "lucide-react"
 import * as XLSX from "xlsx"
 import {
   calculateNewCommissionLogic,
   type NewCommissionCalculation,
   COMMISSION_RATES,
+  getFifthBusinessDayOfMonth,
+  getInvestorMonthlyRate,
+  getLiquidityCycleMonths,
+  type LiquidityOption,
 } from "@/lib/commission-calculator"
 import { useToast } from "@/hooks/use-toast"
 
@@ -50,6 +55,10 @@ interface AdminCommissionDetail extends NewCommissionCalculation {
   investorType?: "investor"
   advisorType?: "assessor" | "assessor_externo" | null
   officeType?: "escritorio" | null
+  /** Liquidez da rentabilidade do investimento (mensal, semestral, anual, bienal, trienal) */
+  liquidity?: string
+  /** Período de compromisso em meses (para cálculo do valor atual) */
+  commitmentPeriod?: number
 }
 
 type PeriodFilter = "all" | "this_month" | "next_month" | "next_6_months"
@@ -62,6 +71,8 @@ export function AdminCommissionsDetail() {
   const [roleFilter, setRoleFilter] = useState<"all" | "office" | "advisor" | "advisor_externo" | "investor">("all")
   const [selectedAdvisorFilter, setSelectedAdvisorFilter] = useState<string>("all")
   const [selectedOfficeFilter, setSelectedOfficeFilter] = useState<string>("all")
+  /** "" seria "próximo"; Radix Select não permite value="", então usamos "__next__". */
+  const [selectedPaymentDateKey, setSelectedPaymentDateKey] = useState<string>("__next__")
 
   useEffect(() => {
     fetchCommissions()
@@ -289,6 +300,8 @@ export function AdminCommissionsDetail() {
           investorType: "investor",
           advisorType: advisor?.role ?? null,
           officeType: office ? "escritorio" : null,
+          liquidity: investment.profitability_liquidity || "mensal",
+          commitmentPeriod: investment.commitment_period ?? 12,
           pixReceipts: investmentReceipts.map((r) => ({
             id: r.id,
             file_name: r.file_name,
@@ -362,28 +375,36 @@ export function AdminCommissionsDetail() {
   /**
    * Calcula a próxima data de pagamento (5º dia útil/cutoff) considerando
    * todas as datas de paymentDueDate das comissões.
+   * Usa sempre a data em UTC para evitar que meia-noite local mude o dia (ex.: 07/04 UTC → 06/04 BRT).
    */
   const nextPaymentDate = useMemo(() => {
     if (commissions.length === 0) return null
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const now = new Date()
+    const todayUTC = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      0, 0, 0, 0,
+    ))
 
     const uniqueDates = new Map<string, Date>()
 
     commissions.forEach((c) => {
       c.paymentDueDate.forEach((d) => {
         const dt = new Date(d)
-        dt.setHours(0, 0, 0, 0)
-        const key = dt.toISOString().split("T")[0]
+        const key = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`
         if (!uniqueDates.has(key)) {
-          uniqueDates.set(key, dt)
+          uniqueDates.set(
+            key,
+            new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), 0, 0, 0, 0)),
+          )
         }
       })
     })
 
     const futureDates = Array.from(uniqueDates.values())
-      .filter((d) => d >= today)
+      .filter((d) => d.getTime() >= todayUTC.getTime())
       .sort((a, b) => a.getTime() - b.getTime())
 
     if (futureDates.length === 0) {
@@ -392,6 +413,67 @@ export function AdminCommissionsDetail() {
 
     return futureDates[0]
   }, [commissions])
+
+  /**
+   * Lista de datas de pagamento disponíveis para seleção: uma entrada por mês (5º dia útil).
+   * Chave = "YYYY-MM" para não duplicar o mesmo mês.
+   * Datas normalizadas em UTC para que o dia do calendário seja o mesmo em qualquer fuso (ex.: 07/04).
+   */
+  const availablePaymentDates = useMemo(() => {
+    const byMonthKey = new Map<string, Date>()
+    const now = new Date()
+    const startYear = now.getUTCFullYear()
+    const startMonth = now.getUTCMonth() - 12
+    for (let i = 0; i < 12 + 24; i++) {
+      let y = startYear
+      let m = startMonth + i
+      while (m < 0) {
+        m += 12
+        y -= 1
+      }
+      while (m > 11) {
+        m -= 12
+        y += 1
+      }
+      const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`
+      if (byMonthKey.has(monthKey)) continue
+      const fifth = getFifthBusinessDayOfMonth(y, m)
+      const fifthUTC = new Date(Date.UTC(
+        fifth.getUTCFullYear(),
+        fifth.getUTCMonth(),
+        fifth.getUTCDate(),
+        0, 0, 0, 0,
+      ))
+      byMonthKey.set(monthKey, fifthUTC)
+    }
+    return Array.from(byMonthKey.entries())
+      .map(([key, date]) => ({ key, date }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+  }, [])
+
+  /** Data de pagamento em exibição: selecionada pelo usuário ou "próxima" por padrão. */
+  const displayPaymentDate = useMemo(() => {
+    if (selectedPaymentDateKey === "__next__") return nextPaymentDate
+    const found = availablePaymentDates.find((p) => p.key === selectedPaymentDateKey)
+    return found ? found.date : nextPaymentDate
+  }, [selectedPaymentDateKey, availablePaymentDates, nextPaymentDate])
+
+  /** Formata data para rótulo no select: "DD/MM/YYYY (5º dia útil de mês/ano)". Usa UTC para consistência. */
+  const formatPaymentDateLabel = (date: Date) => {
+    const monthYear = date.toLocaleDateString("pt-BR", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    })
+    return `${formatDate(date)} (5º dia útil de ${monthYear})`
+  }
+
+  /** Quando não há "próximo" pagamento, selecionar a data mais recente disponível. */
+  const lastAvailableDateKey = availablePaymentDates[availablePaymentDates.length - 1]?.key
+  useEffect(() => {
+    if (commissions.length === 0 || nextPaymentDate || !lastAvailableDateKey) return
+    if (selectedPaymentDateKey === "__next__") setSelectedPaymentDateKey(lastAvailableDateKey)
+  }, [commissions.length, nextPaymentDate, lastAvailableDateKey, selectedPaymentDateKey])
 
   interface NextPaymentRow {
     commission: AdminCommissionDetail
@@ -439,22 +521,27 @@ export function AdminCommissionsDetail() {
   }
 
   /**
-   * Linhas referentes APENAS à próxima data de pagamento.
+   * Linhas referentes à data de pagamento selecionada (ou próxima).
+   * Comparação feita em UTC para que o dia do calendário seja consistente (ex.: 07/04 em todo lugar).
    */
-  const rowsForNextPayment: NextPaymentRow[] = useMemo(() => {
-    if (!nextPaymentDate) return []
+  const rowsForSelectedDate: NextPaymentRow[] = useMemo(() => {
+    if (!displayPaymentDate) return []
 
-    const targetStr = nextPaymentDate.toISOString().split("T")[0]
+    const targetYear = displayPaymentDate.getUTCFullYear()
+    const targetMonth = displayPaymentDate.getUTCMonth()
+    const isMonthKey = selectedPaymentDateKey.length === 7 && selectedPaymentDateKey.indexOf("-") === 4 // "YYYY-MM"
+    const targetKey = `${displayPaymentDate.getUTCFullYear()}-${String(displayPaymentDate.getUTCMonth() + 1).padStart(2, "0")}-${String(displayPaymentDate.getUTCDate()).padStart(2, "0")}`
 
     const rows: NextPaymentRow[] = []
 
     commissions.forEach((commission) => {
       commission.paymentDueDate.forEach((d, idx) => {
         const dt = new Date(d)
-        dt.setHours(0, 0, 0, 0)
-        const key = dt.toISOString().split("T")[0]
-
-        if (key === targetStr) {
+        const dtKey = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`
+        const match = isMonthKey
+          ? dt.getUTCFullYear() === targetYear && dt.getUTCMonth() === targetMonth
+          : dtKey === targetKey
+        if (match) {
           const amounts = getAmountsForPaymentIndex(commission, idx)
           rows.push({
             commission,
@@ -466,33 +553,33 @@ export function AdminCommissionsDetail() {
     })
 
     return rows
-  }, [commissions, nextPaymentDate])
+  }, [commissions, displayPaymentDate, selectedPaymentDateKey])
 
   const advisorOptions = useMemo(() => {
     const map = new Map<string, string>()
-    rowsForNextPayment.forEach(({ commission }) => {
+    rowsForSelectedDate.forEach(({ commission }) => {
       if (commission.advisorId && commission.advisorName) {
         map.set(commission.advisorId, commission.advisorName)
       }
     })
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
-  }, [rowsForNextPayment])
+  }, [rowsForSelectedDate])
 
   const officeOptions = useMemo(() => {
     const map = new Map<string, string>()
-    rowsForNextPayment.forEach(({ commission }) => {
+    rowsForSelectedDate.forEach(({ commission }) => {
       if (commission.officeId && commission.officeName) {
         map.set(commission.officeId, commission.officeName)
       }
     })
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
-  }, [rowsForNextPayment])
+  }, [rowsForSelectedDate])
 
   /**
-   * Filtros (texto + papel) aplicados SOBRE as linhas da próxima data de pagamento.
+   * Filtros (texto + papel) aplicados SOBRE as linhas da data de pagamento selecionada.
    */
   const filteredRows: NextPaymentRow[] = useMemo(() => {
-    let list = rowsForNextPayment
+    let list = rowsForSelectedDate
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase()
@@ -536,22 +623,22 @@ export function AdminCommissionsDetail() {
     }
 
     return list
-  }, [rowsForNextPayment, searchTerm, roleFilter, selectedAdvisorFilter, selectedOfficeFilter])
+  }, [rowsForSelectedDate, searchTerm, roleFilter, selectedAdvisorFilter, selectedOfficeFilter])
 
   const totalOffice = filteredRows.reduce((sum, r) => sum + r.officeAmount, 0)
   const totalAdvisor = filteredRows.reduce((sum, r) => sum + r.advisorAmount, 0)
   const totalInvestor = filteredRows.reduce((sum, r) => sum + r.investorAmount, 0)
 
   const nextCutoffDate = useMemo(() => {
-    if (!nextPaymentDate) return null
-    let year = nextPaymentDate.getFullYear()
-    let month = nextPaymentDate.getMonth() - 1
+    if (!displayPaymentDate) return null
+    let year = displayPaymentDate.getFullYear()
+    let month = displayPaymentDate.getMonth() - 1
     if (month < 0) {
       month = 11
       year -= 1
     }
     return new Date(year, month, 20)
-  }, [nextPaymentDate])
+  }, [displayPaymentDate])
 
   const getCommissionTooltip = (
     kind: "office" | "advisor" | "investor",
@@ -665,240 +752,402 @@ export function AdminCommissionsDetail() {
     return String(days)
   }
 
+  /** Retorna label curto para exibir abaixo da comissão: "x%/x dias". */
+  const getCommissionRateAndProrataLabel = (
+    kind: "office" | "advisor" | "investor",
+    commission: AdminCommissionDetail,
+    paymentIndex: number,
+    row: NextPaymentRow,
+  ): string => {
+    let rate = 0
+    if (kind === "office") {
+      rate = COMMISSION_RATES.escritorio
+    } else if (kind === "advisor") {
+      rate = commission.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor
+    } else {
+      rate = COMMISSION_RATES.investidor
+    }
+    const pct = (rate * 100).toFixed(0)
+
+    if (paymentIndex === 0) {
+      const days = calculateProrataDays(kind, row)
+      return days ? `${pct}%/${days} dias` : `${pct}%`
+    }
+    return `${pct}%/30 dias`
+  }
+
+  /** Retorna label da liquidez para exibir na comissão do investidor (Mensal, Semestral, Anual, etc.). */
+  const getLiquidityLabel = (liquidity?: string): string => {
+    if (!liquidity) return "Mensal"
+    const raw = String(liquidity).toLowerCase()
+    if (raw.includes("trienal")) return "Trienal"
+    if (raw.includes("bienal")) return "Bienal"
+    if (raw.includes("anual")) return "Anual"
+    if (raw.includes("semestral")) return "Semestral"
+    return "Mensal"
+  }
+
+  /** Normaliza string de liquidez para LiquidityOption (cálculo). */
+  const toLiquidityOption = (liquidity?: string): LiquidityOption => {
+    if (!liquidity) return "mensal"
+    const raw = String(liquidity).toLowerCase()
+    if (raw.includes("trienal")) return "trienal"
+    if (raw.includes("bienal")) return "bienal"
+    if (raw.includes("anual")) return "anual"
+    if (raw.includes("semestral")) return "semestral"
+    return "mensal"
+  }
+
+  /**
+   * Valor atual do investimento na data de referência.
+   * Mensal: não acumula (juros simples) → valor atual = valor investido.
+   * Outras liquidezes: acumula no ciclo (semestral 6m, anual 12m, bienal 24m, trienal 36m); retira no fim do ciclo e recomeça.
+   */
+  const getCurrentValue = (
+    commission: AdminCommissionDetail,
+    referenceDate: Date | null,
+  ): number => {
+    const details = getCurrentValueDetails(commission, referenceDate)
+    return details.currentValue
+  }
+
+  /**
+   * Detalhes do valor acumulado para exibir no subtítulo: meses no ciclo e rendimento total.
+   * Para liquidez mensal, mesesInCycle = 0 e totalRendimento = 0.
+   */
+  const getCurrentValueDetails = (
+    commission: AdminCommissionDetail,
+    referenceDate: Date | null,
+  ): { currentValue: number; monthsInCycle: number; totalRendimento: number } => {
+    const amount = Number(commission.amount)
+    const fallback = { currentValue: amount, monthsInCycle: 0, totalRendimento: 0 }
+    if (!amount || !commission.paymentDate) return fallback
+    const ref = referenceDate ? new Date(referenceDate) : new Date()
+    ref.setHours(0, 0, 0, 0)
+    const start = new Date(commission.paymentDate)
+    start.setHours(0, 0, 0, 0)
+    if (ref.getTime() < start.getTime()) return fallback
+
+    const liquidity = toLiquidityOption(commission.liquidity)
+    if (liquidity === "mensal") return fallback
+
+    const cycleMonths = getLiquidityCycleMonths(liquidity)
+    const commitmentPeriod = commission.commitmentPeriod ?? 12
+    const monthlyRate = getInvestorMonthlyRate(commitmentPeriod, liquidity)
+    if (!monthlyRate || monthlyRate <= 0) return fallback
+
+    const monthsSinceStart = Math.floor(
+      (ref.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30),
+    )
+    if (monthsSinceStart <= 0) return fallback
+
+    const monthsInCurrentCycle = monthsSinceStart % cycleMonths
+    const currentValue = amount * Math.pow(1 + monthlyRate, monthsInCurrentCycle)
+    const totalRendimento = currentValue - amount
+    return {
+      currentValue,
+      monthsInCycle: monthsInCurrentCycle,
+      totalRendimento,
+    }
+  }
+
   const exportToExcel = () => {
     if (filteredRows.length === 0) {
       toast({
         title: "Nada para exportar",
-        description: "Não há comissões na próxima data de pagamento com os filtros atuais.",
+        description: displayPaymentDate
+          ? `Não há comissões na data ${formatDate(displayPaymentDate)} com os filtros atuais.`
+          : "Não há comissões na data de pagamento selecionada com os filtros atuais.",
       })
       return
     }
 
     const workbook = XLSX.utils.book_new()
+    const paymentDateStr = displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"
+    const cutoffStr = nextCutoffDate ? formatDate(nextCutoffDate) : "N/A"
 
-    // --- ABA 1: ESCRITÓRIOS ---
+    // --- ABA 1: RESUMO ---
+    const summaryData = [
+      ["RELATÓRIO DE COMISSÕES"],
+      [""],
+      ["Data do pagamento", paymentDateStr],
+      ["Período de corte", cutoffStr],
+      ["Total de lançamentos", filteredRows.length],
+      [""],
+      ["TOTAIS (data selecionada)"],
+      ["Com. Escritório", formatCurrency(totalOffice)],
+      ["Com. Assessor", formatCurrency(totalAdvisor)],
+      ["Com. Investidor", formatCurrency(totalInvestor)],
+      ["TOTAL GERAL", formatCurrency(totalOffice + totalAdvisor + totalInvestor)],
+      [""],
+      ["Gerado em", new Date().toLocaleString("pt-BR")],
+    ]
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+    summarySheet["!cols"] = [{ wch: 22 }, { wch: 28 }]
+    XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo")
+
+    // Ordenação padrão para todas as abas
+    const sortRows = (a: NextPaymentRow, b: NextPaymentRow) => {
+      const aOff = (a.commission.officeName || "").localeCompare(b.commission.officeName || "")
+      if (aOff !== 0) return aOff
+      const aAdv = (a.commission.advisorName || "").localeCompare(b.commission.advisorName || "")
+      if (aAdv !== 0) return aAdv
+      return (a.commission.investorName || "").localeCompare(b.commission.investorName || "")
+    }
+    const sortedRows = [...filteredRows].sort(sortRows)
+
+    // --- ABA 2: COMISSÕES (dados completos, colunas em ordem lógica) ---
+    const mainHeaders = [
+      "Assessor",
+      "Escritório",
+      "Tipo Assessor",
+      "Investidor",
+      "Email Investidor",
+      "Valor Investido",
+      "Data Entrada",
+      "Liquidez",
+      "Valor Atual",
+      "Meses no Ciclo",
+      "Rendimento",
+      "Período Corte",
+      "Data Pagto",
+      "Com. Escritório",
+      "Escr. %/dias",
+      "Com. Assessor",
+      "Assess. %/dias",
+      "Com. Investidor",
+      "Inv. %/dias",
+    ]
+    const mainData: (string | number)[][] = [mainHeaders]
+    for (const row of sortedRows) {
+      const c = row.commission
+      const d = getCurrentValueDetails(c, displayPaymentDate ?? null)
+      const tipoAssessor =
+        c.advisorRole === "assessor_externo" ? "Externo" : c.advisorRole === "assessor" ? "Interno" : "—"
+      mainData.push([
+        c.advisorName || "N/A",
+        c.officeName || "N/A",
+        tipoAssessor,
+        c.investorName ?? "",
+        c.investorEmail || "",
+        Number(c.amount),
+        formatDate(c.paymentDate),
+        getLiquidityLabel(c.liquidity),
+        Math.round(d.currentValue * 100) / 100,
+        d.monthsInCycle,
+        Math.round(d.totalRendimento * 100) / 100,
+        cutoffStr,
+        paymentDateStr,
+        Math.round(row.officeAmount * 100) / 100,
+        getCommissionRateAndProrataLabel("office", c, row.paymentIndex, row),
+        Math.round(row.advisorAmount * 100) / 100,
+        getCommissionRateAndProrataLabel("advisor", c, row.paymentIndex, row),
+        Math.round(row.investorAmount * 100) / 100,
+        getCommissionRateAndProrataLabel("investor", c, row.paymentIndex, row),
+      ])
+    }
+    const mainSheet = XLSX.utils.aoa_to_sheet(mainData)
+    mainSheet["!cols"] = [
+      { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 28 }, { wch: 30 },
+      { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, mainSheet, "Comissões")
+
+    // --- ABA 3: ESCRITÓRIOS (agrupado por assessor, com subtotais) ---
     const officeHeaders = [
       "Escritório",
       "Assessor",
+      "Tipo",
       "Investidor",
-      "Email Investidor",
+      "Email",
       "Valor Investido",
-      "Data do Depósito",
-      "Próximo Pagamento (5º dia útil)",
-      "Dias desde o depósito",
-      "Dias pró-rata (D+60)",
-      "Período de Corte",
-      "Comissão Escritório",
+      "Data Entrada",
+      "Liquidez",
+      "Valor Atual",
+      "Meses Ciclo",
+      "Rendimento",
+      "Período Corte",
+      "Data Pagto",
+      "Com. Escritório",
+      "%/dias",
     ]
-
-    const officeSheetData: any[][] = []
-
-    const officeRowsSorted = [...filteredRows].sort((a, b) => {
-      const aAdv = (a.commission.advisorName || "").localeCompare(b.commission.advisorName || "")
-      if (aAdv !== 0) return aAdv
-      const aOff = (a.commission.officeName || "").localeCompare(b.commission.officeName || "")
-      if (aOff !== 0) return aOff
-      return (a.commission.investorName || "").localeCompare(b.commission.investorName || "")
-    })
-
+    const officeSheetData: (string | number)[][] = []
+    const officeRowsSorted = [...filteredRows].sort(sortRows)
     let currentAdvisorOffice: string | null = null
     let advisorOfficeSubtotal = 0
-
     for (const row of officeRowsSorted) {
       const { commission: c, officeAmount } = row
       const advisorLabel = c.advisorName || "Sem Assessor"
-
+      const tipo = c.advisorRole === "assessor_externo" ? "Externo" : c.advisorRole === "assessor" ? "Interno" : "—"
+      const d = getCurrentValueDetails(c, displayPaymentDate ?? null)
       if (advisorLabel !== currentAdvisorOffice) {
-        // fecha subtotal anterior
         if (currentAdvisorOffice !== null) {
-          officeSheetData.push([
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "Subtotal Escritório por Assessor",
-            formatCurrency(advisorOfficeSubtotal),
-          ])
+          officeSheetData.push(["", "", "", "", "", "", "", "", "", "", "", "", "Subtotal", formatCurrency(advisorOfficeSubtotal)])
           officeSheetData.push([])
         }
-
         currentAdvisorOffice = advisorLabel
         advisorOfficeSubtotal = 0
-
         officeSheetData.push([`Assessor: ${advisorLabel}`])
         officeSheetData.push(officeHeaders)
       }
-
       advisorOfficeSubtotal += officeAmount
-
       officeSheetData.push([
         c.officeName || "N/A",
         advisorLabel,
-        c.investorName,
+        tipo,
+        c.investorName ?? "",
         c.investorEmail || "",
-        formatCurrency(c.amount),
+        Number(c.amount),
         formatDate(c.paymentDate),
-        nextPaymentDate ? formatDate(nextPaymentDate) : "",
-        calculateDaysSinceDeposit(c, nextPaymentDate),
-        calculateProrataDays("office", row),
-        nextCutoffDate ? formatDate(nextCutoffDate) : "",
-        formatCurrency(officeAmount),
+        getLiquidityLabel(c.liquidity),
+        Math.round(d.currentValue * 100) / 100,
+        d.monthsInCycle,
+        Math.round(d.totalRendimento * 100) / 100,
+        cutoffStr,
+        paymentDateStr,
+        Math.round(officeAmount * 100) / 100,
+        getCommissionRateAndProrataLabel("office", c, row.paymentIndex, row),
       ])
     }
-
     if (currentAdvisorOffice !== null) {
-      officeSheetData.push([
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "Subtotal Escritório por Assessor",
-        formatCurrency(advisorOfficeSubtotal),
-      ])
+      officeSheetData.push(["", "", "", "", "", "", "", "", "", "", "", "", "Subtotal", formatCurrency(advisorOfficeSubtotal)])
     }
-
     const officeSheet = XLSX.utils.aoa_to_sheet(officeSheetData)
+    officeSheet["!cols"] = [
+      { wch: 22 }, { wch: 20 }, { wch: 8 }, { wch: 28 }, { wch: 30 },
+      { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+    ]
     XLSX.utils.book_append_sheet(workbook, officeSheet, "Escritórios")
 
-    // --- ABA 2: ASSESSORES ---
+    // --- ABA 4: ASSESSORES (agrupado, com subtotais) ---
     const advisorHeaders = [
       "Assessor",
       "Escritório",
+      "Tipo",
       "Investidor",
-      "Email Investidor",
+      "Email",
       "Valor Investido",
-      "Data do Depósito",
-      "Próximo Pagamento (5º dia útil)",
-      "Dias desde o depósito",
-      "Dias pró-rata (D+60)",
-      "Período de Corte",
-      "Comissão Assessor",
+      "Data Entrada",
+      "Liquidez",
+      "Valor Atual",
+      "Meses Ciclo",
+      "Rendimento",
+      "Período Corte",
+      "Data Pagto",
+      "Com. Assessor",
+      "%/dias",
     ]
-
-    const advisorSheetData: any[][] = []
-
-    const advisorRowsSorted = [...filteredRows].sort((a, b) => {
-      const aAdv = (a.commission.advisorName || "").localeCompare(b.commission.advisorName || "")
-      if (aAdv !== 0) return aAdv
-      return (a.commission.investorName || "").localeCompare(b.commission.investorName || "")
-    })
-
+    const advisorSheetData: (string | number)[][] = []
+    const advisorRowsSorted = [...filteredRows].sort(sortRows)
     let currentAdvisor: string | null = null
     let advisorSubtotal = 0
-
     for (const row of advisorRowsSorted) {
       const { commission: c, advisorAmount } = row
       const advisorLabel = c.advisorName || "Sem Assessor"
-
+      const tipo = c.advisorRole === "assessor_externo" ? "Externo" : c.advisorRole === "assessor" ? "Interno" : "—"
+      const d = getCurrentValueDetails(c, displayPaymentDate ?? null)
       if (advisorLabel !== currentAdvisor) {
         if (currentAdvisor !== null) {
-          advisorSheetData.push([
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "Subtotal Assessor",
-            formatCurrency(advisorSubtotal),
-          ])
+          advisorSheetData.push(["", "", "", "", "", "", "", "", "", "", "", "", "Subtotal", formatCurrency(advisorSubtotal)])
           advisorSheetData.push([])
         }
-
         currentAdvisor = advisorLabel
         advisorSubtotal = 0
-
         advisorSheetData.push([`Assessor: ${advisorLabel}`])
         advisorSheetData.push(advisorHeaders)
       }
-
       advisorSubtotal += advisorAmount
-
       advisorSheetData.push([
         advisorLabel,
         c.officeName || "N/A",
-        c.investorName,
+        tipo,
+        c.investorName ?? "",
         c.investorEmail || "",
-        formatCurrency(c.amount),
+        Number(c.amount),
         formatDate(c.paymentDate),
-        nextPaymentDate ? formatDate(nextPaymentDate) : "",
-        calculateDaysSinceDeposit(c, nextPaymentDate),
-        calculateProrataDays("advisor", row),
-        nextCutoffDate ? formatDate(nextCutoffDate) : "",
-        formatCurrency(advisorAmount),
+        getLiquidityLabel(c.liquidity),
+        Math.round(d.currentValue * 100) / 100,
+        d.monthsInCycle,
+        Math.round(d.totalRendimento * 100) / 100,
+        cutoffStr,
+        paymentDateStr,
+        Math.round(advisorAmount * 100) / 100,
+        getCommissionRateAndProrataLabel("advisor", c, row.paymentIndex, row),
       ])
     }
-
     if (currentAdvisor !== null) {
-      advisorSheetData.push([
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "Subtotal Assessor",
-        formatCurrency(advisorSubtotal),
-      ])
+      advisorSheetData.push(["", "", "", "", "", "", "", "", "", "", "", "", "Subtotal", formatCurrency(advisorSubtotal)])
     }
-
     const advisorSheet = XLSX.utils.aoa_to_sheet(advisorSheetData)
+    advisorSheet["!cols"] = [
+      { wch: 20 }, { wch: 22 }, { wch: 8 }, { wch: 28 }, { wch: 30 },
+      { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+    ]
     XLSX.utils.book_append_sheet(workbook, advisorSheet, "Assessores")
 
-    // --- ABA 3: INVESTIDORES ---
+    // --- ABA 5: INVESTIDORES (lista completa por investidor) ---
     const investorHeaders = [
       "Investidor",
-      "Email Investidor",
+      "Email",
       "Escritório",
       "Assessor",
+      "Tipo",
+      "Liquidez",
       "Valor Investido",
-      "Data do Depósito",
-      "Próximo Pagamento (5º dia útil)",
-      "Dias desde o depósito",
-      "Dias pró-rata (D+60)",
-      "Período de Corte",
-      "Comissão Investidor",
+      "Valor Atual",
+      "Meses Ciclo",
+      "Rendimento",
+      "Data Entrada",
+      "Período Corte",
+      "Data Pagto",
+      "Com. Investidor",
+      "%/dias",
     ]
-
-    const investorSheetData: any[][] = [investorHeaders]
-
+    const investorSheetData: (string | number)[][] = [investorHeaders]
     const investorRowsSorted = [...filteredRows].sort((a, b) =>
       (a.commission.investorName || "").localeCompare(b.commission.investorName || ""),
     )
-
     for (const row of investorRowsSorted) {
-      const { commission: c, investorAmount } = row
-
+      const c = row.commission
+      const d = getCurrentValueDetails(c, displayPaymentDate ?? null)
+      const tipo = c.advisorRole === "assessor_externo" ? "Externo" : c.advisorRole === "assessor" ? "Interno" : "—"
       investorSheetData.push([
-        c.investorName,
+        c.investorName ?? "",
         c.investorEmail || "",
         c.officeName || "N/A",
         c.advisorName || "N/A",
-        formatCurrency(c.amount),
+        tipo,
+        getLiquidityLabel(c.liquidity),
+        Number(c.amount),
+        Math.round(d.currentValue * 100) / 100,
+        d.monthsInCycle,
+        Math.round(d.totalRendimento * 100) / 100,
         formatDate(c.paymentDate),
-        nextPaymentDate ? formatDate(nextPaymentDate) : "",
-        calculateDaysSinceDeposit(c, nextPaymentDate),
-        calculateProrataDays("investor", row),
-        nextCutoffDate ? formatDate(nextCutoffDate) : "",
-        formatCurrency(investorAmount),
+        cutoffStr,
+        paymentDateStr,
+        Math.round(row.investorAmount * 100) / 100,
+        getCommissionRateAndProrataLabel("investor", c, row.paymentIndex, row),
       ])
     }
-
     const investorSheet = XLSX.utils.aoa_to_sheet(investorSheetData)
+    investorSheet["!cols"] = [
+      { wch: 28 }, { wch: 30 }, { wch: 22 }, { wch: 20 }, { wch: 8 },
+      { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+    ]
     XLSX.utils.book_append_sheet(workbook, investorSheet, "Investidores")
+
     const fileName = `comissoes_admin_${new Date().toISOString().split("T")[0]}.xlsx`
     XLSX.writeFile(workbook, fileName)
+
+    toast({
+      title: "Excel exportado",
+      description: "Relatório com Resumo, Comissões (completo), Escritórios, Assessores e Investidores.",
+      variant: "default",
+    })
   }
 
   const getStatusTextForExport = (commission: AdminCommissionDetail) => {
@@ -926,34 +1175,58 @@ export function AdminCommissionsDetail() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Próxima Data de Pagamento
-              </CardTitle>
-              <CardDescription>
-                Saiba exatamente quanto e para quem você vai pagar na próxima data de pagamento (5º dia útil / corte).
-              </CardDescription>
-              {nextPaymentDate && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Próximo pagamento em{" "}
-                  <span className="font-medium">
-                    {formatDate(nextPaymentDate)}
-                  </span>
-                  {filteredRows.length > 0 && ` • ${filteredRows.length} lançamento(s)`}
-                </p>
-              )}
-              {!nextPaymentDate && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Não há datas futuras de pagamento encontradas para os investimentos atuais.
-                </p>
-              )}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Data de Pagamento
+                </CardTitle>
+                <CardDescription>
+                  Escolha uma data (5º dia útil do mês) para ver quanto e para quem pagar.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={selectedPaymentDateKey}
+                  onValueChange={setSelectedPaymentDateKey}
+                >
+                  <SelectTrigger className="w-[280px]">
+                    <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder="Selecione a data de pagamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nextPaymentDate && (
+                      <SelectItem value="__next__">
+                        Próximo pagamento ({formatDate(nextPaymentDate)})
+                      </SelectItem>
+                    )}
+                    {availablePaymentDates.map(({ key, date }) => (
+                      <SelectItem key={key} value={key}>
+                        {formatPaymentDateLabel(date)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={exportToExcel}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar Excel
+                </Button>
+              </div>
             </div>
-            <Button variant="outline" onClick={exportToExcel}>
-              <Download className="mr-2 h-4 w-4" />
-              Exportar Excel
-            </Button>
+            {displayPaymentDate ? (
+              <p className="text-sm text-muted-foreground">
+                {selectedPaymentDateKey === "__next__" ? "Próximo pagamento em " : "Pagamento em "}
+                <span className="font-medium">
+                  {formatPaymentDateLabel(displayPaymentDate)}
+                </span>
+                {filteredRows.length > 0 && ` • ${filteredRows.length} lançamento(s)`}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Não há datas de pagamento disponíveis para os investimentos atuais.
+              </p>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -1054,56 +1327,85 @@ export function AdminCommissionsDetail() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Escritório</TableHead>
-                  <TableHead>Assessor</TableHead>
-                  <TableHead>Tipo Assessor</TableHead>
-                  <TableHead>Investidor</TableHead>
-                  <TableHead>Valor Investido</TableHead>
-                  <TableHead>Data Entrada</TableHead>
-                  <TableHead>Próximo Pagamento</TableHead>
+                  <TableHead>Assessor / Escritório (tipo)</TableHead>
+                  <TableHead className="max-w-[220px] w-max">Investidor</TableHead>
+                  <TableHead>Valor / Entrada</TableHead>
+                  <TableHead>Valor atual</TableHead>
                   <TableHead>Período</TableHead>
-                  <TableHead>Comissão Escritório</TableHead>
-                  <TableHead>Comissão Assessor</TableHead>
-                  <TableHead>Comissão Investidor</TableHead>
+                  <TableHead>Com. Escritório</TableHead>
+                  <TableHead>Com. Assessor</TableHead>
+                  <TableHead>Com. Investidor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center text-muted-foreground">
-                      Nenhuma comissão encontrada para a próxima data de pagamento com os filtros atuais.
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                      Nenhuma comissão encontrada para a data de pagamento selecionada com os filtros atuais.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredRows.map(({ commission, officeAmount, advisorAmount, investorAmount, paymentIndex }) => (
+                  filteredRows.map((row) => {
+                    const { commission, officeAmount, advisorAmount, investorAmount, paymentIndex } = row
+                    return (
                     <TableRow key={`${commission.investmentId}-${paymentIndex}`}>
                       <TableCell>
-                        <p className="font-medium">{commission.officeName || "N/A"}</p>
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium">{commission.advisorName || "N/A"}</p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {commission.advisorRole === "assessor_externo"
-                            ? "Assessor Externo"
-                            : commission.advisorRole === "assessor"
-                              ? "Assessor Interno"
-                              : "—"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{commission.investorName}</p>
+                        <div className="space-y-1">
+                          <p className="font-medium text-primary">
+                            {commission.advisorName || "N/A"}
+                          </p>
                           <p className="text-xs text-muted-foreground">
+                            {commission.officeName || "N/A"}
+                          </p>
+                          <Badge variant="outline" className="text-xs">
+                            {commission.advisorRole === "assessor_externo"
+                              ? "Assessor Externo"
+                              : commission.advisorRole === "assessor"
+                                ? "Assessor Interno"
+                                : "—"}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[220px] w-max">
+                        <div className="min-w-0 overflow-hidden">
+                          <p className="font-medium truncate" title={commission.investorName}>
+                            {commission.investorName}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate" title={commission.investorEmail}>
                             {commission.investorEmail}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>{formatCurrency(commission.amount)}</TableCell>
-                      <TableCell>{formatDate(commission.paymentDate)}</TableCell>
                       <TableCell>
-                        {nextPaymentDate ? formatDate(nextPaymentDate) : "N/A"}
+                        <div className="space-y-0.5">
+                          <p className="font-medium">{formatCurrency(commission.amount)}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(commission.paymentDate)}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <p className="font-medium">
+                            {formatCurrency(getCurrentValue(commission, displayPaymentDate ?? null))}
+                          </p>
+                          {(() => {
+                            const d = getCurrentValueDetails(commission, displayPaymentDate ?? null)
+                            return (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  {d.monthsInCycle > 0
+                                    ? `${d.monthsInCycle} ${d.monthsInCycle === 1 ? "mês" : "meses"}`
+                                    : "—"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatCurrency(d.totalRendimento)}
+                                </p>
+                                <Badge variant="secondary" className="text-xs font-normal">
+                                  {getLiquidityLabel(commission.liquidity)}
+                                </Badge>
+                              </>
+                            )
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -1111,31 +1413,76 @@ export function AdminCommissionsDetail() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span
-                          className="font-semibold text-primary"
-                          title={getCommissionTooltip("office", commission, paymentIndex, officeAmount)}
-                        >
-                          {formatCurrency(officeAmount)}
-                        </span>
+                        <div className="space-y-0.5">
+                          <span
+                            className="font-semibold text-primary"
+                            title={getCommissionTooltip("office", commission, paymentIndex, officeAmount)}
+                          >
+                            {formatCurrency(officeAmount)}
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
+                          </p>
+                          {(() => {
+                            const label = getCommissionRateAndProrataLabel(
+                              "office",
+                              commission,
+                              paymentIndex,
+                              row,
+                            )
+                            return (
+                              <p className="text-xs text-muted-foreground">
+                                {label}
+                              </p>
+                            )
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <span
-                          className="font-semibold text-green-600"
-                          title={getCommissionTooltip("advisor", commission, paymentIndex, advisorAmount)}
-                        >
-                          {formatCurrency(advisorAmount)}
-                        </span>
+                        <div className="space-y-0.5">
+                          <span
+                            className="font-semibold text-green-600"
+                            title={getCommissionTooltip("advisor", commission, paymentIndex, advisorAmount)}
+                          >
+                            {formatCurrency(advisorAmount)}
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
+                          </p>
+                          {(() => {
+                            const label = getCommissionRateAndProrataLabel(
+                              "advisor",
+                              commission,
+                              paymentIndex,
+                              row,
+                            )
+                            return (
+                              <p className="text-xs text-muted-foreground">
+                                {label}
+                              </p>
+                            )
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <span
-                          className="font-semibold text-purple-600"
-                          title={getCommissionTooltip("investor", commission, paymentIndex, investorAmount)}
-                        >
-                          {formatCurrency(investorAmount)}
-                        </span>
+                        <div className="space-y-0.5">
+                          <span
+                            className="font-semibold text-purple-600"
+                            title={getCommissionTooltip("investor", commission, paymentIndex, investorAmount)}
+                          >
+                            {formatCurrency(investorAmount)}
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {getCommissionRateAndProrataLabel("investor", commission, paymentIndex, row)}
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
