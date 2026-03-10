@@ -40,6 +40,7 @@ export const INVESTOR_RATE_RULES: InvestorRateRule[] = [
   { months: 24, liquidity: "bienal", rate: 0.03 },
   { months: 36, liquidity: "mensal", rate: 0.024 },
   { months: 36, liquidity: "semestral", rate: 0.026 },
+  { months: 36, liquidity: "anual", rate: 0.03 },
   { months: 36, liquidity: "bienal", rate: 0.032 },
   { months: 36, liquidity: "trienal", rate: 0.035 },
 ];
@@ -52,6 +53,59 @@ export const INVESTOR_RATE_MATRIX: Record<number, Partial<Record<LiquidityOption
     acc[months]![liquidity] = rate;
     return acc;
   }, {} as Record<number, Partial<Record<LiquidityOption, number>>>);
+
+/** Tabela para investidores de assessores externos (teto 2% a.m.) */
+export const EXTERNAL_ADVISOR_RATE_RULES: InvestorRateRule[] = [
+  { months: 3, liquidity: "mensal", rate: 0.0135 },
+  { months: 6, liquidity: "mensal", rate: 0.014 },
+  { months: 6, liquidity: "semestral", rate: 0.0145 },
+  { months: 12, liquidity: "mensal", rate: 0.015 },
+  { months: 12, liquidity: "semestral", rate: 0.0155 },
+  { months: 12, liquidity: "anual", rate: 0.016 },
+  { months: 24, liquidity: "mensal", rate: 0.0165 },
+  { months: 24, liquidity: "semestral", rate: 0.017 },
+  { months: 24, liquidity: "anual", rate: 0.0175 },
+  { months: 24, liquidity: "bienal", rate: 0.018 },
+  { months: 36, liquidity: "mensal", rate: 0.0185 },
+  { months: 36, liquidity: "semestral", rate: 0.019 },
+  { months: 36, liquidity: "anual", rate: 0.0195 },
+  { months: 36, liquidity: "trienal", rate: 0.02 },
+];
+
+export const EXTERNAL_ADVISOR_RATE_MATRIX: Record<number, Partial<Record<LiquidityOption, number>>> =
+  EXTERNAL_ADVISOR_RATE_RULES.reduce((acc, { months, liquidity, rate }) => {
+    if (!acc[months]) {
+      acc[months] = {};
+    }
+    acc[months]![liquidity] = rate;
+    return acc;
+  }, {} as Record<number, Partial<Record<LiquidityOption, number>>>);
+
+export function getAvailableLiquidityOptionsForExternalAdvisor(commitmentPeriod: number): LiquidityOption[] {
+  const matrix = EXTERNAL_ADVISOR_RATE_MATRIX[commitmentPeriod];
+  if (!matrix) {
+    return [];
+  }
+  return Object.keys(matrix) as LiquidityOption[];
+}
+
+export function getInvestorMonthlyRateForExternalAdvisor(
+  commitmentPeriod: number,
+  liquidity: LiquidityOption
+): number {
+  const matrix = EXTERNAL_ADVISOR_RATE_MATRIX[commitmentPeriod];
+  if (!matrix) {
+    return 0;
+  }
+  const rate = matrix[liquidity];
+  if (typeof rate === "number") {
+    return rate;
+  }
+  if (matrix.mensal) {
+    return matrix.mensal;
+  }
+  return 0;
+}
 
 export function getAvailableLiquidityOptions(commitmentPeriod: number): LiquidityOption[] {
   const matrix = INVESTOR_RATE_MATRIX[commitmentPeriod];

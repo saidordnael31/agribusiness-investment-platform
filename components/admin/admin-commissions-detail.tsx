@@ -42,6 +42,7 @@ import {
   COMMISSION_RATES,
   getFifthBusinessDayOfMonth,
   getInvestorMonthlyRate,
+  getInvestorMonthlyRateForExternalAdvisor,
   getLiquidityCycleMonths,
   type LiquidityOption,
 } from "@/lib/commission-calculator"
@@ -833,7 +834,10 @@ export function AdminCommissionsDetail() {
 
     const cycleMonths = getLiquidityCycleMonths(liquidity)
     const commitmentPeriod = commission.commitmentPeriod ?? 12
-    const monthlyRate = getInvestorMonthlyRate(commitmentPeriod, liquidity)
+    const monthlyRate =
+      commission.advisorRole === "assessor_externo"
+        ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
+        : getInvestorMonthlyRate(commitmentPeriod, liquidity)
     if (!monthlyRate || monthlyRate <= 0) return fallback
 
     const monthsSinceStart = Math.floor(

@@ -250,6 +250,30 @@ export function LoginForm() {
       const profile = profiles[0];
       console.log("[v0] Profile fetched successfully:", profile);
 
+      // Log do assessor: buscar via API (servidor usa service role e contorna RLS)
+      if (profile.parent_id) {
+        try {
+          const token = authData.session?.access_token;
+          const res = await fetch("/api/profile/advisor", {
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const json = await res.json();
+          if (json.success && json.advisor) {
+            console.warn("[LOGIN] Assessor do usuário:", json.advisor);
+            try {
+              localStorage.setItem("login_assessor_log", JSON.stringify(json.advisor));
+            } catch (_) {}
+          } else {
+            console.warn("[LOGIN] parent_id presente mas assessor não encontrado:", profile.parent_id);
+          }
+        } catch (err) {
+          console.warn("[LOGIN] Erro ao buscar assessor via API:", err);
+        }
+      } else {
+        console.warn("[LOGIN] Usuário sem assessor (parent_id vazio)");
+      }
+
       const userData = {
         id: authData.user.id,
         email: profile.email,

@@ -21,6 +21,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Calculator, Gift, TrendingUp } from "lucide-react";
 import { Disclaimers } from "@/components/compliance/disclaimers";
+import {
+  getInvestorMonthlyRate,
+  getInvestorMonthlyRateForExternalAdvisor,
+  getAvailableLiquidityOptions,
+  getAvailableLiquidityOptionsForExternalAdvisor,
+  type LiquidityOption,
+} from "@/lib/commission-calculator";
 
 interface Bonification {
   id: string;
@@ -33,7 +40,13 @@ interface Bonification {
   isActive: boolean;
 }
 
-export function InvestmentSimulator({ title }: { title?: string }) {
+export function InvestmentSimulator({
+  title,
+  isExternalAdvisorInvestor = false,
+}: {
+  title?: string;
+  isExternalAdvisorInvestor?: boolean;
+}) {
   const [user, setUser] = useState<null>(null);
   const [amount, setAmount] = useState("5000");
   const [commitmentPeriod, setCommitmentPeriod] = useState("");
@@ -54,85 +67,19 @@ export function InvestmentSimulator({ title }: { title?: string }) {
     }
   }, []);
 
-  // Função para obter a taxa baseada no prazo e liquidez
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string): number => {
-    // Tabela padrão (investidores em geral)
-    const defaultRates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        mensal: 0.018, // 1,8%
-      },
-      "6": {
-        mensal: 0.019, // 1,9%
-        semestral: 0.02, // 2,0%
-      },
-      "12": {
-        mensal: 0.021, // 2,1%
-        semestral: 0.022, // 2,2%
-        anual: 0.025, // 2,5%
-      },
-      "24": {
-        mensal: 0.023, // 2,3%
-        semestral: 0.025, // 2,5%
-        anual: 0.027, // 2,7%
-        bienal: 0.03, // 3,0%
-      },
-      "36": {
-        mensal: 0.024, // 2,4%
-        semestral: 0.026, // 2,6%
-        anual: 0.03, // 3,0%
-        bienal: 0.032, // 3,2%
-        trienal: 0.035, // 3,5%
-      },
-    };
-
-    // Tabela especial para investidores de assessores externos
-    // Mapeando D+90/180/360/720/1080 para 3/6/12/24/36 meses
-    const externalAdvisorRates: { [key: string]: { [key: string]: number } } = {
-      "3": {
-        mensal: 0.0135, // 1,35%
-      },
-      "6": {
-        mensal: 0.014,  // 1,40%
-        semestral: 0.0145, // 1,45%
-      },
-      "12": {
-        mensal: 0.015,  // 1,50%
-        semestral: 0.0155, // 1,55%
-        anual: 0.016, // 1,60%
-      },
-      "24": {
-        mensal: 0.0165, // 1,65%
-        semestral: 0.017, // 1,70%
-        anual: 0.0175, // 1,75%
-        bienal: 0.018, // 1,80%
-      },
-      "36": {
-        mensal: 0.0185, // 1,85%
-        semestral: 0.019, // 1,90%
-        bienal: 0.0195, // 1,95%
-        trienal: 0.02, // 2,00%
-      },
-    };
-
-    const currentUser: any = user;
-    const isExternalAdvisor =
-      currentUser && (currentUser.role === "assessor_externo" || currentUser.user_type === "assessor_externo");
-
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
-    return table[period.toString()]?.[liquidity] || 0;
+  // Usar tabela de assessor externo quando o investidor é de assessor externo (prop vinda do dashboard)
+  const getRateByPeriodAndLiquidity = (period: number, liq: string): number => {
+    const opt = liq as LiquidityOption;
+    return isExternalAdvisorInvestor
+      ? getInvestorMonthlyRateForExternalAdvisor(period, opt)
+      : getInvestorMonthlyRate(period, opt);
   };
 
-  // Função para obter opções de liquidez disponíveis baseadas no prazo
-  const getAvailableLiquidityOptions = (period: number): string[] => {
-    const options: { [key: string]: string[] } = {
-      "3": ["mensal"],
-      "6": ["mensal", "semestral"],
-      "12": ["mensal", "semestral", "anual"],
-      "24": ["mensal", "semestral", "anual", "bienal"],
-      "36": ["mensal", "semestral", "anual", "bienal", "trienal"],
-    };
-
-    return options[period.toString()] || [];
+  const getLiquidityOptionsForPeriod = (period: number): string[] => {
+    const options = isExternalAdvisorInvestor
+      ? getAvailableLiquidityOptionsForExternalAdvisor(period)
+      : getAvailableLiquidityOptions(period);
+    return options as string[];
   };
 
   const calculateReturns = () => {
@@ -241,7 +188,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                     <SelectValue placeholder="Selecione a liquidez" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
+                    {getLiquidityOptionsForPeriod(Number.parseInt(commitmentPeriod)).map((option) => (
                       <SelectItem key={option} value={option}>
                         {option.charAt(0).toUpperCase() + option.slice(1)}
                       </SelectItem>
@@ -387,7 +334,7 @@ export function InvestmentSimulator({ title }: { title?: string }) {
                   <SelectValue placeholder="Selecione a liquidez" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableLiquidityOptions(Number.parseInt(commitmentPeriod)).map((option) => (
+                  {getLiquidityOptionsForPeriod(Number.parseInt(commitmentPeriod)).map((option) => (
                     <SelectItem key={option} value={option}>
                       {option.charAt(0).toUpperCase() + option.slice(1)}
                     </SelectItem>

@@ -16,6 +16,11 @@ import { InvestmentHistory } from "./investment-history";
 import { PerformanceChart } from "./performance-chart";
 import { RenewalAlertDialog } from "@/components/investment/renewal-alert-dialog";
 import { createBrowserClient } from "@supabase/ssr";
+import {
+  getInvestorMonthlyRate,
+  getInvestorMonthlyRateForExternalAdvisor,
+  type LiquidityOption,
+} from "@/lib/commission-calculator";
 
 interface UserData {
   name: string;
@@ -72,44 +77,21 @@ export function InvestorDashboard() {
   } | null>(null);
   const [showRenewalDialog, setShowRenewalDialog] = useState(false);
 
-  // Função para obter a taxa correta baseada nas tabelas dinâmicas
+  // Função para obter a taxa correta baseada nas tabelas (investidor geral vs assessor externo)
+  const toLiquidityOption = (liquidity: string): LiquidityOption => {
+    const raw = String(liquidity || "").toLowerCase();
+    if (raw.includes("trienal")) return "trienal";
+    if (raw.includes("bienal")) return "bienal";
+    if (raw.includes("anual")) return "anual";
+    if (raw.includes("semestral")) return "semestral";
+    return "mensal";
+  };
+
   const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
-    // Tabela padrão de rentabilidade (investidores em geral)
-    const defaultRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.018 }, // 1,8%
-      6: { Mensal: 0.019, Semestral: 0.02 }, // 1,9% | 2,0%
-      12: { Mensal: 0.021, Semestral: 0.022, Anual: 0.025 }, // 2,1% | 2,2% | 2,5%
-      24: { Mensal: 0.023, Semestral: 0.025, Anual: 0.027, Bienal: 0.03 }, // 2,3% | 2,5% | 2,7% | 3,0%
-      36: {
-        Mensal: 0.024,
-        Semestral: 0.026,
-        Anual: 0.03,
-        Bienal: 0.032,
-        Trienal: 0.035,
-      }, // 2,4% | 2,6% | 3,0% | 3,2% | 3,5%
-    };
-
-    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
-    const externalAdvisorRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.0135 }, // 1,35%
-      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
-      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
-      24: {
-        Mensal: 0.0165,
-        Semestral: 0.017,
-        Anual: 0.0175,
-        Bienal: 0.018,
-      }, // 1,65% | 1,70% | 1,75% | 1,80%
-      36: {
-        Mensal: 0.0185,
-        Semestral: 0.019,
-        Bienal: 0.0195,
-        Trienal: 0.02,
-      }, // 1,85% | 1,90% | 1,95% | 2,00%
-    };
-
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
-    return table[period]?.[liquidity] || 0;
+    const opt = toLiquidityOption(liquidity);
+    return isExternalAdvisor
+      ? getInvestorMonthlyRateForExternalAdvisor(period, opt)
+      : getInvestorMonthlyRate(period, opt);
   };
 
   const fetchTransactionHistory = async (userId: string) => {
@@ -193,14 +175,14 @@ export function InvestorDashboard() {
     }
   };
 
-  const fetchInvestmentData = async (userId: string) => {
+  const fetchInvestmentData = async (userId: string, isExternalAdvisorOverride?: boolean) => {
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
 
-      // Buscar investimentos ativos
+      const useExternalTable = isExternalAdvisorOverride ?? isExternalAdvisorInvestor;
       const { data: investmentsRaw, error: investmentsError } = await supabase
         .from("investments")
         .select(
@@ -267,7 +249,7 @@ export function InvestorDashboard() {
         const monthlyRate = getRateByPeriodAndLiquidity(
           commitmentPeriod,
           liquidity,
-          isExternalAdvisorInvestor
+          useExternalTable
         ) || Number(inv.monthly_return_rate) || 0.02;
         const amount = Number(inv.amount);
 
@@ -314,7 +296,7 @@ export function InvestorDashboard() {
         const monthlyRate = getRateByPeriodAndLiquidity(
           commitmentPeriod,
           liquidity,
-          isExternalAdvisorInvestor
+          useExternalTable
         ) || Number(inv.monthly_return_rate) || 0.02;
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
@@ -392,7 +374,7 @@ export function InvestorDashboard() {
         const monthlyRate = getRateByPeriodAndLiquidity(
           commitmentPeriod,
           liquidity,
-          isExternalAdvisorInvestor
+          useExternalTable
         ) || Number(inv.monthly_return_rate) || 0.02;
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
@@ -492,22 +474,50 @@ export function InvestorDashboard() {
   };
 
   useEffect(() => {
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
+    let cancelled = false;
+    const load = async () => {
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        setLoading(false);
+        return;
+      }
       const userData = JSON.parse(userStr);
       setUser(userData);
 
-      if (userData.id) {
-        fetchInvestmentData(userData.id);
-        fetchTransactionHistory(userData.id);
-        // Verificar alertas de renovação após carregar os dados
-        setTimeout(() => {
-          checkRenewalAlerts(userData.id);
-        }, 2000); // Aguardar 2 segundos para garantir que os dados foram carregados
+      if (!userData.id) {
+        setLoading(false);
+        return;
       }
-    } else {
-      setLoading(false);
-    }
+
+      // Verificar se o investidor é de assessor externo via API (contorna RLS)
+      let isExternal = false;
+      try {
+        const res = await fetch("/api/profile/advisor", { credentials: "include" });
+        const json = await res.json();
+        if (json.success && json.advisor?.assessor_role === "assessor_externo") {
+          isExternal = true;
+        }
+        if (json.advisor) {
+          console.warn("[DASHBOARD] Assessor do investidor:", {
+            ...json.advisor,
+            is_assessor_externo: isExternal,
+          });
+        }
+      } catch (_) {
+        // mantém false em caso de erro
+      }
+
+      if (!cancelled) {
+        setIsExternalAdvisorInvestor(isExternal);
+        await fetchInvestmentData(userData.id, isExternal);
+        await fetchTransactionHistory(userData.id);
+        setTimeout(() => {
+          if (!cancelled) checkRenewalAlerts(userData.id);
+        }, 2000);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   if (!user) return null;
@@ -824,7 +834,7 @@ export function InvestorDashboard() {
         </div>
 
         {/* Investment Simulator */}
-        <InvestmentSimulator />
+        <InvestmentSimulator isExternalAdvisorInvestor={isExternalAdvisorInvestor} />
 
         {/* Footer with Legal Disclaimers */}
         <div className="mt-12 p-6">

@@ -265,18 +265,18 @@ export function PerformanceChart() {
       // Verificar se é investidor de assessor externo
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, parent_id, assessor_id")
+        .select("id, parent_id")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
 
       if (profile) {
-        const advisorId = (profile as any).parent_id || (profile as any).assessor_id
+        const advisorId = (profile as any).parent_id
         if (advisorId) {
           const { data: advisorProfile } = await supabase
             .from("profiles")
             .select("role")
             .eq("id", advisorId)
-            .single()
+            .maybeSingle()
 
           if (advisorProfile && advisorProfile.role === "assessor_externo") {
             setIsExternalAdvisorInvestor(true)
