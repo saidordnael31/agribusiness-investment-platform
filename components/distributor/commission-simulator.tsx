@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Calculator } from "lucide-react"
-import { calculateRoleCommission } from "@/lib/commission-calculator"
+import { calculateRoleCommission, getIndividualAdvisorPortfolioRate } from "@/lib/commission-calculator"
 
 export function CommissionSimulator() {
   const [capturedAmount, setCapturedAmount] = useState("")
@@ -14,6 +14,7 @@ export function CommissionSimulator() {
   const [results, setResults] = useState<{
     monthlyCommission: number
     annualCommission: number
+    advisorRateMonthly?: number // taxa mensal do assessor individual (ex.: 0.006)
   } | null>(null)
 
   useEffect(() => {
@@ -24,13 +25,30 @@ export function CommissionSimulator() {
     }
   }, [])
 
+  const parsedCapturedAmount = Number.parseFloat(capturedAmount)
+  const individualAdvisorRateMonthly =
+    Number.isFinite(parsedCapturedAmount) && parsedCapturedAmount > 0
+      ? getIndividualAdvisorPortfolioRate(parsedCapturedAmount)
+      : 0
+
   const calculateCommissions = () => {
     const amount = Number.parseFloat(capturedAmount)
     if (!amount) return
 
-    const isExternalAdvisor = user?.role === "assessor_externo"
+    if (user?.role === "assessor_individual") {
+      // Assessor individual: taxa mensal depende do volume total da carteira ativa
+      const advisorRateMonthly = getIndividualAdvisorPortfolioRate(amount)
+      const monthlyCommission = amount * advisorRateMonthly
+      const annualCommission = monthlyCommission * 12
+      setResults({
+        monthlyCommission,
+        annualCommission,
+        advisorRateMonthly,
+      })
+      return
+    }
 
-    if (isExternalAdvisor) {
+    if (user?.role === "assessor_externo") {
       // Assessor externo: 2% ao mês
       const monthlyCommission = amount * 0.02
       const annualCommission = monthlyCommission * 12
@@ -42,11 +60,12 @@ export function CommissionSimulator() {
     }
 
     // Determinar role baseado no tipo de usuário (interno)
-    const userRole = user?.role === "investidor"
-      ? "investidor"
-      : user?.role === "escritorio"
-      ? "escritorio"
-      : "assessor"
+    const userRole =
+      user?.role === "investidor"
+        ? "investidor"
+        : user?.role === "escritorio"
+          ? "escritorio"
+          : "assessor"
 
     // Calcular comissão baseada no role do usuário (sem bônus)
     const roleCalculation = calculateRoleCommission(amount, userRole, 12)
@@ -95,7 +114,11 @@ export function CommissionSimulator() {
           <div className="space-y-4">
             <div className="p-4 bg-[#D9D9D9]/45 rounded-lg border border-gray-300">
               <p className="text-sm text-gray-600">
-                {user?.role === "assessor" || user?.role === "assessor_externo"
+                {user?.role === "assessor"
+                  ? "Comissão Mensal (Assessor)"
+                  : user?.role === "assessor_individual"
+                    ? "Comissão Mensal (Assessor Individual)"
+                    : user?.role === "assessor_externo"
                   ? "Comissão Mensal (Assessor)"
                   : user?.role === "escritorio"
                   ? "Comissão Mensal (Escritório)"
@@ -115,6 +138,8 @@ export function CommissionSimulator() {
                   ? "2% a.m."
                   : user?.role === "escritorio"
                   ? "1% a.m."
+                  : user?.role === "assessor_individual"
+                    ? `${(((results?.advisorRateMonthly ?? individualAdvisorRateMonthly) * 100)).toFixed(2).replace(".", ",")}% a.m.`
                   : user?.role === "assessor_externo"
                   ? "2% a.m."
                   : "3% a.m."}
@@ -142,6 +167,11 @@ export function CommissionSimulator() {
               <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Investidor):</span> 2% ao mês sobre valor investido</p>
             ) : user?.role === "escritorio" ? (
               <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Escritório):</span> 1% ao mês sobre valor investido</p>
+            ) : user?.role === "assessor_individual" ? (
+              <p>
+                • <span className="font-medium text-[#003F28]">Sua Comissão (Assessor Individual):</span>{" "}
+                {`${(individualAdvisorRateMonthly * 100).toFixed(2).replace(".", ",")}% ao mês sobre valor captado (faixa por volume da carteira ativa)`}
+              </p>
             ) : user?.role === "assessor" ? (
               <p>• <span className="font-medium text-[#003F28]">Sua Comissão (Assessor):</span> 3% ao mês sobre valor investido</p>
             ) : user?.role === "assessor_externo" ? (

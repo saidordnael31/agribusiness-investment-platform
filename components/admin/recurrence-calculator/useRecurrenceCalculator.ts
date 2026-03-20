@@ -4,7 +4,19 @@ import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
-import { calculateNewCommissionLogic, getInvestmentCutoffPeriod, getFifthBusinessDayOfMonth, isBusinessDay, getCurrentCutoffDate, canInvestorEnterCurrentCutoff, COMMISSION_RATES } from "@/lib/commission-calculator"
+import {
+  calculateNewCommissionLogic,
+  getInvestmentCutoffPeriod,
+  getFifthBusinessDayOfMonth,
+  isBusinessDay,
+  getCurrentCutoffDate,
+  canInvestorEnterCurrentCutoff,
+  COMMISSION_RATES,
+  getInvestorMonthlyRate,
+  getInvestorMonthlyRateForExternalAdvisor,
+  getInvestorMonthlyRateForIndividualAdvisor,
+  type LiquidityOption,
+} from "@/lib/commission-calculator"
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 
@@ -14,9 +26,13 @@ export interface RecurrenceCalculation {
   investorEmail: string
   advisorName: string
   advisorId: string
+  /** Papel do assessor (ex.: "assessor", "assessor_externo", "assessor_individual"). */
+  advisorRole?: string | null
   officeName: string
   officeId: string
   investmentAmount: number
+  /** Para `assessor_individual`: volume total da carteira ativa sob sua originação. */
+  advisorTotalActivePortfolio?: number
   baseCommissionRate: number
   bonusRate: number
   totalCommissionRate: number
@@ -165,6 +181,17 @@ export function useRecurrenceCalculator() {
         }
       })
 
+      // Para `assessor_individual`, a taxa do assessor depende do volume total da carteira ativa.
+      // Pré-calculamos o total por assessor (soma dos investimentos ativos sob cada parent_id).
+      const totalActivePortfolioByAdvisorId = new Map<string, number>()
+      for (const inv of investments || []) {
+        const investor = profilesMap.get(inv.user_id)
+        const advisorId = investor?.parent_id
+        if (!advisorId) continue
+        const current = totalActivePortfolioByAdvisorId.get(advisorId) || 0
+        totalActivePortfolioByAdvisorId.set(advisorId, current + Number(inv.amount || 0))
+      }
+
       const today = new Date()
       today.setHours(0, 0, 0, 0)
 
@@ -219,6 +246,9 @@ export function useRecurrenceCalculator() {
             advisorId: advisor?.id,
             advisorName: advisor?.full_name || "Assessor",
             advisorRole: advisor?.role,
+            totalActivePortfolio: advisor?.id
+              ? totalActivePortfolioByAdvisorId.get(advisor.id) || 0
+              : undefined,
             officeId: office?.id,
             officeName: office?.full_name || "Escritório",
             isForAdvisor: true, // Para calcular comissão do assessor
@@ -331,6 +361,10 @@ export function useRecurrenceCalculator() {
             investorEmail: investor?.email || "",
             advisorName: advisor?.full_name || "Assessor",
             advisorId: advisor?.id || "",
+              advisorRole: advisor?.role,
+              advisorTotalActivePortfolio: advisor?.id
+                ? totalActivePortfolioByAdvisorId.get(advisor.id) || 0
+                : undefined,
             officeName: office?.full_name || "Escritório",
             officeId: office?.id || "",
             investmentAmount: investment.amount,
@@ -358,13 +392,22 @@ export function useRecurrenceCalculator() {
         // Usar a comissão calculada pela nova lógica
         // Para o primeiro mês: usar advisorCommission (proporcional)
         // Para meses futuros: usar monthlyBreakdown (mensal completa)
-        const advisorRate = 3.0
         const officeRate = 1.0
+        // Converter a comissão mensal cheia do 2º pagamento (index 1) para taxa percentual mensal.
+        // Isso permite suportar `assessor_externo` (2%) e `assessor_individual` (faixa por volume).
+        const advisorRate =
+          commissionCalc.monthlyBreakdown && commissionCalc.monthlyBreakdown.length > 1 && commissionCalc.amount > 0
+            ? (commissionCalc.monthlyBreakdown[1].advisorCommission / commissionCalc.amount) * 100
+            : 3.0
+
         const totalCommissionRate = advisorRate + officeRate
         
         // Comissão mensal completa (a partir do segundo mês)
         const monthlyAdvisorCommission = commissionCalc.amount * (advisorRate / 100)
-        const monthlyOfficeCommission = commissionCalc.amount * (officeRate / 100)
+        const monthlyOfficeCommission =
+          commissionCalc.monthlyBreakdown && commissionCalc.monthlyBreakdown.length > 1 && commissionCalc.amount > 0
+            ? commissionCalc.monthlyBreakdown[1].officeCommission
+            : commissionCalc.amount * (officeRate / 100)
         const monthlyCommission = monthlyAdvisorCommission + monthlyOfficeCommission
         
         // Para exibição: usar a comissão do primeiro mês (proporcional) ou mensal completa
@@ -521,6 +564,10 @@ export function useRecurrenceCalculator() {
           investorEmail: investor?.email || "",
           advisorName: advisor?.full_name || "Assessor",
           advisorId: advisor?.id || "",
+          advisorRole: advisor?.role,
+          advisorTotalActivePortfolio: advisor?.id
+            ? totalActivePortfolioByAdvisorId.get(advisor.id) || 0
+            : undefined,
           officeName: office?.full_name || "Escritório",
           officeId: office?.id || "",
           investmentAmount: investment.amount,
@@ -848,40 +895,29 @@ export function useRecurrenceCalculator() {
 
   const calculateInvestorRate = (recurrence: RecurrenceCalculation) => {
     const commitmentPeriod = recurrence.commitmentPeriod || 12
-    const days = commitmentPeriod * 30
-    
-    const liquidity = recurrence.profitabilityLiquidity?.toLowerCase() || "mensal"
-    
-    let calculatedInvestorRate = 0
-    
-    if (days <= 90) {
-      calculatedInvestorRate = 1.8
-    } else if (days <= 180) {
-      if (liquidity === "mensal") calculatedInvestorRate = 1.9
-      else if (liquidity === "semestral") calculatedInvestorRate = 2.0
-      else calculatedInvestorRate = 1.9
-    } else if (days <= 360) {
-      if (liquidity === "mensal") calculatedInvestorRate = 2.1
-      else if (liquidity === "semestral") calculatedInvestorRate = 2.2
-      else if (liquidity === "anual") calculatedInvestorRate = 2.5
-      else calculatedInvestorRate = 2.1
-    } else if (days <= 720) {
-      if (liquidity === "mensal") calculatedInvestorRate = 2.3
-      else if (liquidity === "semestral") calculatedInvestorRate = 2.5
-      else if (liquidity === "anual") calculatedInvestorRate = 2.7
-      else if (liquidity === "bienal") calculatedInvestorRate = 3.0
-      else calculatedInvestorRate = 2.3
-    } else if (days <= 1080) {
-      if (liquidity === "mensal") calculatedInvestorRate = 2.4
-      else if (liquidity === "semestral") calculatedInvestorRate = 2.6
-      else if (liquidity === "bienal") calculatedInvestorRate = 3.2
-      else if (liquidity === "trienal") calculatedInvestorRate = 3.5
-      else calculatedInvestorRate = 2.4
-    } else {
-      calculatedInvestorRate = 3.5
+    const rawLiquidity = recurrence.profitabilityLiquidity?.toLowerCase() || "mensal"
+
+    const liquidityOption: LiquidityOption =
+      rawLiquidity.includes("trienal")
+        ? "trienal"
+        : rawLiquidity.includes("bienal")
+          ? "bienal"
+          : rawLiquidity.includes("anual")
+            ? "anual"
+            : rawLiquidity.includes("semestral")
+              ? "semestral"
+              : "mensal"
+
+    const role = recurrence.advisorRole
+
+    if (role === "assessor_individual") {
+      return getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidityOption) * 100
     }
-    
-    return calculatedInvestorRate
+    if (role === "assessor_externo") {
+      return getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidityOption) * 100
+    }
+
+    return getInvestorMonthlyRate(commitmentPeriod, liquidityOption) * 100
   }
 
   useEffect(() => {
@@ -923,6 +959,8 @@ export function useRecurrenceCalculator() {
         investorName: recurrence.investorName,
         advisorId: recurrence.advisorId,
         advisorName: recurrence.advisorName,
+        advisorRole: recurrence.advisorRole,
+        totalActivePortfolio: recurrence.advisorTotalActivePortfolio,
         officeId: recurrence.officeId,
         officeName: recurrence.officeName,
         isForAdvisor: true,

@@ -37,6 +37,7 @@ export function useDepositFlow() {
   const [allInvestmentsReturn, setAllInvestmentsReturn] = useState(0);
   const [allInvestmentsValue, setAllInvestmentsValue] = useState(0);
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
+  const [isIndividualAdvisorInvestor, setIsIndividualAdvisorInvestor] = useState(false);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -80,12 +81,20 @@ export function useDepositFlow() {
 
         if (advisorProfile && advisorProfile.role === "assessor_externo") {
           setIsExternalAdvisorInvestor(true);
+          setIsIndividualAdvisorInvestor(false);
         } else {
           setIsExternalAdvisorInvestor(false);
+        }
+
+        if (advisorProfile && advisorProfile.role === "assessor_individual") {
+          setIsIndividualAdvisorInvestor(true);
+        } else {
+          setIsIndividualAdvisorInvestor(false);
         }
       } catch (error) {
         console.error("Erro ao verificar assessor externo:", error);
         setIsExternalAdvisorInvestor(false);
+        setIsIndividualAdvisorInvestor(false);
       }
     };
 
@@ -269,21 +278,75 @@ export function useDepositFlow() {
       },
     };
 
-    const table = isExternalAdvisorInvestor ? externalAdvisorRates : defaultRates;
+    // Tabela para investidores cadastrados por assessores individuais (faixa por volume, teto 2% a.m.)
+    // Observacao: aqui usamos apenas a tabela de "rentabilidade do investidor", nao a taxa do assessor.
+    const individualAdvisorRates: { [key: string]: { [key: string]: number } } = {
+      "3": {},
+      "6": {
+        "Mensal": 0.0140, // 1,40%
+        "Semestral": 0.0145, // 1,45%
+      },
+      "12": {
+        "Mensal": 0.0150, // 1,50%
+        "Semestral": 0.0155, // 1,55%
+        "Anual": 0.0160, // 1,60%
+      },
+      "24": {
+        "Mensal": 0.0165, // 1,65%
+        "Semestral": 0.0170, // 1,70%
+        "Anual": 0.0175, // 1,75%
+        "Bienal": 0.0180, // 1,80%
+      },
+      "36": {
+        "Mensal": 0.0185, // 1,85%
+        "Semestral": 0.0190, // 1,90%
+        "Anual": 0.0195, // 1,95%
+        "Trienal": 0.0200, // 2,00%
+      },
+    };
+
+    const table = isIndividualAdvisorInvestor
+      ? individualAdvisorRates
+      : isExternalAdvisorInvestor
+        ? externalAdvisorRates
+        : defaultRates;
 
     return table[period.toString()]?.[liquidity] || 0;
   };
 
   const getAvailableLiquidityOptions = (period: number): string[] => {
-    const options: { [key: string]: string[] } = {
-      "3": ["Mensal"],
-      "6": ["Mensal", "Semestral"],
-      "12": ["Mensal", "Semestral", "Anual"],
-      "24": ["Mensal", "Semestral", "Anual", "Bienal"],
-      "36": ["Mensal", "Semestral", "Anual", "Bienal", "Trienal"],
+    // Baseado na tabela que o investidor deve utilizar para nao permitir liquidez inexistente
+    const defaultRates: { [key: string]: { [key: string]: number } } = {
+      "3": { "Mensal": 0.018 },
+      "6": { "Mensal": 0.019, "Semestral": 0.02 },
+      "12": { "Mensal": 0.021, "Semestral": 0.022, "Anual": 0.025 },
+      "24": { "Mensal": 0.023, "Semestral": 0.025, "Anual": 0.027, "Bienal": 0.03 },
+      "36": { "Mensal": 0.024, "Semestral": 0.026, "Anual": 0.03, "Bienal": 0.032, "Trienal": 0.035 },
     };
 
-    return options[period.toString()] || [];
+    const externalAdvisorRates: { [key: string]: { [key: string]: number } } = {
+      "3": { "Mensal": 0.0135 },
+      "6": { "Mensal": 0.014, "Semestral": 0.0145 },
+      "12": { "Mensal": 0.015, "Semestral": 0.0155, "Anual": 0.016 },
+      "24": { "Mensal": 0.0165, "Semestral": 0.017, "Anual": 0.0175, "Bienal": 0.018 },
+      "36": { "Mensal": 0.0185, "Semestral": 0.019, "Anual": 0.0195, "Trienal": 0.02 },
+    };
+
+    const individualAdvisorRates: { [key: string]: { [key: string]: number } } = {
+      "3": {},
+      "6": { "Mensal": 0.0140, "Semestral": 0.0145 },
+      "12": { "Mensal": 0.0150, "Semestral": 0.0155, "Anual": 0.0160 },
+      "24": { "Mensal": 0.0165, "Semestral": 0.0170, "Anual": 0.0175, "Bienal": 0.0180 },
+      "36": { "Mensal": 0.0185, "Semestral": 0.0190, "Anual": 0.0195, "Trienal": 0.02 },
+    };
+
+    const table = isIndividualAdvisorInvestor
+      ? individualAdvisorRates
+      : isExternalAdvisorInvestor
+        ? externalAdvisorRates
+        : defaultRates;
+
+    return Object.keys(table[period.toString()] || {});
   };
 
   const handleCommitmentPeriodChange = (value: string) => {
@@ -320,6 +383,7 @@ export function useDepositFlow() {
     investments,
     allInvestmentsReturn,
     allInvestmentsValue,
+    isIndividualAdvisorInvestor,
     setStep,
     setSelectedInvestment,
     setDepositAmount,

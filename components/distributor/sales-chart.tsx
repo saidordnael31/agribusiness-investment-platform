@@ -12,6 +12,13 @@ import {
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
+import {
+  getIndividualAdvisorPortfolioRate,
+  getInvestorMonthlyRate,
+  getInvestorMonthlyRateForExternalAdvisor,
+  getInvestorMonthlyRateForIndividualAdvisor,
+  type LiquidityOption,
+} from "@/lib/commission-calculator";
 
 interface SalesData {
   month: string;
@@ -27,6 +34,24 @@ export function SalesChart({ distributorId }: SalesChartProps) {
   const [user, setUser] = useState<any>(null);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const toLiquidityOption = (rawLiquidity: string | null | undefined): LiquidityOption => {
+    const raw = String(rawLiquidity || "").toLowerCase();
+    if (raw.includes("trienal")) return "trienal";
+    if (raw.includes("bienal")) return "bienal";
+    if (raw.includes("anual")) return "anual";
+    if (raw.includes("semestral")) return "semestral";
+    return "mensal";
+  };
+
+  const getCommissionRateByRole = (capturedAmount: number) => {
+    if (user?.role === "escritorio") return 0.01;
+    if (user?.role === "assessor_externo") return 0.02;
+    if (user?.role === "assessor_individual") {
+      return getIndividualAdvisorPortfolioRate(capturedAmount);
+    }
+    return 0.03;
+  };
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -104,6 +129,37 @@ useEffect(() => {
           return paymentDate >= sixMonthsAgo && paymentDate <= currentDate;
         }) ?? [];
 
+      // Mapear role do assessor responsável por cada investidor (parent_id -> role).
+      const advisorRoleByInvestorId: Record<string, string> = {};
+      const advisorIds = Array.from(
+        new Set(
+          (investors ?? [])
+            .map((inv: any) => inv.parent_id)
+            .filter((id: string | null | undefined): id is string => Boolean(id))
+        )
+      );
+
+      if (advisorIds.length > 0) {
+        const { data: advisors } = await supabase
+          .from("profiles")
+          .select("id, role")
+          .in("id", advisorIds);
+
+        const advisorRoleById: Record<string, string> = {};
+        (advisors || []).forEach((a: any) => {
+          if (a?.id && a?.role) {
+            advisorRoleById[a.id] = a.role;
+          }
+        });
+
+        (investors || []).forEach((inv: any) => {
+          const parentId = inv?.parent_id;
+          if (inv?.id && parentId && advisorRoleById[parentId]) {
+            advisorRoleByInvestorId[inv.id] = advisorRoleById[parentId];
+          }
+        });
+      }
+
       // Processar dados para o gráfico
       const monthlyData: {
         [key: string]: { captured: number; commission: number };
@@ -142,10 +198,34 @@ useEffect(() => {
         if (monthlyData[monthKey]) {
           const investmentValue = Number(investment.amount) || 0;
           monthlyData[monthKey].captured += investmentValue;
-          monthlyData[monthKey].commission +=
-            investmentValue * (user?.role === "escritorio" ? 0.01 : user?.role === "investor" ? 0.02 : 0.03);
+
+          // Para investidor, a taxa NÃO é fixa:
+          // depende de prazo + liquidez + tipo de assessor (interno/externo/individual).
+          if (user?.role === "investor") {
+            const commitmentPeriod = Number(investment.commitment_period) || 12;
+            const liquidity = toLiquidityOption(investment.profitability_liquidity);
+            const advisorRole = advisorRoleByInvestorId[investment.user_id];
+
+            const investorRate =
+              advisorRole === "assessor_externo"
+                ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
+                : advisorRole === "assessor_individual"
+                  ? getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidity)
+                  : getInvestorMonthlyRate(commitmentPeriod, liquidity);
+
+            monthlyData[monthKey].commission += investmentValue * investorRate;
+          }
         }
       });
+
+      // Para escritório/assessores, comissão segue a taxa do papel sobre o total captado do mês.
+      if (user?.role !== "investor") {
+        Object.keys(monthlyData).forEach((monthKey) => {
+          const captured = monthlyData[monthKey].captured || 0;
+          const rate = getCommissionRateByRole(captured);
+          monthlyData[monthKey].commission = captured * rate;
+        });
+      }
 
       // Converter para array para o gráfico
       const chartData: SalesData[] = Object.entries(monthlyData).map(

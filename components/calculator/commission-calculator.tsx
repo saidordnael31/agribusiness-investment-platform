@@ -33,6 +33,7 @@ export function CommissionCalculator() {
   if (!user) return null
 
   const isExternalAdvisor = user.role === "assessor_externo" || user.user_type === "assessor_externo"
+  const isIndividualAdvisor = user.role === "assessor_individual" || user.user_type === "assessor_individual"
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,7 +88,8 @@ export function CommissionCalculator() {
                 <h4 className="font-semibold text-purple-700 mb-1">Taxas aplicadas</h4>
                 <p className="text-sm text-muted-foreground">
                   Rentabilidade do investidor varia entre{" "}
-                  {isExternalAdvisor ? "1,35%" : "1,8%"} e {isExternalAdvisor ? "2,0%" : "3,5%"} ao mês, de acordo com a liquidez
+                  {isExternalAdvisor ? "1,35%" : isIndividualAdvisor ? "1,40%" : "1,8%"} e{" "}
+                  {isExternalAdvisor ? "2,0%" : isIndividualAdvisor ? "2,0%" : "3,5%"} ao mês, de acordo com a liquidez
                   escolhida.
                 </p>
               </div>

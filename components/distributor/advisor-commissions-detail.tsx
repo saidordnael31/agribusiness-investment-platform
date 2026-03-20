@@ -112,7 +112,8 @@ export function AdvisorCommissionsDetail() {
       }
 
       const isOffice = profile.role === "escritorio"
-      const isAdvisor = profile.role === "assessor" || profile.role === "assessor_externo"
+      const isAdvisor =
+        profile.role === "assessor" || profile.role === "assessor_externo" || profile.role === "assessor_individual"
 
       if (!isOffice && !isAdvisor) {
         toast({
@@ -141,7 +142,7 @@ export function AdvisorCommissionsDetail() {
           .select("id, full_name")
           .eq("office_id", user.id)
           .eq("user_type", "distributor")
-          .in("role", ["assessor", "assessor_externo"])
+          .in("role", ["assessor", "assessor_externo", "assessor_individual"])
 
         if (advisors) {
           advisors.forEach(advisor => {
@@ -229,6 +230,11 @@ export function AdvisorCommissionsDetail() {
         setLoading(false)
         return
       }
+
+      const totalActivePortfolio = investmentsToProcess.reduce(
+        (sum, inv: any) => sum + Number(inv.amount || 0),
+        0,
+      )
 
       // Buscar comprovantes PIX
       const investmentIds = investmentsToProcess.map((inv) => inv.id)
@@ -322,6 +328,7 @@ export function AdvisorCommissionsDetail() {
               advisorId: user.id,
               advisorName: profile?.full_name || "Assessor",
               advisorRole: profile.role,
+              totalActivePortfolio,
               isForAdvisor: true, // Flag para aplicar regra sem D+60
             })
           }

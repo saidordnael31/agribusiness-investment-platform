@@ -56,7 +56,10 @@ import { SalesChart } from "./sales-chart";
 import { ApproveInvestmentModal } from "./approve-investment-modal";
 import { AdvisorCommissionsDetail } from "./advisor-commissions-detail";
 import { useToast } from "@/hooks/use-toast";
-import { calculateNewCommissionLogic } from "@/lib/commission-calculator";
+import {
+  calculateNewCommissionLogic,
+  getIndividualAdvisorPortfolioRate,
+} from "@/lib/commission-calculator";
 import { createClient } from "@/lib/supabase/client";
 import {
   Dialog,
@@ -522,7 +525,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   useEffect(() => {
     if (user?.role === "escritorio") {
       setUserType("advisor");
-    } else if (user?.role === "assessor" || user?.role === "assessor_externo") {
+    } else if (
+      user?.role === "assessor" ||
+      user?.role === "assessor_externo" ||
+      user?.role === "assessor_individual"
+    ) {
       setUserType("investor");
     }
   }, [user]);
@@ -1214,8 +1221,12 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       user.role === "escritorio"
         ? 0.01
         : user.role === "investor"
-        ? 0.02
-        : 0.03; // Baseado no role
+          ? 0.02
+          : user.role === "assessor_externo"
+            ? 0.02
+            : user.role === "assessor_individual"
+              ? getIndividualAdvisorPortfolioRate(totalCaptured)
+              : 0.03; // Baseado no role
     const monthlyCommission = totalCaptured * baseCommissionRate;
     const annualCommission = monthlyCommission * 12;
 
@@ -1248,7 +1259,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
   const visibleSteps = getVisibleSteps();
   const isLastStep = currentStep === visibleSteps.length - 1;
-  const showContractsTab = user?.role === "assessor" || user?.role === "assessor_externo" || user?.role === "escritorio";
+  const showContractsTab =
+    user?.role === "assessor" ||
+    user?.role === "assessor_externo" ||
+    user?.role === "assessor_individual" ||
+    user?.role === "escritorio";
   const tabsGridCols =
     user?.role === "escritorio" ? "grid-cols-6" : showContractsTab ? "grid-cols-5" : "grid-cols-4";
   const overviewGridCols = "lg:grid-cols-4";
@@ -1291,7 +1306,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       const supabase = createClient();
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("office_id, role")
+        .select("office_id, parent_id, role")
         .eq("id", userId)
         .single();
 
@@ -1300,9 +1315,14 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      // Se o usuário for um escritório, seu office_id é seu próprio id
-      // Se for um assessor, usa o office_id do seu perfil
-      const officeId = profile.role === "escritorio" ? userId : profile.office_id;
+      // Regra de ranking:
+      // - Escritório usa o próprio id.
+      // - Assessor (incluindo externo e individual) usa SEMPRE parent_id.
+      const isAdvisorRole =
+        profile.role === "assessor" ||
+        profile.role === "assessor_externo" ||
+        profile.role === "assessor_individual";
+      const officeId = profile.role === "escritorio" ? userId : isAdvisorRole ? profile.parent_id || null : profile.office_id || null;
       console.log(`[v0] Office ID definido para usuário ${userId}:`, officeId, `(role: ${profile.role})`);
       setUserOfficeId(officeId);
     } catch (error) {
@@ -1319,7 +1339,12 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   }, [user]);
 
   useEffect(() => {
-    if ((user?.role === "assessor" || user?.role === "assessor_externo") && userOfficeId) {
+    if (
+      (user?.role === "assessor" ||
+        user?.role === "assessor_externo" ||
+        user?.role === "assessor_individual") &&
+      userOfficeId
+    ) {
       void fetchOfficeAdvisors(userOfficeId);
     }
   }, [user?.role, userOfficeId]);
@@ -1631,14 +1656,14 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               .from("profiles")
               .select("*")
               .eq("user_type", "distributor")
-              .in("role", ["assessor", "assessor_externo"])
+              .in("role", ["assessor", "assessor_externo", "assessor_individual"])
               .eq("office_id", distributorId)
               .order("created_at", { ascending: false })
           : supabase
               .from("profiles")
               .select("*")
               .eq("user_type", "distributor")
-              .in("role", ["assessor", "assessor_externo"])
+              .in("role", ["assessor", "assessor_externo", "assessor_individual"])
               .eq("parent_id", distributorId)
               .order("created_at", { ascending: false });
 
@@ -1840,7 +1865,11 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
           .single();
         
         distributorId = officeProfile?.distributor_id || officeProfile?.parent_id || null;
-      } else if (user?.role === "assessor" || user?.role === "assessor_externo") {
+      } else if (
+        user?.role === "assessor" ||
+        user?.role === "assessor_externo" ||
+        user?.role === "assessor_individual"
+      ) {
         // Se o usuário é assessor (interno ou externo), buscar o distributor_id do assessor
         const { data: assessorProfile } = await supabase
           .from("profiles")
@@ -3015,7 +3044,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         .from("profiles")
         .select("*")
         .eq("user_type", "distributor")
-        .in("role", ["assessor", "assessor_externo"])
+        .in("role", ["assessor", "assessor_externo", "assessor_individual"])
         .eq("office_id", officeId)
         .order("created_at", { ascending: false });
 
@@ -3114,15 +3143,13 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
   useEffect(() => {
     if (!user) return;
 
-    const advisorsForRanking =
-      user.role === "escritorio"
-        ? myAdvisors
-        : user.role === "assessor" || user.role === "assessor_externo"
-        ? officeAdvisors
-        : [];
-
-    if (user.role === "assessor" || user.role === "assessor_externo") {
-      if (advisorsForRanking.length === 0) {
+    if (
+      user.role === "assessor" ||
+      user.role === "assessor_externo" ||
+      user.role === "assessor_individual"
+    ) {
+      // Para assessor, o ranking deve considerar seus investidores.
+      if (myInvestors.length === 0) {
         setDistributorData((prev) => ({
           ...prev,
           ranking: {
@@ -3136,19 +3163,20 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         return;
       }
 
-      const sorted = [...advisorsForRanking].sort(
-        (a, b) => (b.totalCaptured || 0) - (a.totalCaptured || 0)
+      const sortedInvestors = [...myInvestors].sort(
+        (a, b) => (b.totalInvested || 0) - (a.totalInvested || 0)
       );
-      const positionIndex = sorted.findIndex((advisor) => advisor.id === user.id);
 
       setDistributorData((prev) => ({
         ...prev,
         ranking: {
           ...prev.ranking,
-          position: positionIndex >= 0 ? positionIndex + 1 : 0,
-          totalDistributors: sorted.length,
-          topAdvisorName: sorted[0]?.name ?? "",
-          topAdvisorTotal: sorted[0]?.totalCaptured ?? 0,
+          // Como estamos rankeando os investidores do assessor,
+          // a posição relevante do card é sempre o topo da lista.
+          position: 1,
+          totalDistributors: sortedInvestors.length,
+          topAdvisorName: sortedInvestors[0]?.name ?? "",
+          topAdvisorTotal: sortedInvestors[0]?.totalInvested ?? 0,
         },
       }));
     } else if (user.role === "escritorio") {
@@ -3181,10 +3209,27 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
         },
       }));
     }
-  }, [user, myAdvisors, officeAdvisors]);
+  }, [user, myAdvisors, officeAdvisors, myInvestors]);
 
   // Funções auxiliares para investimento
   const getAvailableLiquidityOptions = (period: number) => {
+    const isIndividualAdvisor = user?.role === "assessor_individual";
+
+    if (isIndividualAdvisor) {
+      switch (period) {
+        case 6:
+          return ["Mensal", "Semestral"];
+        case 12:
+          return ["Mensal", "Semestral", "Anual"];
+        case 24:
+          return ["Mensal", "Semestral", "Anual", "Bienal"];
+        case 36:
+          return ["Mensal", "Semestral", "Anual", "Trienal"];
+        default:
+          return [];
+      }
+    }
+
     switch (period) {
       case 3:
         return ["Mensal"];
@@ -3238,9 +3283,32 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
       }, // 1,85% | 1,90% | 1,95% | 2,00%
     };
 
-    // Se o usuário logado for um assessor externo, aplicar tabela reduzida
+    // Tabela para investidores de assessor individual (não contempla 3 meses).
+    const individualAdvisorRates: Record<number, Record<string, number>> = {
+      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
+      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
+      24: {
+        Mensal: 0.0165,
+        Semestral: 0.017,
+        Anual: 0.0175,
+        Bienal: 0.018,
+      }, // 1,65% | 1,70% | 1,75% | 1,80%
+      36: {
+        Mensal: 0.0185,
+        Semestral: 0.019,
+        Anual: 0.0195,
+        Trienal: 0.02,
+      }, // 1,85% | 1,90% | 1,95% | 2,00%
+    };
+
+    // Seleção de tabela conforme tipo de assessor logado
     const isExternalAdvisor = user?.role === "assessor_externo";
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
+    const isIndividualAdvisor = user?.role === "assessor_individual";
+    const table = isIndividualAdvisor
+      ? individualAdvisorRates
+      : isExternalAdvisor
+        ? externalAdvisorRates
+        : defaultRates;
 
     return table[period]?.[liquidity] ?? 0.03;
   };
@@ -3433,7 +3501,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
             </CardContent>
           </Card>
 
-          {user?.role === "escritorio" || user?.role === "assessor" || user?.role === "assessor_externo" ? (
+          {user?.role === "escritorio" ? (
             <Card className="bg-gradient-to-br from-[#01223F] to-[#003562] border-[#01223F] text-white relative overflow-hidden">
               <div className="absolute right-0 top-0 opacity-10">
                 <UserCheck className="h-24 w-24" />
@@ -3462,16 +3530,18 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
               <CardTitle className="text-sm font-medium text-white">Ranking</CardTitle>
             </CardHeader>
             <CardContent className="relative z-10">
-              {user?.role === "assessor" || user?.role === "assessor_externo" ? (
+              {user?.role === "assessor" ||
+              user?.role === "assessor_externo" ||
+              user?.role === "assessor_individual" ? (
                 <>
                   <div className="text-xl md:text-2xl font-bold text-[#00BC6E]">
-                    {distributorData.ranking.position > 0
-                      ? `#${distributorData.ranking.position}`
+                    {distributorData.ranking.topAdvisorName
+                      ? distributorData.ranking.topAdvisorName
                       : "-"}
                   </div>
                   <p className="text-xs text-white/70 mt-1">
                     {distributorData.ranking.totalDistributors > 0
-                      ? `de ${distributorData.ranking.totalDistributors} Distribuidores`
+                      ? `Top investidor entre ${distributorData.ranking.totalDistributors}`
                       : "Aguardando dados"}
                   </p>
                 </>
@@ -3493,7 +3563,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
 
         {/* Commission Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-1 gap-4 md:gap-6 mb-6 md:mb-8">
-          <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
+          {/* <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
             <CardHeader className="pb-4">
               <CardTitle className="text-[#003F28] text-xl font-bold">Divisão de Comissões</CardTitle>
               <CardDescription className="text-gray-600 text-sm mt-1">
@@ -3550,7 +3620,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                 </div>
               )}
             </CardContent>
-          </Card>
+          </Card> */}
 
           {user.email === "felipe@aethosconsultoria.com.br" && (
             <Card className="bg-gradient-to-b from-[#D9D9D9] via-[#596D7E] to-[#01223F] border-gray-200 rounded-lg">
@@ -4279,7 +4349,7 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                   className="max-w-full space-y-6"
                 >
                   {/* Switch para escolher tipo de usuário (apenas para escritório) */}
-                  {user.role === "escritorio" ? null : user.role === "assessor" || user.role === "assessor_externo" ? (
+                  {user.role === "escritorio" ? null : user.role === "assessor" || user.role === "assessor_externo" || user.role === "assessor_individual" ? (
                     <div className="rounded-xl border border-[#C7F3E1] bg-white/80 p-4">
                       <Label className="mb-0 block text-base font-semibold text-[#064E3B]">
                         Investidor
@@ -5324,11 +5394,14 @@ const [generatePixAfterCreate, setGeneratePixAfterCreate] = useState(true);
                     className="w-full rounded-md border p-2"
                   >
                     <option value="">Selecione o prazo</option>
-                    <option value="3">3 meses</option>
-                    <option value="6">6 meses</option>
-                    <option value="12">12 meses</option>
-                    <option value="24">24 meses</option>
-                    <option value="36">36 meses</option>
+                    {(user?.role === "assessor_individual"
+                      ? [6, 12, 24, 36]
+                      : [3, 6, 12, 24, 36]
+                    ).map((months) => (
+                      <option key={months} value={String(months)}>
+                        {months} meses
+                      </option>
+                    ))}
                   </select>
                 </div>
 

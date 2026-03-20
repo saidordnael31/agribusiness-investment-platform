@@ -51,6 +51,7 @@ export function DepositFlow() {
     handleResetForm,
     canContinue,
     router,
+    isIndividualAdvisorInvestor,
   } = useDepositFlow();
 
   const getLiquidityCycleMonths = (liquidityLabel: string): number => {
@@ -451,11 +452,11 @@ export function DepositFlow() {
                     <SelectValue placeholder="Selecione o prazo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="3">3 meses</SelectItem>
-                    <SelectItem value="6">6 meses</SelectItem>
-                    <SelectItem value="12">12 meses</SelectItem>
-                    <SelectItem value="24">24 meses</SelectItem>
-                    <SelectItem value="36">36 meses</SelectItem>
+                    {(isIndividualAdvisorInvestor ? [6, 12, 24, 36] : [3, 6, 12, 24, 36]).map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {m} meses
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -480,7 +481,7 @@ export function DepositFlow() {
                 </Select>
                 {commitmentPeriod && liquidity && (
                   <p className="text-sm text-[#00A568] font-ibm-plex-sans font-normal mt-1">
-                    Taxa: {(monthlyRate * 100).toFixed(1)}% a.m.
+                    Taxa: {(monthlyRate * 100).toFixed(2)}% a.m.
                   </p>
                 )}
               </div>

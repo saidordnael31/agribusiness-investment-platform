@@ -31,6 +31,7 @@ interface AporteMensal {
 interface AssessorData {
   id: string
   name: string
+  role: string
   totalInvested: number
   investorsCount: number
 }
@@ -123,7 +124,7 @@ export default function AnalisesPage() {
         .from("profiles")
         .select("id, parent_id, office_id, user_type, role, distributor_id")
         .eq("user_type", "distributor")
-        .in("role", ["assessor", "assessor_externo"])
+        .in("role", ["assessor", "assessor_externo", "assessor_individual"])
         .eq("distributor_id", distribuidorId)
 
       if (assessoresError) {
@@ -465,7 +466,7 @@ export default function AnalisesPage() {
         .from("profiles")
         .select("id, full_name, email")
         .eq("user_type", "distributor")
-        .in("role", ["assessor", "assessor_externo"])
+        .in("role", ["assessor", "assessor_externo", "assessor_individual"])
         .or(`office_id.eq.${escritorioId},parent_id.eq.${escritorioId}`)
 
       if (assessoresError) {
@@ -548,6 +549,7 @@ export default function AnalisesPage() {
         return {
           id: assessor.id,
           name: assessor.full_name || assessor.email.split("@")[0],
+          role: assessor.role,
           totalInvested,
           investorsCount: investorsByAssessor[assessor.id] || 0,
         }
@@ -672,7 +674,8 @@ export default function AnalisesPage() {
             investorName: investorProfile?.full_name || "Investidor",
             advisorId: assessor.id,
             advisorName: assessor.name,
-            advisorRole: "assessor",
+            advisorRole: assessor.role,
+            totalActivePortfolio: assessor.totalInvested,
             isForAdvisor: true,
           })
 
@@ -882,6 +885,18 @@ export default function AnalisesPage() {
         return
       }
 
+      const supabase = createClient()
+      const investorIds = investments.map((inv) => inv.user_id)
+      const { data: investorProfiles } = await supabase
+        .from("profiles")
+        .select("id, parent_id")
+        .in("id", investorIds)
+
+      const investorParentIdMap = new Map<string, string>()
+      ;(investorProfiles || []).forEach((p: any) => {
+        if (p?.id && p?.parent_id) investorParentIdMap.set(p.id, p.parent_id)
+      })
+
       // Processar comissões por mês
       const comissoesPorMes: Record<string, Record<string, number>> = {}
 
@@ -896,6 +911,12 @@ export default function AnalisesPage() {
           const paymentDate = investment.payment_date || investment.created_at
           const dateStr = typeof paymentDate === 'string' ? paymentDate.split('T')[0] : paymentDate
 
+          const parentId = investorParentIdMap.get(investment.user_id)
+          if (!parentId) continue
+
+          const advisor = assessores.find((a) => a.id === parentId)
+          if (!advisor) continue
+
           // Calcular comissões para o assessor (3%) - assumindo que o assessor é o parent do investidor
           const commissionCalc = calculateNewCommissionLogic({
             id: investment.id,
@@ -905,9 +926,10 @@ export default function AnalisesPage() {
             commitment_period: investment.commitment_period || 12,
             liquidity: investment.profitability_liquidity,
             investorName: investorName,
-            advisorId: investment.user_id, // Usar user_id temporariamente, será ajustado
-            advisorName: investorName,
-            advisorRole: "assessor",
+            advisorId: advisor.id,
+            advisorName: advisor.name,
+            advisorRole: advisor.role,
+            totalActivePortfolio: advisor.totalInvested,
             isForAdvisor: true,
           })
 

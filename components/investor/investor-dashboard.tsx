@@ -19,6 +19,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import {
   getInvestorMonthlyRate,
   getInvestorMonthlyRateForExternalAdvisor,
+  getInvestorMonthlyRateForIndividualAdvisor,
   type LiquidityOption,
 } from "@/lib/commission-calculator";
 
@@ -67,6 +68,7 @@ export function InvestorDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
+  const [isIndividualAdvisorInvestor, setIsIndividualAdvisorInvestor] = useState(false);
   const [renewalInvestment, setRenewalInvestment] = useState<{
     id: string;
     amount: number;
@@ -87,8 +89,16 @@ export function InvestorDashboard() {
     return "mensal";
   };
 
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
+  const getRateByPeriodAndLiquidity = (
+    period: number,
+    liquidity: string,
+    isExternalAdvisor: boolean = false,
+    isIndividualAdvisor: boolean = false
+  ): number => {
     const opt = toLiquidityOption(liquidity);
+    if (isIndividualAdvisor) {
+      return getInvestorMonthlyRateForIndividualAdvisor(period, opt);
+    }
     return isExternalAdvisor
       ? getInvestorMonthlyRateForExternalAdvisor(period, opt)
       : getInvestorMonthlyRate(period, opt);
@@ -175,7 +185,11 @@ export function InvestorDashboard() {
     }
   };
 
-  const fetchInvestmentData = async (userId: string, isExternalAdvisorOverride?: boolean) => {
+  const fetchInvestmentData = async (
+    userId: string,
+    isExternalAdvisorOverride?: boolean,
+    isIndividualAdvisorOverride?: boolean
+  ) => {
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -183,6 +197,7 @@ export function InvestorDashboard() {
       );
 
       const useExternalTable = isExternalAdvisorOverride ?? isExternalAdvisorInvestor;
+      const useIndividualTable = isIndividualAdvisorOverride ?? isIndividualAdvisorInvestor;
       const { data: investmentsRaw, error: investmentsError } = await supabase
         .from("investments")
         .select(
@@ -246,11 +261,10 @@ export function InvestorDashboard() {
         // Obter taxa correta das tabelas dinâmicas
         const commitmentPeriod = inv.commitment_period || 12;
         const liquidity = inv.profitability_liquidity || "Mensal";
-        const monthlyRate = getRateByPeriodAndLiquidity(
-          commitmentPeriod,
-          liquidity,
-          useExternalTable
-        ) || Number(inv.monthly_return_rate) || 0.02;
+        const monthlyRate =
+          getRateByPeriodAndLiquidity(commitmentPeriod, liquidity, useExternalTable, useIndividualTable) ||
+          Number(inv.monthly_return_rate) ||
+          0.02;
         const amount = Number(inv.amount);
 
         // Calcular resgates específicos deste investimento
@@ -296,7 +310,8 @@ export function InvestorDashboard() {
         const monthlyRate = getRateByPeriodAndLiquidity(
           commitmentPeriod,
           liquidity,
-          useExternalTable
+          useExternalTable,
+          useIndividualTable
         ) || Number(inv.monthly_return_rate) || 0.02;
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
@@ -374,7 +389,8 @@ export function InvestorDashboard() {
         const monthlyRate = getRateByPeriodAndLiquidity(
           commitmentPeriod,
           liquidity,
-          useExternalTable
+          useExternalTable,
+          useIndividualTable
         ) || Number(inv.monthly_return_rate) || 0.02;
         const paymentDate = inv.payment_date
           ? new Date(inv.payment_date)
@@ -491,16 +507,21 @@ export function InvestorDashboard() {
 
       // Verificar se o investidor é de assessor externo via API (contorna RLS)
       let isExternal = false;
+      let isIndividual = false;
       try {
         const res = await fetch("/api/profile/advisor", { credentials: "include" });
         const json = await res.json();
         if (json.success && json.advisor?.assessor_role === "assessor_externo") {
           isExternal = true;
         }
+        if (json.success && json.advisor?.assessor_role === "assessor_individual") {
+          isIndividual = true;
+        }
         if (json.advisor) {
           console.warn("[DASHBOARD] Assessor do investidor:", {
             ...json.advisor,
             is_assessor_externo: isExternal,
+            is_assessor_individual: isIndividual,
           });
         }
       } catch (_) {
@@ -509,7 +530,8 @@ export function InvestorDashboard() {
 
       if (!cancelled) {
         setIsExternalAdvisorInvestor(isExternal);
-        await fetchInvestmentData(userData.id, isExternal);
+        setIsIndividualAdvisorInvestor(isIndividual);
+        await fetchInvestmentData(userData.id, isExternal, isIndividual);
         await fetchTransactionHistory(userData.id);
         setTimeout(() => {
           if (!cancelled) checkRenewalAlerts(userData.id);
@@ -754,7 +776,8 @@ export function InvestorDashboard() {
                               const expectedRate = getRateByPeriodAndLiquidity(
                                 item.commitment_period,
                                 item.profitability_liquidity,
-                                isExternalAdvisorInvestor
+                                isExternalAdvisorInvestor,
+                                isIndividualAdvisorInvestor
                               );
                               
                               // Se a taxa esperada for diferente de zero, usar ela (validação)
@@ -834,7 +857,10 @@ export function InvestorDashboard() {
         </div>
 
         {/* Investment Simulator */}
-        <InvestmentSimulator isExternalAdvisorInvestor={isExternalAdvisorInvestor} />
+        <InvestmentSimulator
+          isExternalAdvisorInvestor={isExternalAdvisorInvestor}
+          isIndividualAdvisorInvestor={isIndividualAdvisorInvestor}
+        />
 
         {/* Footer with Legal Disclaimers */}
         <div className="mt-12 p-6">

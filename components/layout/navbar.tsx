@@ -163,6 +163,7 @@ export function Navbar() {
         return "Investidor";
       case "assessor":
       case "assessor_externo":
+      case "assessor_individual":
         return "Assessor";
       case "escritorio":
         return "Escritório";
@@ -212,6 +213,9 @@ export function Navbar() {
   
   // Cor da navbar: #01223F para distribuidores/assessores/escritórios/investidores, #003F28 para outros
   const navbarBgColor = (isDistributorUser || user?.user_type === "investor") ? 'bg-[#01223F]' : 'bg-[#003F28]';
+  const canSeeAnalytics =
+    !!user &&
+    (user.role === "distribuidor" || user.role === "distributor");
   
   return (
     <header 
@@ -332,22 +336,24 @@ export function Navbar() {
                       </Link>
                     </NavigationMenuItem>
 
-                    <NavigationMenuItem>
-                      <Link href="/distributor/analises" legacyBehavior passHref>
-                        <NavigationMenuLink
-                          className={cn(
-                            "flex items-center justify-center text-[#003F28] font-medium transition-colors",
-                            "w-[138px] h-[41px] rounded-[11px]",
-                            "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
-                            isActive("/distributor/analises") 
-                              ? "bg-[#00BC6E] text-[#003F28]" 
-                              : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
-                          )}
-                        >
-                          Análises
-                        </NavigationMenuLink>
-                      </Link>
-                    </NavigationMenuItem>
+                    {canSeeAnalytics && (
+                      <NavigationMenuItem>
+                        <Link href="/distributor/analises" legacyBehavior passHref>
+                          <NavigationMenuLink
+                            className={cn(
+                              "flex items-center justify-center text-[#003F28] font-medium transition-colors",
+                              "w-[138px] h-[41px] rounded-[11px]",
+                              "focus:outline-none focus:ring-0 active:bg-[#00BC6E] active:text-[#003F28]",
+                              isActive("/distributor/analises") 
+                                ? "bg-[#00BC6E] text-[#003F28]" 
+                                : "bg-[#D9D9D9] text-[#003F28] hover:bg-[#D9D9D9]/80"
+                            )}
+                          >
+                            Análises
+                          </NavigationMenuLink>
+                        </Link>
+                      </NavigationMenuItem>
+                    )}
 
                     {/* <NavigationMenuItem>
                       <Link href="/bonifications" legacyBehavior passHref>
@@ -563,19 +569,21 @@ export function Navbar() {
                     Calculadora
                   </Link>
 
-                  <Link
-                    href="/distributor/analises"
-                    className={cn(
-                      "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
-                      isActive("/distributor/analises")
-                        ? "bg-accent text-white"
-                        : "text-white hover:text-white hover:bg-accent/80"
-                    )}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <BarChart3 className="h-5 w-5 mr-3 text-white" />
-                    Análises
-                  </Link>
+                  {canSeeAnalytics && (
+                    <Link
+                      href="/distributor/analises"
+                      className={cn(
+                        "flex items-center px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                        isActive("/distributor/analises")
+                          ? "bg-accent text-white"
+                          : "text-white hover:text-white hover:bg-accent/80"
+                      )}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <BarChart3 className="h-5 w-5 mr-3 text-white" />
+                      Análises
+                    </Link>
+                  )}
                 </>
               )}
             </nav>

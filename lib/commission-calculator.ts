@@ -89,6 +89,109 @@ export function getAvailableLiquidityOptionsForExternalAdvisor(commitmentPeriod:
   return Object.keys(matrix) as LiquidityOption[];
 }
 
+/**
+ * Tabela para investidores de assessores individuais (teto 2% a.m.)
+ * Valores conforme material de planos de investimento para assessores individuais.
+ */
+export const INDIVIDUAL_ADVISOR_RATE_RULES: InvestorRateRule[] = [
+  // 6 meses
+  { months: 6, liquidity: "mensal", rate: 0.014 },
+  { months: 6, liquidity: "semestral", rate: 0.0145 },
+  // 12 meses
+  { months: 12, liquidity: "mensal", rate: 0.015 },
+  { months: 12, liquidity: "semestral", rate: 0.0155 },
+  { months: 12, liquidity: "anual", rate: 0.016 },
+  // 24 meses
+  { months: 24, liquidity: "mensal", rate: 0.0165 },
+  { months: 24, liquidity: "semestral", rate: 0.017 },
+  { months: 24, liquidity: "anual", rate: 0.0175 },
+  { months: 24, liquidity: "bienal", rate: 0.018 },
+  // 36 meses
+  { months: 36, liquidity: "mensal", rate: 0.0185 },
+  { months: 36, liquidity: "semestral", rate: 0.019 },
+  { months: 36, liquidity: "anual", rate: 0.0195 },
+  { months: 36, liquidity: "trienal", rate: 0.02 },
+];
+
+export const INDIVIDUAL_ADVISOR_RATE_MATRIX: Record<number, Partial<Record<LiquidityOption, number>>> =
+  INDIVIDUAL_ADVISOR_RATE_RULES.reduce((acc, { months, liquidity, rate }) => {
+    if (!acc[months]) {
+      acc[months] = {};
+    }
+    acc[months]![liquidity] = rate;
+    return acc;
+  }, {} as Record<number, Partial<Record<LiquidityOption, number>>>);
+
+export function getAvailableLiquidityOptionsForIndividualAdvisor(commitmentPeriod: number): LiquidityOption[] {
+  const matrix = INDIVIDUAL_ADVISOR_RATE_MATRIX[commitmentPeriod];
+  if (!matrix) {
+    return [];
+  }
+  return Object.keys(matrix) as LiquidityOption[];
+}
+
+export function getInvestorMonthlyRateForIndividualAdvisor(
+  commitmentPeriod: number,
+  liquidity: LiquidityOption
+): number {
+  const matrix = INDIVIDUAL_ADVISOR_RATE_MATRIX[commitmentPeriod];
+  if (!matrix) {
+    return 0;
+  }
+  const rate = matrix[liquidity];
+  if (typeof rate === "number") {
+    return rate;
+  }
+  if (matrix.mensal) {
+    return matrix.mensal;
+  }
+  return 0;
+}
+
+/**
+ * Faixas de comissão recorrente por volume de carteira do assessor individual.
+ * O volume considerado é a carteira ativa total sob sua originação.
+ */
+export interface IndividualAdvisorPortfolioBracket {
+  minVolume: number; // inclusive
+  maxVolume?: number; // se ausente, significa "acima de"
+  rate: number; // percentual mensal (ex.: 0.006 = 0,60%)
+}
+
+export const INDIVIDUAL_ADVISOR_PORTFOLIO_BRACKETS: IndividualAdvisorPortfolioBracket[] = [
+  { minVolume: 5_000, maxVolume: 1_000_000, rate: 0.006 },          // 0,60%
+  { minVolume: 1_000_000.01, maxVolume: 3_000_000, rate: 0.0065 },  // 0,65%
+  { minVolume: 3_000_000.01, maxVolume: 7_000_000, rate: 0.007 },   // 0,70%
+  { minVolume: 7_000_000.01, maxVolume: 9_000_000, rate: 0.0075 },  // 0,75%
+  { minVolume: 9_000_000.01, maxVolume: 12_000_000, rate: 0.008 },  // 0,80%
+  { minVolume: 12_000_000.01, maxVolume: 17_000_000, rate: 0.0085 },// 0,85%
+  { minVolume: 17_000_000.01, maxVolume: 22_000_000, rate: 0.009 }, // 0,90%
+  { minVolume: 22_000_000.01, maxVolume: 50_000_000, rate: 0.01 },  // 1,00%
+  { minVolume: 50_000_000.01, rate: 0.01 },                         // acima de 50M: 1,00%
+];
+
+/**
+ * Retorna a taxa de comissão mensal do assessor individual com base no volume total de carteira ativa.
+ * Se o volume for menor que o mínimo da primeira faixa, retorna 0.
+ */
+export function getIndividualAdvisorPortfolioRate(totalActivePortfolio: number): number {
+  if (!Number.isFinite(totalActivePortfolio) || totalActivePortfolio <= 0) {
+    return 0;
+  }
+
+  const bracket = INDIVIDUAL_ADVISOR_PORTFOLIO_BRACKETS.find(b => {
+    if (totalActivePortfolio < b.minVolume) {
+      return false;
+    }
+    if (typeof b.maxVolume === "number" && totalActivePortfolio > b.maxVolume) {
+      return false;
+    }
+    return true;
+  });
+
+  return bracket ? bracket.rate : 0;
+}
+
 export function getInvestorMonthlyRateForExternalAdvisor(
   commitmentPeriod: number,
   liquidity: LiquidityOption
@@ -580,6 +683,11 @@ export function calculateNewCommissionLogic(
     officeId?: string;
     officeName?: string;
     isForAdvisor?: boolean; // Flag para identificar se é cálculo para assessor
+    /**
+     * Para `assessor_individual`: volume total da carteira ativa sob sua originação.
+     * Usado para definir a faixa percentual aplicável (0,60% a 1,00% a.m.).
+     */
+    totalActivePortfolio?: number;
   }
 ): NewCommissionCalculation {
   // Converter payment_date para Date, tratando diferentes formatos
@@ -652,6 +760,30 @@ export function calculateNewCommissionLogic(
     else liquidityOption = "mensal";
   }
   const liquidityCycleMonths = getLiquidityCycleMonths(liquidityOption);
+
+  // Rentabilidade mensal base do investidor (depende do tipo de assessor e da liquidez)
+  let investorBaseRateMonthly = COMMISSION_RATES.investidor;
+  if (investment.advisorRole === "assessor_externo") {
+    investorBaseRateMonthly = getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidityOption);
+  } else if (investment.advisorRole === "assessor_individual") {
+    investorBaseRateMonthly = getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidityOption);
+  }
+
+  // Taxa mensal base do assessor (depende do tipo de assessor)
+  let advisorBaseRateMonthly = COMMISSION_RATES.assessor; // interno: 3% ao mês
+  if (investment.advisorRole === "assessor_externo") {
+    advisorBaseRateMonthly = 0.02; // 2% ao mês
+  } else if (investment.advisorRole === "assessor_individual") {
+    const totalActivePortfolio = investment.totalActivePortfolio;
+    if (typeof totalActivePortfolio === "number" && Number.isFinite(totalActivePortfolio) && totalActivePortfolio > 0) {
+      advisorBaseRateMonthly = getIndividualAdvisorPortfolioRate(totalActivePortfolio);
+    } else {
+      // Sem volume total, não conseguimos determinar a faixa do assessor individual.
+      // Mantemos 0 para evitar superestimar.
+      advisorBaseRateMonthly = 0;
+      console.warn("[COMISSÃO] totalActivePortfolio ausente/invalid para assessor_individual. Usando 0% a.m.");
+    }
+  }
   
   let cutoffPeriod: { year: number; month: number; cutoffDate: Date };
   let commissionPeriod: { startDate: Date; endDate: Date };
@@ -789,9 +921,8 @@ export function calculateNewCommissionLogic(
       ) + 1; // +1 para incluir o dia do corte
       const daysDiff = Math.max(0, rawDaysDiff);
       
-      // Taxa do assessor: 3% padrão, 2% para assessor_externo
-      const advisorBaseRate =
-        investment.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor;
+      // Taxa do assessor (depende do tipo)
+      const advisorBaseRate = advisorBaseRateMonthly;
       // Taxa diária do assessor
       const dailyRateAdvisor = advisorBaseRate / 30;
       const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
@@ -827,7 +958,7 @@ export function calculateNewCommissionLogic(
       const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
       const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
       
-      investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+      investorCommission = calculateProportionalCommission(investment.amount, investorBaseRateMonthly, daysInPeriod);
     } else {
       // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
       investorCommission = 0;
@@ -850,7 +981,7 @@ export function calculateNewCommissionLogic(
     // Comissão mensal = valor * taxa mensal (assessorBaseRate para assessor, 1% para escritório, 2% para investidor)
     const monthlyAdvisorCommission = investment.amount * advisorBaseRate;
     const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
-    const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+    const monthlyInvestorCommission = investment.amount * investorBaseRateMonthly;
       
       // Construir monthlyBreakdown alinhado com as DATAS DE PAGAMENTO
       // 1. Primeiro mês: comissão proporcional aos dias acumulados até o corte atual,
@@ -962,7 +1093,7 @@ export function calculateNewCommissionLogic(
     // Taxa diária
     const dailyRateAdvisor = COMMISSION_RATES.assessor / 30;
     const dailyRateOffice = COMMISSION_RATES.escritorio / 30;
-    const dailyRateInvestor = COMMISSION_RATES.investidor / 30;
+    const dailyRateInvestor = investorBaseRateMonthly / 30;
     
     // Comissão proporcional: taxa diária * dias acumulados
     const proportionalRateAdvisor = dailyRateAdvisor * daysDiff;
@@ -996,7 +1127,7 @@ export function calculateNewCommissionLogic(
       const daysSinceCommissionStart = Math.max(0, Math.floor((cutoffDateUTC.getTime() - commissionStartDate.getTime()) / (1000 * 60 * 60 * 24)));
       const daysInPeriod = Math.min(30, daysSinceCommissionStart + 1); // +1 para incluir o dia do corte
       
-      investorCommission = calculateProportionalCommission(investment.amount, COMMISSION_RATES.investidor, daysInPeriod);
+      investorCommission = calculateProportionalCommission(investment.amount, investorBaseRateMonthly, daysInPeriod);
     } else {
       // Se não pode entrar no corte atual (ainda não passaram 60 dias), comissão é zero
       investorCommission = 0;
@@ -1009,7 +1140,7 @@ export function calculateNewCommissionLogic(
     // Comissão mensal = valor * taxa mensal (3% para assessor, 1% para escritório, 2% para investidor)
     const monthlyAdvisorCommission = investment.amount * COMMISSION_RATES.assessor;
     const monthlyOfficeCommission = investment.amount * COMMISSION_RATES.escritorio;
-    const monthlyInvestorCommission = investment.amount * COMMISSION_RATES.investidor;
+    const monthlyInvestorCommission = investment.amount * investorBaseRateMonthly;
     
     // Período de comissionamento: do dia da entrada até o corte atual (para cálculo)
     commissionPeriod = {

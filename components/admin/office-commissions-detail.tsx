@@ -140,7 +140,7 @@ export function OfficeCommissionsDetail() {
         .select("id, full_name, email, office_id, role")
         .eq("office_id", user.id)
         .eq("user_type", "distributor")
-        .in("role", ["assessor", "assessor_externo"])
+        .in("role", ["assessor", "assessor_externo", "assessor_individual"])
 
       if (advisorsError) {
         console.error('[ESCRITÓRIO] Erro ao buscar assessores:', advisorsError);
@@ -266,6 +266,20 @@ export function OfficeCommissionsDetail() {
         return
       }
 
+      // Para `assessor_individual`, a taxa recorrente do assessor depende do volume total da carteira ativa.
+      const investorParentIdById = new Map<string, string>()
+      finalInvestorProfiles.forEach((p: any) => {
+        if (p?.id && p?.parent_id) investorParentIdById.set(p.id, p.parent_id)
+      })
+
+      const totalActivePortfolioByAdvisorId = new Map<string, number>()
+      for (const inv of investmentsToProcess) {
+        const advisorId = investorParentIdById.get(inv.user_id)
+        if (!advisorId) continue
+        const current = totalActivePortfolioByAdvisorId.get(advisorId) || 0
+        totalActivePortfolioByAdvisorId.set(advisorId, current + Number(inv.amount || 0))
+      }
+
       // Buscar comprovantes PIX
       const investmentIds = investmentsToProcess.map((inv) => inv.id)
       const { data: receipts } = await supabase
@@ -318,6 +332,7 @@ export function OfficeCommissionsDetail() {
             advisorId: advisorId,
             advisorName: advisor?.full_name || "Assessor",
             advisorRole: advisor?.role,
+            totalActivePortfolio: totalActivePortfolioByAdvisorId.get(advisorId) || 0,
             isForAdvisor: true, // Sem D+60 para assessor
           })
           

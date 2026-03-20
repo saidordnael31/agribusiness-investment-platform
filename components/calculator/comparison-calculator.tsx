@@ -13,8 +13,10 @@ import {
   LiquidityOption,
   getAvailableLiquidityOptions,
   getAvailableLiquidityOptionsForExternalAdvisor,
+  getAvailableLiquidityOptionsForIndividualAdvisor,
   getInvestorMonthlyRate,
   getInvestorMonthlyRateForExternalAdvisor,
+  getInvestorMonthlyRateForIndividualAdvisor,
   getLiquidityCycleMonths,
   getRedemptionWindow,
 } from "@/lib/commission-calculator"
@@ -27,8 +29,6 @@ interface ScenarioConfig {
   liquidity: LiquidityOption
 }
 
-const commitmentOptions = [3, 6, 12, 24, 36]
-
 const liquidityLabels: Record<LiquidityOption, string> = {
   mensal: "Mensal",
   semestral: "Semestral",
@@ -38,7 +38,7 @@ const liquidityLabels: Record<LiquidityOption, string> = {
 }
 
 export function ComparisonCalculator() {
-  const [isExternalAdvisor, setIsExternalAdvisor] = useState(false)
+  const [advisorType, setAdvisorType] = useState<"default" | "external" | "individual">("default")
   const [scenarios, setScenarios] = useState<ScenarioConfig[]>([
     { name: "Cenário 1", amount: 500000, commitmentPeriod: 12, liquidity: "mensal" },
     { name: "Cenário 2", amount: 500000, commitmentPeriod: 12, liquidity: "semestral" },
@@ -53,17 +53,38 @@ export function ComparisonCalculator() {
     try {
       const parsed = JSON.parse(userStr)
       const role = parsed.role || parsed.user_type || parsed.type
-      setIsExternalAdvisor(role === "assessor_externo")
+      if (role === "assessor_externo") {
+        setAdvisorType("external")
+      } else if (role === "assessor_individual") {
+        setAdvisorType("individual")
+      } else {
+        setAdvisorType("default")
+      }
     } catch {
-      setIsExternalAdvisor(false)
+      setAdvisorType("default")
     }
   }, [])
 
+  const commitmentOptions = advisorType === "individual" ? [6, 12, 24, 36] : [3, 6, 12, 24, 36]
+
+  const getAvailableLiquidityByAdvisorType = (period: number) => {
+    if (advisorType === "external") {
+      return getAvailableLiquidityOptionsForExternalAdvisor(period)
+    }
+    if (advisorType === "individual") {
+      return getAvailableLiquidityOptionsForIndividualAdvisor(period)
+    }
+    return getAvailableLiquidityOptions(period)
+  }
+
   const calculateScenario = (scenario: ScenarioConfig) => {
     const { amount, commitmentPeriod, liquidity } = scenario
-    const investorRate = isExternalAdvisor
-      ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
-      : getInvestorMonthlyRate(commitmentPeriod, liquidity)
+    const investorRate =
+      advisorType === "external"
+        ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
+        : advisorType === "individual"
+          ? getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidity)
+          : getInvestorMonthlyRate(commitmentPeriod, liquidity)
     const redemptionWindow = getRedemptionWindow(commitmentPeriod)
     const liquidityCycleMonths = getLiquidityCycleMonths(liquidity)
 
@@ -107,9 +128,7 @@ export function ComparisonCalculator() {
         scenario.amount = Math.max(0, value)
       } else if (field === "commitmentPeriod" && typeof value === "number") {
         scenario.commitmentPeriod = value
-        const availableLiquidity = isExternalAdvisor
-          ? getAvailableLiquidityOptionsForExternalAdvisor(value)
-          : getAvailableLiquidityOptions(value)
+        const availableLiquidity = getAvailableLiquidityByAdvisorType(value)
         scenario.liquidity = availableLiquidity.includes(scenario.liquidity)
           ? scenario.liquidity
           : availableLiquidity[0] || "mensal"
@@ -125,9 +144,7 @@ export function ComparisonCalculator() {
   const comparisonData = useMemo(() => {
     return scenarios.map((scenario) => {
       const calc = calculateScenario(scenario)
-      const availableLiquidity = isExternalAdvisor
-        ? getAvailableLiquidityOptionsForExternalAdvisor(scenario.commitmentPeriod)
-        : getAvailableLiquidityOptions(scenario.commitmentPeriod)
+      const availableLiquidity = getAvailableLiquidityByAdvisorType(scenario.commitmentPeriod)
       const redemptionWindow = calc.redemptionWindow
 
       return {
@@ -150,7 +167,7 @@ export function ComparisonCalculator() {
         liquidityCycleMonths: calc.liquidityCycleMonths,
       }
     })
-  }, [scenarios, isExternalAdvisor])
+  }, [scenarios, advisorType])
 
   const chartData = useMemo(
     () =>

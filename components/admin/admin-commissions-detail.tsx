@@ -43,6 +43,7 @@ import {
   getFifthBusinessDayOfMonth,
   getInvestorMonthlyRate,
   getInvestorMonthlyRateForExternalAdvisor,
+  getInvestorMonthlyRateForIndividualAdvisor,
   getLiquidityCycleMonths,
   type LiquidityOption,
 } from "@/lib/commission-calculator"
@@ -54,7 +55,7 @@ interface AdminCommissionDetail extends NewCommissionCalculation {
   advisorRole?: string | null
   officeEmail?: string
   investorType?: "investor"
-  advisorType?: "assessor" | "assessor_externo" | null
+  advisorType?: "assessor" | "assessor_externo" | "assessor_individual" | null
   officeType?: "escritorio" | null
   /** Liquidez da rentabilidade do investimento (mensal, semestral, anual, bienal, trienal) */
   liquidity?: string
@@ -142,6 +143,17 @@ export function AdminCommissionsDetail() {
         advisors.map((a: any) => [a.id, a]),
       )
 
+      // Para `assessor_individual`, a taxa recorrente depende do volume total da carteira ativa do assessor.
+      // Vamos pré-calcular o total captado (soma dos investimentos ativos) por assessor.
+      const totalActivePortfolioByAdvisorId = new Map<string, number>()
+      for (const inv of investments) {
+        const investor = investorById.get(inv.user_id)
+        const advisorId = investor?.parent_id
+        if (!advisorId) continue
+        const current = totalActivePortfolioByAdvisorId.get(advisorId) || 0
+        totalActivePortfolioByAdvisorId.set(advisorId, current + Number(inv.amount || 0))
+      }
+
       // IDs de escritórios a partir dos assessores e investidores
       const officeIds = Array.from(
         new Set(
@@ -200,6 +212,7 @@ export function AdminCommissionsDetail() {
         try {
           if (advisor) {
             // 1) Calcular fluxo para assessor (sem D+60, pró‑rata)
+            const totalActivePortfolio = totalActivePortfolioByAdvisorId.get(advisor.id) || 0
             const advisorCalc = calculateNewCommissionLogic({
               id: investment.id,
               user_id: investment.user_id,
@@ -211,6 +224,7 @@ export function AdminCommissionsDetail() {
               advisorId: advisor.id,
               advisorName: advisor.full_name || "Assessor",
               advisorRole: advisor.role,
+              totalActivePortfolio,
               isForAdvisor: true,
             })
 
@@ -605,7 +619,7 @@ export function AdminCommissionsDetail() {
           return !!c.officeId
         }
         if (roleFilter === "advisor") {
-          return c.advisorRole === "assessor"
+          return c.advisorRole === "assessor" || c.advisorRole === "assessor_individual"
         }
         if (roleFilter === "advisor_externo") {
           return c.advisorRole === "assessor_externo"
@@ -835,9 +849,11 @@ export function AdminCommissionsDetail() {
     const cycleMonths = getLiquidityCycleMonths(liquidity)
     const commitmentPeriod = commission.commitmentPeriod ?? 12
     const monthlyRate =
-      commission.advisorRole === "assessor_externo"
-        ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
-        : getInvestorMonthlyRate(commitmentPeriod, liquidity)
+      commission.advisorRole === "assessor_individual"
+        ? getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidity)
+        : commission.advisorRole === "assessor_externo"
+          ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
+          : getInvestorMonthlyRate(commitmentPeriod, liquidity)
     if (!monthlyRate || monthlyRate <= 0) return fallback
 
     const monthsSinceStart = Math.floor(

@@ -24,8 +24,10 @@ import { Disclaimers } from "@/components/compliance/disclaimers";
 import {
   getInvestorMonthlyRate,
   getInvestorMonthlyRateForExternalAdvisor,
+  getInvestorMonthlyRateForIndividualAdvisor,
   getAvailableLiquidityOptions,
   getAvailableLiquidityOptionsForExternalAdvisor,
+  getAvailableLiquidityOptionsForIndividualAdvisor,
   type LiquidityOption,
 } from "@/lib/commission-calculator";
 
@@ -43,9 +45,11 @@ interface Bonification {
 export function InvestmentSimulator({
   title,
   isExternalAdvisorInvestor = false,
+  isIndividualAdvisorInvestor = false,
 }: {
   title?: string;
   isExternalAdvisorInvestor?: boolean;
+  isIndividualAdvisorInvestor?: boolean;
 }) {
   const [user, setUser] = useState<null>(null);
   const [amount, setAmount] = useState("5000");
@@ -70,15 +74,36 @@ export function InvestmentSimulator({
   // Usar tabela de assessor externo quando o investidor é de assessor externo (prop vinda do dashboard)
   const getRateByPeriodAndLiquidity = (period: number, liq: string): number => {
     const opt = liq as LiquidityOption;
-    return isExternalAdvisorInvestor
-      ? getInvestorMonthlyRateForExternalAdvisor(period, opt)
-      : getInvestorMonthlyRate(period, opt);
+    // Se for versão de distribuidor/assessor (layout com title), inferir a tabela pelo papel atual do usuário.
+    const effectiveIsIndividual =
+      isIndividualAdvisorInvestor ||
+      (!!title && user?.role === "assessor_individual");
+    const effectiveIsExternal =
+      isExternalAdvisorInvestor ||
+      (!!title && user?.role === "assessor_externo");
+
+    if (effectiveIsIndividual) {
+      return getInvestorMonthlyRateForIndividualAdvisor(period, opt);
+    }
+    if (effectiveIsExternal) {
+      return getInvestorMonthlyRateForExternalAdvisor(period, opt);
+    }
+    return getInvestorMonthlyRate(period, opt);
   };
 
   const getLiquidityOptionsForPeriod = (period: number): string[] => {
-    const options = isExternalAdvisorInvestor
-      ? getAvailableLiquidityOptionsForExternalAdvisor(period)
-      : getAvailableLiquidityOptions(period);
+    const effectiveIsIndividual =
+      isIndividualAdvisorInvestor ||
+      (!!title && user?.role === "assessor_individual");
+    const effectiveIsExternal =
+      isExternalAdvisorInvestor ||
+      (!!title && user?.role === "assessor_externo");
+
+    const options = effectiveIsIndividual
+      ? getAvailableLiquidityOptionsForIndividualAdvisor(period)
+      : effectiveIsExternal
+        ? getAvailableLiquidityOptionsForExternalAdvisor(period)
+        : getAvailableLiquidityOptions(period);
     return options as string[];
   };
 
@@ -108,6 +133,21 @@ export function InvestmentSimulator({
       bonusReturn: 0,
     });
   };
+
+  // Para `assessor_individual`, o material/tabela não contempla `3 meses`.
+  const effectiveIsIndividual =
+    isIndividualAdvisorInvestor || (!!title && user?.role === "assessor_individual");
+  const commitmentPeriodOptions = effectiveIsIndividual
+    ? [6, 12, 24, 36]
+    : [3, 6, 12, 24, 36];
+
+  useEffect(() => {
+    // Se estava selecionado um prazo inválido para `assessor_individual`, limpa o campo.
+    if (effectiveIsIndividual && commitmentPeriod === "3") {
+      setCommitmentPeriod("");
+      setLiquidity(""); // Resetar liquidez também
+    }
+  }, [effectiveIsIndividual]);
 
   // Se tiver título, é para distribuidor/assessor - usar novo layout
   // Se não tiver título, é para investidor - manter layout original
@@ -166,11 +206,11 @@ export function InvestmentSimulator({
                     <SelectValue placeholder="Selecione o prazo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="3">3 meses</SelectItem>
-                    <SelectItem value="6">6 meses</SelectItem>
-                    <SelectItem value="12">12 meses</SelectItem>
-                    <SelectItem value="24">24 meses</SelectItem>
-                    <SelectItem value="36">36 meses</SelectItem>
+                    {commitmentPeriodOptions.map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {m} meses
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -218,7 +258,7 @@ export function InvestmentSimulator({
                   Prazo: {commitmentPeriod} meses | Liquidez: {liquidity.charAt(0).toUpperCase() + liquidity.slice(1)}
                 </p>
                 <p className="text-lg font-bold text-[#00BC6E]">
-                  {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                  {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(2)}% a.m.
                 </p>
               </div>
 
@@ -312,11 +352,11 @@ export function InvestmentSimulator({
                   <SelectValue placeholder="Selecione o prazo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="3">3 meses</SelectItem>
-                  <SelectItem value="6">6 meses</SelectItem>
-                  <SelectItem value="12">12 meses</SelectItem>
-                  <SelectItem value="24">24 meses</SelectItem>
-                  <SelectItem value="36">36 meses</SelectItem>
+                    {commitmentPeriodOptions.map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {m} meses
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -365,7 +405,7 @@ export function InvestmentSimulator({
                 Prazo: {commitmentPeriod} meses | Liquidez: {liquidity.charAt(0).toUpperCase() + liquidity.slice(1)}
               </p>
               <p className="text-lg font-bold text-[#00FF88]">
-                {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(1)}% a.m.
+                {(getRateByPeriodAndLiquidity(Number.parseInt(commitmentPeriod), liquidity) * 100).toFixed(2)}% a.m.
               </p>
             </div>
 
