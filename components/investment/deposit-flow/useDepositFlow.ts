@@ -273,6 +273,7 @@ export function useDepositFlow() {
       "36": {
         "Mensal": 0.0185, // 1,85%
         "Semestral": 0.019, // 1,90%
+        "Anual": 0.0195, // 1,95%
         "Bienal": 0.0195, // 1,95%
         "Trienal": 0.02, // 2,00%
       },
@@ -346,7 +347,10 @@ export function useDepositFlow() {
         ? externalAdvisorRates
         : defaultRates;
 
-    return Object.keys(table[period.toString()] || {});
+    const allowedLiquidity = ["Anual", "Bienal", "Trienal"];
+    return Object.keys(table[period.toString()] || {}).filter((option) =>
+      allowedLiquidity.includes(option)
+    );
   };
 
   const handleCommitmentPeriodChange = (value: string) => {

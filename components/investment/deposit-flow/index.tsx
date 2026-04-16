@@ -452,7 +452,7 @@ export function DepositFlow() {
                     <SelectValue placeholder="Selecione o prazo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(isIndividualAdvisorInvestor ? [6, 12, 24, 36] : [3, 6, 12, 24, 36]).map((m) => (
+                    {[12, 24, 36].map((m) => (
                       <SelectItem key={m} value={String(m)}>
                         {m} meses
                       </SelectItem>
