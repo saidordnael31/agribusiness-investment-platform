@@ -41,17 +41,17 @@ export default function ContatosPage() {
               </CardHeader>
               <CardContent>
                 <a
-                  href="mailto:luiz.fortuna@akintec.com"
+                  href="mailto:agrinvest@akintec.com"
                   className="text-lg font-semibold text-blue-400 hover:text-blue-300 transition-colors break-all"
                 >
-                  luiz.fortuna@akintec.com
+                  agrinvest@akintec.com
                 </a>
                 <div className="mt-4">
                   <Button
                     asChild
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
-                    <a href="mailto:luiz.fortuna@akintec.com">
+                    <a href="mailto:agrinvest@akintec.com">
                       Enviar E-mail
                     </a>
                   </Button>

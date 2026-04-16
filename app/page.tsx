@@ -1,37 +1,7 @@
 import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, Shield, BarChart3, Users, Calendar, FileText } from "lucide-react"
+import { Calendar, FileText } from "lucide-react"
 import Image from "next/image"
-
-const marketData = [
-  { name: "Selic/Tesouro", min: 0.8, max: 1.0, avg: 0.9 },
-  { name: "CDBs/Fundos RF", min: 1.0, max: 1.2, avg: 1.1 },
-  { name: "Fundos Multi", min: 1.5, max: 2.0, avg: 1.75 },
-  { name: "Agrinvest", min: 2.0, max: 3.0, avg: 2.50 },
-]
-
-const highlights = {
-  opsAtivas: 18,
-  volume30d: 12800000,
-  proj: {
-    "12m": { 
-      conservador: 2.0,
-      base: 2.4,
-      otimista: 3.0,
-    },
-    "24m": { 
-      conservador: 2.1,
-      base: 2.5,
-      otimista: 3.2,
-    },
-    "36m": { 
-      conservador: 3.5,
-      base: 3.0,
-      otimista: 3.0,
-    },
-  },
-};
 
 export default function HomePage() {
   const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendly.com/akintec/30min"
@@ -153,68 +123,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Rentabilidade e Diferenciais - Background Unificado */}
-      <div 
-        className="py-20 px-4"
-        style={{
-          background: 'linear-gradient(180deg, #003562 0%, #D9D9D9 100%), url("/images/blur-bg.png")',
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-          marginTop: 0,
-          marginBottom: 0
-        }}
-      >
-        {/* Rentabilidade Section */}
-        <div className="container mx-auto">
-          <h2 className="text-4xl font-bold text-white text-center mb-12 font-urbanist">
-            RENTABILIDADE COM SEGURANÇA E TRANSPARÊNCIA
-          </h2>
-          
-          <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-8 mb-12">
-            <Card className="bg-[#003562] border-0 text-center p-6 sm:p-8">
-              <CardTitle className="text-4xl sm:text-6xl font-bold text-white mb-2 font-ibm-plex-sans">18</CardTitle>
-              <CardDescription className="text-white text-base sm:text-lg font-ibm-plex-sans">operações em curso</CardDescription>
-            </Card>
-            <Card className="bg-[#003562] border-0 text-center p-6 sm:p-8">
-              <CardTitle className="text-4xl sm:text-6xl font-bold text-white mb-2 font-ibm-plex-sans">R$12.8M</CardTitle>
-              <CardDescription className="text-white text-base sm:text-lg font-ibm-plex-sans">volume financiado (30 dias)</CardDescription>
-            </Card>
-          </div>
-
-          <div className="max-w-4xl mx-auto">
-            <h3 className="text-2xl font-bold text-white text-center mb-8 font-urbanist">
-              Cenários de Projeção
-            </h3>
-            <p className="text-white text-center mb-8 font-ibm-plex-sans">(%a.m alvo/esperado)</p>
-            
-            <div className="space-y-4">
-              {Object.entries(highlights.proj).map(([periodo, valores]) => (
-                <Card key={periodo} className="bg-[#D9D9D9] border-0 p-4 sm:p-6">
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <span className="text-xl sm:text-2xl font-bold text-[#003F28] font-ibm-plex-sans">{periodo}</span>
-                    <div className="flex gap-4 sm:gap-8">
-                      <div className="text-center">
-                        <div className="text-lg sm:text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.conservador}%</div>
-                        <div className="text-xs sm:text-sm text-[#4A4D4C] font-ibm-plex-sans">conservador</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg sm:text-xl font-bold text-[#4A4D4C] font-ibm-plex-sans">{valores.base}%</div>
-                        <div className="text-xs sm:text-sm text-[#4A4D4C] font-ibm-plex-sans">base</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg sm:text-xl font-bold text-[#00BC6E] font-ibm-plex-sans">{valores.otimista}%</div>
-                        <div className="text-xs sm:text-sm text-[#4A4D4C] font-ibm-plex-sans">otimista</div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Diferenciais + O AGRO do futuro + Footer - Background Unificado com blur-bg.png */}
       <div 
         className="py-20 px-4 relative min-h-screen"
@@ -239,39 +147,6 @@ export default function HomePage() {
               backgroundRepeat: "no-repeat"
             }}
           ></div>
-        </div>
-        
-        {/* Diferenciais Competitivos */}
-        <div className="container mx-auto mt-20 relative z-10">
-          <div className="flex flex-col items-center">
-            {/* Banner do título - quase transparente */}
-            <div className="rounded-2xl px-8 py-4 mb-8 border border-white/20" style={{ background: 'linear-gradient(180deg, rgba(217, 217, 217, 0.1) 0%, rgba(217, 217, 217, 0.1) 100%)' }}>
-              <h2 className="text-2xl font-bold text-[#003F28] font-urbanist">
-                Diferenciais Competitivos
-              </h2>
-            </div>
-            
-            {/* Card principal - estilo das imagens */}
-            <Card className="border-2 border-[#00BC6E] p-8 max-w-4xl mx-auto rounded-2xl" style={{ backgroundColor: 'rgba(0, 53, 98, 0.65)' }}>
-              <div className="space-y-4">
-                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
-                  Estrutura Privada Auditada
-                </div>
-                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
-                  Transparência & Relatórios
-                </div>
-                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
-                  Rentabilidade acima da renda fixa tradicional
-                </div>
-                <div className="text-center text-white text-lg font-ibm-plex-sans py-4 border-b-2 border-[#00BC6E]">
-                  Impacto Real no Agro
-                </div>
-                <div className="text-center text-white text-lg font-ibm-plex-sans py-4">
-                  Liquidez programada e previsível
-                </div>
-              </div>
-            </Card>
-          </div>
         </div>
         
         <div className="container mx-auto text-center relative z-10 mt-20">
