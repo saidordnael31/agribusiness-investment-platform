@@ -1,7 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
-import { getInvestorMonthlyRate } from "@/lib/commission-calculator"
-
 export const dynamic = "force-dynamic"
 
 // PATCH - Atualizar investimento (apenas admin)
@@ -138,15 +136,8 @@ export async function PATCH(
       allowedFields.quota_type = updateData.quota_type
     }
 
-    // Se commitment_period ou profitability_liquidity foram alterados, recalcular monthly_return_rate
-    if (allowedFields.commitment_period || allowedFields.profitability_liquidity) {
-      const commitmentPeriod = allowedFields.commitment_period || existingInvestment.commitment_period
-      const liquidity = allowedFields.profitability_liquidity || existingInvestment.profitability_liquidity || 'Mensal'
-      
-      // Recalcular taxa mensal baseado nas novas regras
-      const newRate = getInvestorMonthlyRate(commitmentPeriod, liquidity)
-      allowedFields.monthly_return_rate = newRate
-    }
+    // Taxa contratual: use sempre `monthly_return_rate` persistido. Para alterar prazo/liquidez e taxa,
+    // envie explicitamente `monthly_return_rate` no PATCH (não recalcular automaticamente por tabela).
 
     // Adicionar updated_at
     allowedFields.updated_at = new Date().toISOString()
