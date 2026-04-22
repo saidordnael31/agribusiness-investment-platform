@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Gerando QR Code PIX fixo para:", { value, cpf, email, userName })
 
     const fixedPixCode =
-      "00020101021126360014br.gov.bcb.pix0114630936810001085204000053039865802BR5913AGRINVEST SCP6009SAO PAULO62070503***6304A7ED"
+      "00020101021126580014br.gov.bcb.pix01361b29340b-e834-46bd-9f51-8df1d5551b525204000053039865802BR5913AGRINVEST SCP6009SAO PAULO62070503***6304DC79"
 
     console.log("[v0] Enviando email com código PIX para:", { email, userName })
     // Enviar email com código PIX se email e nome do usuário foram fornecidos
