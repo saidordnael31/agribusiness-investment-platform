@@ -1079,9 +1079,6 @@ export function WithdrawFlow() {
                 <p className="text-[#003F28] font-ibm-plex-sans font-normal text-lg">
                   Você receberá seus rendimentos quando completar o período.
                 </p>
-                <p className="text-[#003F28] font-ibm-plex-sans font-bold text-lg mt-2">
-                  Data prevista: {getDividendsAvailableDate(selectedInvestment)?.toLocaleDateString("pt-BR")}
-                </p>
               </div>
             )}
           </CardContent>
