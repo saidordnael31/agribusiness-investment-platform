@@ -16,6 +16,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import {
+  ArrowLeft,
+  TrendingUp,
+  Calendar,
+  Shield,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  FileText,
+  DollarSign,
+} from "lucide-react";
 
 interface ProductDetailProps {
   productId: string;
