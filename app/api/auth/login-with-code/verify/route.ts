@@ -51,21 +51,44 @@ export async function POST(request: NextRequest) {
 
     // Buscar usuário na tabela profiles
     const supabase = createAdminClient();
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("email", normalizedEmail)
       .single();
 
+    // Se o perfil não existe, criar um novo perfil de investidor
     if (profileError || !profile) {
-      console.error("Erro ao buscar perfil:", profileError);
-      return NextResponse.json(
-        { success: false, error: "Usuário não encontrado" },
-        { status: 404 }
-      );
-    }
+      console.log(`[LOGIN-WITH-CODE-VERIFY] Perfil não encontrado, criando novo perfil para: ${normalizedEmail}`);
+      
+      const newProfileId = crypto.randomUUID();
+      const { data: newProfile, error: createError } = await supabase
+        .from("profiles")
+        .insert({
+          id: newProfileId,
+          email: normalizedEmail,
+          full_name: normalizedEmail.split("@")[0],
+          user_type: "investor",
+          is_pass_temp: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-    console.log(`[LOGIN-WITH-CODE-VERIFY] ✅ Perfil encontrado: ${profile.id}`);
+      if (createError || !newProfile) {
+        console.error("Erro ao criar perfil:", createError);
+        return NextResponse.json(
+          { success: false, error: "Erro ao criar perfil do usuário" },
+          { status: 500 }
+        );
+      }
+
+      profile = newProfile;
+      console.log(`[LOGIN-WITH-CODE-VERIFY] ✅ Novo perfil criado: ${profile.id}`);
+    } else {
+      console.log(`[LOGIN-WITH-CODE-VERIFY] ✅ Perfil encontrado: ${profile.id}`);
+    }
 
     // Verificar se o usuário tem conta de autenticação no Supabase Auth
     let authUser = null;
