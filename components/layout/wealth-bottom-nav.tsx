@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   },
   {
     label: "Investir",
-    href: "/investor/products",
+    href: "/investor/invest",
     icon: <PlusCircle className="h-5 w-5" />,
   },
   {
