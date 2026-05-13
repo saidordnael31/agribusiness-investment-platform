@@ -53,6 +53,51 @@ interface TransactionHistoryItem {
   monthly_return_rate?: number | null;
 }
 
+function normalizeHistoryStatus(status: string): string {
+  return String(status || "").toLowerCase();
+}
+
+function getTransactionHistoryStatusLabel(status: string): string {
+  switch (normalizeHistoryStatus(status)) {
+    case "active":
+      return "Ativo";
+    case "completed":
+      return "Concluído";
+    case "pending":
+      return "Pendente";
+    case "withdrawn":
+      return "Resgatado";
+    case "cancelled":
+      return "Cancelado";
+    case "failed":
+      return "Falhou";
+    default:
+      return status ? String(status) : "—";
+  }
+}
+
+function getTransactionHistoryBadgeVariant(
+  status: string
+): "default" | "secondary" | "destructive" | "outline" {
+  const s = normalizeHistoryStatus(status);
+  if (s === "active" || s === "completed") return "default";
+  if (s === "pending") return "secondary";
+  if (s === "withdrawn" || s === "cancelled") return "outline";
+  if (s === "failed") return "destructive";
+  return "outline";
+}
+
+function getTransactionHistoryBadgeClassName(status: string): string {
+  const s = normalizeHistoryStatus(status);
+  const base = "text-xs px-2 py-0.5";
+  if (s === "pending") return `${base} bg-[#D9D9D9] text-[#003F28] border-transparent`;
+  if (s === "withdrawn")
+    return `${base} border-sky-400/50 bg-sky-950/40 text-sky-100`;
+  if (s === "cancelled")
+    return `${base} border-white/25 bg-white/10 text-white/85`;
+  return base;
+}
+
 export function InvestorDashboard() {
   const [user, setUser] = useState<UserData | null>(null);
   const [investmentsData, setInvestmentsData] = useState<any[]>([]);
@@ -717,27 +762,14 @@ export function InvestorDashboard() {
                           }).format(item.amount)}
                         </p>
                         <Badge
-                          variant={
-                            item.status === "active" ||
-                            item.status === "completed"
-                              ? "default"
-                              : item.status === "pending"
-                              ? "secondary"
-                              : "destructive"
-                          }
-                          className={`text-xs px-2 py-0.5 ${
-                            item.status === "pending"
-                              ? "bg-[#D9D9D9] text-[#003F28]"
-                              : ""
-                          }`}
+                          variant={getTransactionHistoryBadgeVariant(
+                            item.status
+                          )}
+                          className={getTransactionHistoryBadgeClassName(
+                            item.status
+                          )}
                         >
-                          {item.status === "active"
-                            ? "Ativo"
-                            : item.status === "completed"
-                            ? "Concluído"
-                            : item.status === "pending"
-                            ? "Pendente"
-                            : "Falhou"}
+                          {getTransactionHistoryStatusLabel(item.status)}
                         </Badge>
                       </div>
                     </div>
@@ -745,14 +777,22 @@ export function InvestorDashboard() {
                     <div className="flex flex-col gap-1.5 w-full text-sm text-white/70">
                       <div className="flex flex-row justify-between">
                         <span>
-                          {item.type === "investment" && item.status === "active" && item.payment_date
+                          {item.type === "investment" &&
+                          (normalizeHistoryStatus(item.status) === "active" ||
+                            normalizeHistoryStatus(item.status) ===
+                              "withdrawn") &&
+                          item.payment_date
                             ? "Data de pagamento:"
                             : item.type === "investment"
                             ? "Data de criação:"
                             : "Data:"}
                         </span>
                         <span>
-                          {item.type === "investment" && item.status === "active" && item.payment_date
+                          {item.type === "investment" &&
+                          (normalizeHistoryStatus(item.status) === "active" ||
+                            normalizeHistoryStatus(item.status) ===
+                              "withdrawn") &&
+                          item.payment_date
                             ? new Date(item.payment_date).toLocaleDateString("pt-BR")
                             : new Date(item.created_at).toLocaleDateString("pt-BR")}
                         </span>
