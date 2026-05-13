@@ -133,14 +133,17 @@ export function InvestmentSimulator({
 
   const effectiveIsIndividual =
     isIndividualAdvisorInvestor || (!!title && user?.role === "assessor_individual");
-  const commitmentPeriodOptions = effectiveIsIndividual ? [6, 12, 24, 36] : [3, 6, 12, 24, 36];
+  const commitmentPeriodOptions = effectiveIsIndividual ? [12, 24, 36] : [12, 24, 36];
+
 
   useEffect(() => {
-    if (effectiveIsIndividual && commitmentPeriod === "3") {
-      setCommitmentPeriod("");
-      setLiquidity("");
+    if (commitmentPeriod) {
+      const liquidityOptions = getLiquidityOptionsForPeriod(Number.parseInt(commitmentPeriod));
+      if (liquidity && !liquidityOptions.includes(liquidity)) {
+        setLiquidity(liquidityOptions[0] || "");
+      }
     }
-  }, [effectiveIsIndividual]);
+  }, [commitmentPeriod]);
 
   const formatMoneyInput = (val: string) => {
     const digits = val.replace(/\D/g, "");
