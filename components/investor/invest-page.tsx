@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -242,6 +243,7 @@ const formatCurrency = (value: number) =>
 
 function RecommendedCard({ product }: { product: Product }) {
   const [fav, setFav] = useState(false);
+  const router = useRouter();
 
   return (
     <div className="flex-shrink-0 w-64 rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-3 snap-start">
@@ -298,6 +300,7 @@ function RecommendedCard({ product }: { product: Product }) {
         <Button
           size="sm"
           className="flex-1 h-8 bg-[#00BC6E] hover:bg-[#00a85f] text-white text-xs font-semibold rounded-lg"
+          onClick={() => router.push(`/investor/products/${product.id}?simulate=true`)}
         >
           Simular
         </Button>
@@ -305,6 +308,7 @@ function RecommendedCard({ product }: { product: Product }) {
           size="sm"
           variant="outline"
           className="flex-1 h-8 border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-xs rounded-lg bg-transparent"
+          onClick={() => router.push(`/investor/products/${product.id}`)}
         >
           Ver detalhes
         </Button>
@@ -315,6 +319,7 @@ function RecommendedCard({ product }: { product: Product }) {
 
 function ProductCard({ product }: { product: Product }) {
   const [fav, setFav] = useState(false);
+  const router = useRouter();
 
   return (
     <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-3">
@@ -399,6 +404,7 @@ function ProductCard({ product }: { product: Product }) {
         <Button
           size="sm"
           className="flex-1 h-9 bg-[#00BC6E] hover:bg-[#00a85f] text-white text-sm font-semibold rounded-xl"
+          onClick={() => router.push(`/investor/products/${product.id}?reserve=true`)}
         >
           Reservar
         </Button>
@@ -406,6 +412,7 @@ function ProductCard({ product }: { product: Product }) {
           size="sm"
           variant="outline"
           className="h-9 px-4 border-white/20 text-white/70 hover:text-white hover:bg-white/10 text-sm rounded-xl bg-transparent"
+          onClick={() => router.push(`/investor/products/${product.id}?simulate=true`)}
         >
           Simular
         </Button>
@@ -413,6 +420,7 @@ function ProductCard({ product }: { product: Product }) {
           size="sm"
           variant="ghost"
           className="h-9 px-3 text-white/50 hover:text-white hover:bg-white/10 text-sm rounded-xl"
+          onClick={() => router.push(`/investor/products/${product.id}`)}
         >
           Ver detalhes
         </Button>
