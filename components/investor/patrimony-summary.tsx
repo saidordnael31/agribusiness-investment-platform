@@ -2,14 +2,8 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { Eye, EyeOff, TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface PatrimonySummaryProps {
   totalPatrimony: number;
@@ -69,16 +63,6 @@ export function PatrimonySummary({
       <div className="relative flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className="text-sm text-white/60">Patrimonio Total</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <Info className="h-3.5 w-3.5 text-white/40" />
-              </TooltipTrigger>
-              <TooltipContent className="bg-[#01223F] border-white/20 text-white">
-                <p>Soma de todos os seus investimentos + rendimentos</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
         <Button
           variant="ghost"
