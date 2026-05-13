@@ -390,7 +390,7 @@ export function WealthDashboard() {
           asChild
           className="relative bg-[#00BC6E] hover:bg-[#00a85f] text-[#003F28] font-semibold rounded-xl h-10 px-6"
         >
-          <Link href="/investor/products">
+          <Link href="/investor/invest">
             <PlusCircle className="h-4 w-4 mr-2" />
             Investir
           </Link>
@@ -541,7 +541,7 @@ export function WealthDashboard() {
             Produtos recomendados
           </h2>
           <Link
-            href="/investor/products"
+            href="/investor/invest"
             className="flex items-center gap-1 text-xs text-[#00BC6E] hover:text-[#00a85f] transition-colors"
           >
             Ver todos
@@ -651,7 +651,7 @@ function EmptyPerformance() {
         size="sm"
         className="mt-1 bg-[#00BC6E] hover:bg-[#00a85f] text-[#003F28] font-semibold rounded-xl"
       >
-        <Link href="/investor/products">Ver oportunidades</Link>
+        <Link href="/investor/invest">Ver oportunidades</Link>
       </Button>
     </div>
   );
