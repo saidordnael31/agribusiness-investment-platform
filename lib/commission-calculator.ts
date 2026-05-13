@@ -28,18 +28,9 @@ interface InvestorRateRule {
 }
 
 export const INVESTOR_RATE_RULES: InvestorRateRule[] = [
-  { months: 3, liquidity: "mensal", rate: 0.018 },
-  { months: 6, liquidity: "mensal", rate: 0.019 },
-  { months: 6, liquidity: "semestral", rate: 0.02 },
-  { months: 12, liquidity: "mensal", rate: 0.021 },
-  { months: 12, liquidity: "semestral", rate: 0.022 },
   { months: 12, liquidity: "anual", rate: 0.025 },
-  { months: 24, liquidity: "mensal", rate: 0.023 },
-  { months: 24, liquidity: "semestral", rate: 0.025 },
   { months: 24, liquidity: "anual", rate: 0.027 },
   { months: 24, liquidity: "bienal", rate: 0.03 },
-  { months: 36, liquidity: "mensal", rate: 0.024 },
-  { months: 36, liquidity: "semestral", rate: 0.026 },
   { months: 36, liquidity: "anual", rate: 0.03 },
   { months: 36, liquidity: "bienal", rate: 0.032 },
   { months: 36, liquidity: "trienal", rate: 0.035 },
@@ -56,18 +47,9 @@ export const INVESTOR_RATE_MATRIX: Record<number, Partial<Record<LiquidityOption
 
 /** Tabela para investidores de assessores externos (teto 2% a.m.) */
 export const EXTERNAL_ADVISOR_RATE_RULES: InvestorRateRule[] = [
-  { months: 3, liquidity: "mensal", rate: 0.0135 },
-  { months: 6, liquidity: "mensal", rate: 0.014 },
-  { months: 6, liquidity: "semestral", rate: 0.0145 },
-  { months: 12, liquidity: "mensal", rate: 0.015 },
-  { months: 12, liquidity: "semestral", rate: 0.0155 },
   { months: 12, liquidity: "anual", rate: 0.016 },
-  { months: 24, liquidity: "mensal", rate: 0.0165 },
-  { months: 24, liquidity: "semestral", rate: 0.017 },
   { months: 24, liquidity: "anual", rate: 0.0175 },
   { months: 24, liquidity: "bienal", rate: 0.018 },
-  { months: 36, liquidity: "mensal", rate: 0.0185 },
-  { months: 36, liquidity: "semestral", rate: 0.019 },
   { months: 36, liquidity: "anual", rate: 0.0195 },
   { months: 36, liquidity: "trienal", rate: 0.02 },
 ];
@@ -94,21 +76,12 @@ export function getAvailableLiquidityOptionsForExternalAdvisor(commitmentPeriod:
  * Valores conforme material de planos de investimento para assessores individuais.
  */
 export const INDIVIDUAL_ADVISOR_RATE_RULES: InvestorRateRule[] = [
-  // 6 meses
-  { months: 6, liquidity: "mensal", rate: 0.014 },
-  { months: 6, liquidity: "semestral", rate: 0.0145 },
   // 12 meses
-  { months: 12, liquidity: "mensal", rate: 0.015 },
-  { months: 12, liquidity: "semestral", rate: 0.0155 },
   { months: 12, liquidity: "anual", rate: 0.016 },
   // 24 meses
-  { months: 24, liquidity: "mensal", rate: 0.0165 },
-  { months: 24, liquidity: "semestral", rate: 0.017 },
   { months: 24, liquidity: "anual", rate: 0.0175 },
   { months: 24, liquidity: "bienal", rate: 0.018 },
   // 36 meses
-  { months: 36, liquidity: "mensal", rate: 0.0185 },
-  { months: 36, liquidity: "semestral", rate: 0.019 },
   { months: 36, liquidity: "anual", rate: 0.0195 },
   { months: 36, liquidity: "trienal", rate: 0.02 },
 ];
