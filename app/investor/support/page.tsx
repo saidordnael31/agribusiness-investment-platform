@@ -1,12 +1,12 @@
-import { WealthDashboard } from "@/components/investor/wealth-dashboard"
+import { SupportCenter } from "@/components/investor/support-center"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { WealthLayout } from "@/components/layout/wealth-layout"
 
-export default function InvestorPage() {
+export default function SupportPage() {
   return (
     <ProtectedRoute allowedTypes={["investor"]}>
       <WealthLayout>
-        <WealthDashboard />
+        <SupportCenter />
       </WealthLayout>
     </ProtectedRoute>
   )

@@ -27,8 +27,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Akintec Platform - Clube Privado de Investimentos do Agronegócio",
-  description: "Clube privado de investimentos em direitos creditórios do agronegócio brasileiro",
+  title: "Akin Wealth Management - Investimentos no Agronegocio",
+  description: "Plataforma de Wealth Management especializada em investimentos no agronegocio brasileiro. CRAs, FIAGROs e produtos exclusivos.",
   generator: "v0.app",
 }
 
