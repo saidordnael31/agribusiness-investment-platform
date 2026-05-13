@@ -57,8 +57,8 @@ export function InvestmentSimulator({
   isIndividualAdvisorInvestor?: boolean;
 }) {
   const [user, setUser] = useState<null>(null);
-  const [amount, setAmount] = useState("50000");
-  const [rawAmount, setRawAmount] = useState("50000");
+  const [amount, setAmount] = useState("");
+  const [rawAmount, setRawAmount] = useState("");
   const [commitmentPeriod, setCommitmentPeriod] = useState("");
   const [liquidity, setLiquidity] = useState("");
 
@@ -274,7 +274,7 @@ export function InvestmentSimulator({
             <input
               type="text"
               inputMode="numeric"
-              placeholder="50.000,00"
+              placeholder="Digite o valor"
               value={rawAmount ? formatMoneyInput(rawAmount) : ""}
               onChange={handleAmountChange}
               className="w-full h-11 rounded-xl bg-white/5 border border-white/10 pl-9 pr-4 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#00BC6E]/50 focus:ring-1 focus:ring-[#00BC6E]/20 transition-all"
