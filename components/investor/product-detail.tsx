@@ -1,39 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
-  TrendingUp,
-  Calendar,
   Shield,
   Clock,
   AlertTriangle,
   CheckCircle2,
   FileText,
   ChevronRight,
-  Lock,
   DollarSign,
-  BarChart3,
-  Layers,
-  Calculator,
   Info,
+  TrendingUp,
+  Calendar,
+  Percent,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type RiskLevel = "baixo" | "medio" | "alto" | "muito-alto";
 type StatusType = "aberta" | "estruturacao" | "breve" | "encerrado";
-
-interface TimelineStep {
-  label: string;
-}
 
 interface RiskItem {
   title: string;
@@ -50,242 +39,559 @@ interface ProductData {
   termMonths: number;
   liquidity: string;
   minInvestment: number;
-  maxInvestment?: number;
-  riskLevel: RiskLevel;
-  riskNumber: number;
+  riskNumber: 1 | 2 | 3 | 4 | 5;
   status: StatusType;
   qualifiedOnly?: boolean;
+  cvm88?: boolean;
+  equity?: boolean;
   about: string;
   objective: string;
+  issuer: string;
   collateral: string[];
-  timeline: TimelineStep[];
+  guarantees: string[];
+  taxation: string;
+  timeline: { label: string }[];
   risks: RiskItem[];
   documents: { name: string }[];
-  monthlyRate: number;
+  tags: string[];
+  annualRate?: number; // taxa anual base para simulador (null = equity sem retorno fixo)
 }
 
 // ─── Dados dos Produtos ───────────────────────────────────────────────────────
 
 const productsData: Record<string, ProductData> = {
-  "ccb-recebiveis": {
-    id: "ccb-recebiveis",
-    name: "CCB Akin Recebíveis 180D",
-    category: "Renda Fixa Privada",
-    returnRate: "115% do CDI",
+  "nota-comercial-akin-cr": {
+    id: "nota-comercial-akin-cr",
+    name: "Nota Comercial Akin CR",
+    category: "Crédito Privado",
+    returnRate: "CDI + 5% a.a.",
     indexador: "CDI",
-    term: "180 dias",
-    termMonths: 6,
+    term: "12 a 18 meses",
+    termMonths: 18,
     liquidity: "No vencimento",
-    minInvestment: 5000,
-    riskLevel: "medio",
-    riskNumber: 2,
-    status: "aberta",
-    about:
-      "A CCB Akin Recebíveis 180D é uma operação de crédito privado estruturada pela Akin S.A., com objetivo de financiar operações comerciais e recebíveis selecionados. O produto é direcionado a investidores que buscam exposição a crédito privado com prazo definido, rentabilidade-alvo e acompanhamento digital pela plataforma Agrinvest.",
-    objective:
-      "Os recursos captados são destinados ao financiamento de operações previamente analisadas pela Akin S.A., respeitando critérios internos de crédito, documentação, garantias e monitoramento.",
-    collateral: [
-      "Recebíveis comerciais selecionados",
-      "Contratos ou títulos representativos da operação",
-      "Conta de acompanhamento da operação",
-      "Relatórios periódicos",
-      "Eventuais garantias adicionais conforme documentação específica",
-    ],
-    timeline: [
-      { label: "Reserva" },
-      { label: "Assinatura dos documentos" },
-      { label: "Integralização" },
-      { label: "Alocação na operação" },
-      { label: "Acompanhamento mensal" },
-      { label: "Pagamento no vencimento" },
-    ],
-    risks: [
-      {
-        title: "Risco de crédito",
-        description: "Possibilidade de inadimplência do devedor dos recebíveis.",
-      },
-      {
-        title: "Risco de liquidez",
-        description: "O produto não possui liquidez antes do vencimento.",
-      },
-      {
-        title: "Risco de mercado",
-        description: "Variação das taxas de juros pode afetar a marcação a mercado.",
-      },
-      {
-        title: "Risco operacional",
-        description: "Falhas em processos internos ou sistemas de gestão.",
-      },
-      {
-        title: "Risco regulatório",
-        description: "Mudanças na legislação podem impactar as condições da operação.",
-      },
-    ],
-    documents: [
-      { name: "Lâmina do produto" },
-      { name: "Termo de ciência de risco" },
-      { name: "Contrato de investimento" },
-      { name: "Relatório de lastro" },
-      { name: "Política de suitability" },
-      { name: "Informações regulatórias" },
-    ],
-    monthlyRate: 1.05,
-  },
-  "fidc-senior": {
-    id: "fidc-senior",
-    name: "FIDC Akin Sênior",
-    category: "Fundo de Crédito",
-    returnRate: "CDI + 3,5% a.a.",
-    indexador: "CDI",
-    term: "12 meses",
-    termMonths: 12,
-    liquidity: "360 dias",
-    minInvestment: 10000,
-    riskLevel: "medio",
+    minInvestment: 50000,
     riskNumber: 3,
     status: "aberta",
-    qualifiedOnly: true,
-    about:
-      "O FIDC Akin Sênior é um fundo de investimento em direitos creditórios estruturado para oferecer exposição diversificada a recebíveis comerciais do agronegócio. A cota sênior tem prioridade no recebimento dos rendimentos e na devolução do principal.",
-    objective:
-      "Os recursos captados são alocados em uma carteira diversificada de direitos creditórios originados de operações agroindustriais, com rigorosos critérios de elegibilidade e monitoramento contínuo.",
+    about: "A Nota Comercial Akin CR é um título de crédito privado emitido pela estrutura Akin para captação junto a investidores qualificados. Oferece remuneração atrelada ao CDI com spread adicional, com prazo de 12 a 18 meses e pagamento integral no vencimento.",
+    objective: "Financiar operações de crédito estruturado da carteira da Akin S.A., com lastro em recebíveis e contratos comerciais previamente selecionados.",
+    issuer: "Akin S.A. — Estruturador e Emissor",
     collateral: [
-      "Direitos creditórios do agronegócio",
-      "Reserva de liquidez mínima de 10%",
-      "Estrutura de subordinação com cotas juniores",
-      "Cessão fiduciária dos recebíveis",
-      "Conta vinculada ao fundo",
+      "Recebíveis comerciais vinculados à operação",
+      "Contratos firmados com contrapartes selecionadas",
+      "Cessão fiduciária de direitos creditórios",
     ],
+    guarantees: [
+      "Cessão fiduciária de recebíveis",
+      "Fundo de reserva de liquidez",
+    ],
+    taxation: "Tabela regressiva de IR: 22,5% (até 180 dias), 20% (181–360 dias), 17,5% (361–720 dias), 15% (acima de 720 dias). IOF regressivo até 30 dias.",
     timeline: [
-      { label: "Reserva" },
-      { label: "Assinatura dos documentos" },
+      { label: "Subscrição" },
       { label: "Integralização" },
-      { label: "Alocação na carteira" },
-      { label: "Rendimentos mensais" },
-      { label: "Resgate após 360 dias" },
+      { label: "Acumulação de rendimento" },
+      { label: "Vencimento e resgate" },
     ],
     risks: [
-      {
-        title: "Risco de crédito",
-        description: "Inadimplência dos cedentes ou devedores dos recebíveis.",
-      },
-      {
-        title: "Risco de liquidez",
-        description: "Prazo mínimo de 360 dias para resgate das cotas.",
-      },
-      {
-        title: "Risco de mercado",
-        description: "Oscilação do CDI e das condições de crédito.",
-      },
-      {
-        title: "Risco operacional",
-        description: "Risco de erros na gestão e custódia dos ativos.",
-      },
-      {
-        title: "Risco regulatório",
-        description: "Alterações normativas da CVM ou Banco Central.",
-      },
+      { title: "Risco de crédito", description: "Possibilidade de inadimplência do emissor ou dos devedores da carteira." },
+      { title: "Risco de liquidez", description: "Produto sem mercado secundário ativo. O resgate ocorre apenas no vencimento." },
+      { title: "Risco de mercado", description: "Variação do CDI pode afetar rentabilidade relativa." },
+      { title: "Sem FGC", description: "Este produto não conta com a cobertura do Fundo Garantidor de Crédito." },
     ],
     documents: [
-      { name: "Lâmina do fundo" },
-      { name: "Regulamento" },
-      { name: "Termo de adesão" },
-      { name: "Relatório de lastro" },
+      { name: "Instrumento de emissão" },
+      { name: "Lâmina do produto" },
+      { name: "Relatório de due diligence" },
       { name: "Política de suitability" },
-      { name: "Informações regulatórias" },
     ],
-    monthlyRate: 1.18,
+    tags: ["Sem FGC", "Produto privado", "Suitability obrigatório"],
+    annualRate: 0.165,
   },
-  "cra-agro": {
-    id: "cra-agro",
-    name: "CRA Akin Agro",
-    category: "Agro",
-    returnRate: "IPCA + 9,5% a.a.",
+
+  "fidc-akin-senior": {
+    id: "fidc-akin-senior",
+    name: "FIDC Akin Sênior",
+    category: "Fundos de Crédito",
+    returnRate: "CDI + 4,5% a.a.",
+    indexador: "CDI",
+    term: "24 a 36 meses",
+    termMonths: 36,
+    liquidity: "Janela semestral ou vencimento",
+    minInvestment: 50000,
+    riskNumber: 3,
+    status: "aberta",
+    about: "O FIDC Akin Sênior é um Fundo de Investimento em Direitos Creditórios cujas cotas sênior oferecem prioridade no recebimento de rendimentos e amortizações, com subordinação mínima de 20% de cotas subordinadas para proteção.",
+    objective: "Adquirir direitos creditórios de operações comerciais e do agronegócio, proporcionando rentabilidade superior ao CDI com proteção estrutural via subordinação.",
+    issuer: "Akin S.A. (Gestor e Administrador) — FIDC regulamentado pela CVM",
+    collateral: [
+      "Direitos creditórios cedidos por originadores selecionados",
+      "Cotas subordinadas como camada de proteção",
+      "Diversificação por sacado e setor",
+    ],
+    guarantees: [
+      "Subordinação mínima de 20%",
+      "Fundo de reserva",
+      "Critérios de elegibilidade dos créditos",
+    ],
+    taxation: "Tributação de fundos: 15% de IR na fonte sobre rendimentos para PF (tabela regressiva). IOF regressivo em resgates até 30 dias.",
+    timeline: [
+      { label: "Captação" },
+      { label: "Aquisição de direitos creditórios" },
+      { label: "Janela de resgate semestral" },
+      { label: "Liquidação final" },
+    ],
+    risks: [
+      { title: "Risco de crédito", description: "Inadimplência nos direitos creditórios da carteira." },
+      { title: "Risco de concentração", description: "Exposição a setores ou sacados específicos." },
+      { title: "Risco de liquidez", description: "Resgate condicionado a janelas semestrais." },
+      { title: "Sem FGC", description: "Cotas de FIDC não são cobertas pelo FGC." },
+    ],
+    documents: [
+      { name: "Regulamento do FIDC" },
+      { name: "Lâmina de informações essenciais" },
+      { name: "Relatório mensal de carteira" },
+      { name: "Política de elegibilidade" },
+    ],
+    tags: ["FIDC", "Cota Sênior", "Sem FGC", "Baixa liquidez"],
+    annualRate: 0.155,
+  },
+
+  "fidc-akin-fertilizantes": {
+    id: "fidc-akin-fertilizantes",
+    name: "FIDC Akin Fertilizantes",
+    category: "Agro / Crédito Privado",
+    returnRate: "CDI + 5,5% a.a.",
+    indexador: "CDI",
+    term: "24 a 36 meses",
+    termMonths: 36,
+    liquidity: "Janela anual ou vencimento",
+    minInvestment: 50000,
+    riskNumber: 4,
+    status: "aberta",
+    about: "O FIDC Akin Fertilizantes é um fundo especializado em direitos creditórios originados no setor de insumos agrícolas, com lastro em CPRs e contratos de fornecimento de fertilizantes e defensivos para produtores rurais selecionados.",
+    objective: "Prover capital de giro para a cadeia de insumos agrícolas, adquirindo CPRs e recebíveis de produtores rurais com histórico comprovado.",
+    issuer: "Akin S.A. (Gestor) — FIDC regulamentado pela CVM",
+    collateral: [
+      "CPRs (Cédulas de Produto Rural) físicas e financeiras",
+      "Recebíveis de contratos de fornecimento de insumos",
+      "Penhor de safra e garantias reais rurais",
+    ],
+    guarantees: [
+      "CPR com aval",
+      "Seguro de produção agrícola",
+      "Cotas subordinadas como proteção",
+    ],
+    taxation: "Tributação de fundos: 15% de IR sobre rendimentos. Janela anual de resgate.",
+    timeline: [
+      { label: "Captação e estruturação" },
+      { label: "Aquisição de CPRs e recebíveis" },
+      { label: "Safra e liquidação dos créditos" },
+      { label: "Janela anual de resgate" },
+      { label: "Liquidação final" },
+    ],
+    risks: [
+      { title: "Risco agrícola", description: "Perdas de safra por clima, pragas ou eventos de força maior." },
+      { title: "Risco de crédito rural", description: "Inadimplência de produtores rurais." },
+      { title: "Risco de liquidez", description: "Resgate apenas em janelas anuais." },
+      { title: "Sem FGC", description: "FIDC não possui cobertura do FGC." },
+    ],
+    documents: [
+      { name: "Regulamento do FIDC" },
+      { name: "Política de elegibilidade de CPRs" },
+      { name: "Relatório de safra e carteira" },
+      { name: "Lâmina de informações" },
+    ],
+    tags: ["FIDC", "Agro", "Fertilizantes", "CPR", "Baixa liquidez"],
+    annualRate: 0.165,
+  },
+
+  "cri-akin-real-estate": {
+    id: "cri-akin-real-estate",
+    name: "CRI Akin Real Estate",
+    category: "Imobiliário",
+    returnRate: "IPCA + 10% a.a.",
     indexador: "IPCA",
     term: "36 meses",
     termMonths: 36,
     liquidity: "No vencimento",
-    minInvestment: 1000,
-    riskLevel: "medio",
+    minInvestment: 50000,
     riskNumber: 3,
     status: "aberta",
-    about:
-      "O CRA Akin Agro é um Certificado de Recebíveis do Agronegócio emitido para financiar produtores rurais e empresas do setor. Conta com isenção de Imposto de Renda para pessoas físicas e é lastreado em recebíveis de operações agroindustriais selecionadas.",
-    objective:
-      "Os recursos são direcionados ao financiamento de operações agroindustriais com garantias reais, contribuindo para o desenvolvimento do agronegócio brasileiro de forma sustentável.",
+    about: "O CRI Akin Real Estate é um Certificado de Recebíveis Imobiliários lastreado em contratos de locação e recebíveis imobiliários de empreendimentos selecionados. Oferece proteção inflacionária via IPCA com spread adicional.",
+    objective: "Financiar empreendimentos e operações imobiliárias com lastro em recebíveis de locação e contratos de compra e venda, proporcionando proteção real ao patrimônio do investidor.",
+    issuer: "Securitizadora parceira — CRI regulamentado pela CVM",
     collateral: [
-      "Recebíveis do agronegócio selecionados",
-      "Hipotecas e garantias rurais",
-      "Certificados e contratos agroindustriais",
-      "Conta de acompanhamento da operação",
-      "Relatórios periódicos de performance",
+      "Recebíveis de locação de imóveis comerciais e logísticos",
+      "Contratos de alienação fiduciária de imóveis",
+      "Fiança corporativa dos devedores",
     ],
+    guarantees: [
+      "Alienação fiduciária dos imóveis lastro",
+      "Fundo de reserva de liquidez",
+      "Fiança corporativa",
+    ],
+    taxation: "Isento de IR para pessoa física (Lei 12.431). Sujeito a IOF regressivo em resgates até 30 dias.",
     timeline: [
-      { label: "Reserva" },
-      { label: "Assinatura dos documentos" },
+      { label: "Emissão e subscrição" },
       { label: "Integralização" },
-      { label: "Alocação nas operações" },
-      { label: "Acompanhamento semestral" },
-      { label: "Pagamento no vencimento" },
+      { label: "Pagamento de juros semestral" },
+      { label: "Amortização e vencimento" },
     ],
     risks: [
-      {
-        title: "Risco de crédito",
-        description: "Inadimplência dos produtores rurais financiados.",
-      },
-      {
-        title: "Risco de liquidez",
-        description: "Sem resgate antecipado; liquidez apenas no vencimento.",
-      },
-      {
-        title: "Risco de mercado",
-        description: "Variação do IPCA e das condições do mercado agrícola.",
-      },
-      {
-        title: "Risco operacional",
-        description: "Riscos climáticos e de produção afetando o lastro.",
-      },
-      {
-        title: "Risco regulatório",
-        description: "Mudanças na legislação do agronegócio ou tributária.",
-      },
+      { title: "Risco imobiliário", description: "Desvalorização ou vacância dos imóveis lastro." },
+      { title: "Risco de crédito", description: "Inadimplência do devedor do CRI." },
+      { title: "Risco de liquidez", description: "Sem mercado secundário ativo garantido." },
+      { title: "Sem FGC", description: "CRI não possui cobertura do FGC." },
     ],
     documents: [
+      { name: "Termo de securitização" },
+      { name: "Escritura do CRI" },
+      { name: "Relatório de due diligence imobiliária" },
       { name: "Lâmina do produto" },
-      { name: "Termo de ciência de risco" },
-      { name: "Contrato de investimento" },
-      { name: "Relatório de lastro" },
-      { name: "Política de suitability" },
-      { name: "Informações regulatórias" },
     ],
-    monthlyRate: 1.22,
+    tags: ["CRI", "Real Estate", "Sem FGC", "Ativo real"],
+    annualRate: 0.10,
+  },
+
+  "debenture-akin-privada": {
+    id: "debenture-akin-privada",
+    name: "Debênture Akin Privada",
+    category: "Crédito Privado",
+    returnRate: "CDI + 6% a.a.",
+    indexador: "CDI",
+    term: "36 meses",
+    termMonths: 36,
+    liquidity: "No vencimento ou mercado secundário",
+    minInvestment: 50000,
+    riskNumber: 4,
+    status: "aberta",
+    about: "A Debênture Akin Privada é um título de dívida de médio prazo emitido diretamente pela Akin S.A., com remuneração atrativa atrelada ao CDI. Destinada a investidores que buscam crédito privado com rentabilidade superior ao mercado de capitais tradicional.",
+    objective: "Captação de recursos para expansão das operações de crédito estruturado da Akin S.A., com uso de recursos previamente definido em relatório de destino.",
+    issuer: "Akin S.A. — Emissora direta",
+    collateral: [
+      "Carteira de recebíveis da Akin S.A.",
+      "Ativos operacionais da companhia",
+    ],
+    guarantees: [
+      "Penhor de ações da emissora",
+      "Fiança dos sócios controladores",
+    ],
+    taxation: "Tabela regressiva de IR: 22,5% (até 180 dias), 20% (181–360 dias), 17,5% (361–720 dias), 15% (acima de 720 dias).",
+    timeline: [
+      { label: "Emissão e bookbuilding" },
+      { label: "Integralização" },
+      { label: "Acumulação de rendimento" },
+      { label: "Vencimento e resgate" },
+    ],
+    risks: [
+      { title: "Risco de crédito corporativo", description: "Risco de inadimplência da Akin S.A. como emissora." },
+      { title: "Risco de liquidez", description: "Mercado secundário pode não estar disponível ou ter spreads elevados." },
+      { title: "Risco de mercado", description: "Variação do CDI pode afetar a rentabilidade relativa." },
+      { title: "Sem FGC", description: "Debêntures não possuem cobertura do FGC." },
+    ],
+    documents: [
+      { name: "Escritura de emissão" },
+      { name: "Lâmina do produto" },
+      { name: "Demonstrações financeiras da emissora" },
+      { name: "Relatório de destino de recursos" },
+    ],
+    tags: ["Debênture", "Crédito Privado", "Sem FGC"],
+    annualRate: 0.17,
+  },
+
+  "debenture-conversivel-akin": {
+    id: "debenture-conversivel-akin",
+    name: "Debênture Conversível Akin",
+    category: "Alternativos",
+    returnRate: "10% a.a. + potencial de conversão",
+    indexador: "Prefixado",
+    term: "36 a 60 meses",
+    termMonths: 60,
+    liquidity: "No vencimento ou evento de liquidez",
+    minInvestment: 50000,
+    riskNumber: 5,
+    status: "aberta",
+    qualifiedOnly: true,
+    equity: true,
+    about: "A Debênture Conversível Akin combina remuneração mínima contratual de 10% a.a. com a opção de conversão em participação societária em evento futuro qualificado. Produto destinado a investidores qualificados com alta tolerância a risco e horizonte de longo prazo.",
+    objective: "Financiar o crescimento de empresa ou projeto selecionado com possibilidade de upside via conversão em equity, caso ocorra evento de liquidez, rodada qualificada ou IPO.",
+    issuer: "Akin S.A. em nome da empresa portfólio — Instrumento privado",
+    collateral: [
+      "Direito contratual de conversão em participação",
+      "Garantias pessoais dos fundadores",
+    ],
+    guarantees: [
+      "Direito de conversão em rodada qualificada",
+      "Tag along e anti-diluição contratual",
+    ],
+    taxation: "Tabela regressiva de IR sobre a parcela de rendimento fixo. Ganho de capital em conversão sujeito a tributação específica.",
+    timeline: [
+      { label: "Emissão e subscrição" },
+      { label: "Acumulação de rendimento mínimo" },
+      { label: "Evento de conversão ou vencimento" },
+      { label: "Liquidação ou participação societária" },
+    ],
+    risks: [
+      { title: "Risco de negócio", description: "A empresa portfólio pode não atingir as metas projetadas." },
+      { title: "Risco de conversão", description: "Evento de conversão pode não ocorrer dentro do prazo." },
+      { title: "Risco de diluição", description: "Novas rodadas podem diluir a participação convertida." },
+      { title: "Risco de liquidez", description: "Produto de baixíssima liquidez. Resgate apenas em vencimento ou evento." },
+      { title: "Sem FGC e sem garantia de retorno do equity", description: "A parcela equity não possui garantia de rentabilidade." },
+    ],
+    documents: [
+      { name: "Instrumento de emissão conversível" },
+      { name: "Contrato social da empresa portfólio" },
+      { name: "Memorando de investimento" },
+      { name: "Projeções financeiras" },
+    ],
+    tags: ["Conversível", "Equity kicker", "Alta Convicção", "Sem FGC"],
+    annualRate: 0.10,
+  },
+
+  "scp-akin-alternativos": {
+    id: "scp-akin-alternativos",
+    name: "SCP Akin Alternativos",
+    category: "Alternativos",
+    returnRate: "Participação econômica",
+    indexador: "Participação",
+    term: "36 meses ou mais",
+    termMonths: 36,
+    liquidity: "Conforme contrato",
+    minInvestment: 30000,
+    riskNumber: 5,
+    status: "aberta",
+    qualifiedOnly: true,
+    about: "A SCP Akin Alternativos é uma Sociedade em Conta de Participação estruturada para investidores que buscam participação econômica em projetos e operações alternativas selecionadas pela Akin S.A. Não há rentabilidade fixa contratual.",
+    objective: "Viabilizar participação conjunta em projetos alternativos de alta convicção, incluindo operações agro, energia, logística e crédito estruturado fora do mercado de capitais regulado.",
+    issuer: "Akin S.A. como sócia ostensiva — SCP regulamentada pelo Código Civil",
+    collateral: [
+      "Participação nos ativos e receitas do projeto",
+      "Contrato de SCP com cláusulas de proteção ao participante",
+    ],
+    guarantees: [
+      "Participação proporcional nos resultados",
+      "Direito de veto em decisões relevantes (conforme contrato)",
+    ],
+    taxation: "Tributação como pessoa jurídica participante. Distribuição de lucros conforme apuração. Consulte seu assessor fiscal.",
+    timeline: [
+      { label: "Assinatura do contrato de SCP" },
+      { label: "Integralização da participação" },
+      { label: "Operação e distribuição de resultados" },
+      { label: "Liquidação conforme contrato" },
+    ],
+    risks: [
+      { title: "Risco operacional", description: "Resultados dependem do desempenho do projeto." },
+      { title: "Risco de liquidez", description: "Participação sem mercado secundário e resgate apenas conforme contrato." },
+      { title: "Risco de perda do capital", description: "Resultados negativos podem impactar o capital investido." },
+      { title: "Risco regulatório", description: "Alterações no marco regulatório do setor podem afetar os resultados." },
+    ],
+    documents: [
+      { name: "Contrato de SCP" },
+      { name: "Memorando do projeto" },
+      { name: "Relatório de viabilidade econômica" },
+      { name: "Política de distribuição de resultados" },
+    ],
+    tags: ["SCP", "Alternativos", "Baixa liquidez", "Produto privado"],
+    annualRate: undefined,
+  },
+
+  "akin-equity-cvm88": {
+    id: "akin-equity-cvm88",
+    name: "Akin Equity CVM 88",
+    category: "Equity / Crowdinvesting",
+    returnRate: "Potencial de valorização",
+    indexador: "Equity",
+    term: "Longo prazo",
+    termMonths: 60,
+    liquidity: "Baixa ou inexistente antes de evento de liquidez",
+    minInvestment: 5000,
+    riskNumber: 5,
+    status: "aberta",
+    cvm88: true,
+    equity: true,
+    about: "A oferta Akin Equity CVM 88 é uma oportunidade de participação em empresa ou projeto regulamentada pela Instrução CVM 88 (Crowdfunding de Investimento). Não há rentabilidade fixa. O retorno está condicionado à valorização da empresa, distribuição de dividendos ou evento de liquidez.",
+    objective: "Democratizar o acesso a oportunidades de participação em startups, PMEs e projetos de alto potencial, dentro do marco regulatório CVM 88.",
+    issuer: "Empresa emissora parceira da Akin S.A. — Oferta regulamentada CVM 88",
+    collateral: [
+      "Participação acionária ou quotas na empresa emissora",
+      "Direitos econômicos conforme estatuto ou contrato social",
+    ],
+    guarantees: [
+      "Direitos de tag along",
+      "Direito a informações periódicas",
+    ],
+    taxation: "Ganho de capital na alienação das participações sujeito à alíquota de 15% a 22,5% conforme o valor do ganho. Dividendos isentos para PF.",
+    timeline: [
+      { label: "Oferta pública CVM 88" },
+      { label: "Captação e integralização" },
+      { label: "Operação e crescimento da empresa" },
+      { label: "Evento de liquidez (M&A, IPO ou dividendos)" },
+    ],
+    risks: [
+      { title: "Risco de perda total", description: "O investimento pode resultar na perda integral do capital investido." },
+      { title: "Risco de iliquidez", description: "Não há garantia de mercado secundário antes de evento de liquidez." },
+      { title: "Risco de negócio", description: "A empresa pode não alcançar seu potencial projetado." },
+      { title: "Risco de diluição", description: "Novas rodadas de captação podem diluir a participação atual." },
+      { title: "Sem FGC e sem retorno garantido", description: "Produto de risco máximo sem qualquer garantia de retorno." },
+    ],
+    documents: [
+      { name: "Documento de oferta CVM 88" },
+      { name: "Estatuto social da emissora" },
+      { name: "Demonstrações financeiras" },
+      { name: "Plano de negócios" },
+      { name: "Termo de ciência de risco" },
+    ],
+    tags: ["CVM 88", "Equity", "Startup/PME", "Sem garantia", "Alta volatilidade"],
+    annualRate: undefined,
   },
 };
 
-// Fallback para IDs antigos
-const idAliases: Record<string, string> = {
-  "cra-senior": "cra-agro",
-  "cra-subordinada": "cra-agro",
-  "fiagro-premium": "fidc-senior",
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const RISK_COLORS: Record<number, { bg: string; border: string; text: string; label: string }> = {
+  1: { bg: "bg-emerald-500/10", border: "border-emerald-500/20", text: "text-emerald-400", label: "Nível 1 — Muito baixo" },
+  2: { bg: "bg-green-500/10", border: "border-green-500/20", text: "text-green-400", label: "Nível 2 — Baixo" },
+  3: { bg: "bg-yellow-500/10", border: "border-yellow-500/20", text: "text-yellow-400", label: "Nível 3 — Moderado" },
+  4: { bg: "bg-orange-500/10", border: "border-orange-500/20", text: "text-orange-400", label: "Nível 4 — Alto" },
+  5: { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-400", label: "Nível 5 — Muito alto" },
 };
 
-// ─── Helpers visuais ──────────────────────────────────────────────────────────
-
-const statusConfig: Record<StatusType, { label: string; className: string }> = {
-  aberta: { label: "Reserva aberta", className: "bg-[#00BC6E]/20 text-[#00BC6E]" },
-  estruturacao: { label: "Em estruturação", className: "bg-amber-500/20 text-amber-400" },
-  breve: { label: "Disponível em breve", className: "bg-cyan-500/20 text-cyan-400" },
-  encerrado: { label: "Encerrado", className: "bg-white/10 text-white/40" },
+const STATUS_MAP: Record<StatusType, { label: string; color: string }> = {
+  aberta: { label: "Captação aberta", color: "text-emerald-400" },
+  estruturacao: { label: "Em estruturação", color: "text-yellow-400" },
+  breve: { label: "Em breve", color: "text-blue-400" },
+  encerrado: { label: "Encerrado", color: "text-white/40" },
 };
 
-const riskConfig: Record<RiskLevel, { label: string; className: string }> = {
-  baixo: { label: "Nível 1 — Baixo", className: "bg-[#00BC6E]/20 text-[#00BC6E]" },
-  medio: { label: "Nível 2 — Médio", className: "bg-amber-500/20 text-amber-400" },
-  alto: { label: "Nível 3 — Alto", className: "bg-orange-500/20 text-orange-400" },
-  "muito-alto": { label: "Nível 4 — Muito Alto", className: "bg-red-500/20 text-red-400" },
-};
+const fmt = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
 
-// ─── Componente ───────────────────────────────────────────────────────────────
+const fmtFull = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 });
+
+// ─── Simulador ────────────────────────────────────────────────────────────────
+
+function ProductSimulator({ product }: { product: ProductData }) {
+  const [amount, setAmount] = useState("");
+  const [years, setYears] = useState(1);
+  const isEquity = product.equity || product.annualRate === undefined;
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "");
+    setAmount(raw);
+  };
+
+  const inv = parseFloat(amount) || 0;
+  const rate = product.annualRate ?? 0;
+  const grossFinal = inv > 0 && !isEquity ? inv * Math.pow(1 + rate, years) : 0;
+  const grossReturn = grossFinal - inv;
+  const irRate = years <= 0.5 ? 0.225 : years <= 1 ? 0.20 : years <= 2 ? 0.175 : 0.15;
+  const netReturn = grossReturn * (1 - irRate);
+  const netFinal = inv + netReturn;
+
+  const fmtInput = (raw: string) => {
+    if (!raw) return "";
+    const n = parseInt(raw);
+    return (n / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  };
+
+  if (isEquity) {
+    return (
+      <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-4">
+        <h3 className="text-white font-semibold text-sm">Tese de retorno</h3>
+        <div className="space-y-3">
+          {[
+            { label: "Conservador", desc: "Operação sem evento de liquidez no prazo. Retorno mínimo contratual, se houver." },
+            { label: "Base", desc: "Evento de liquidez parcial (dividendos ou venda secundária) com ganho de 1,5x a 3x." },
+            { label: "Otimista", desc: "Evento de liquidez pleno (IPO ou M&A) com ganho de 3x ou mais sobre o investido." },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+              <p className="text-white/70 text-xs font-semibold mb-1">{s.label}</p>
+              <p className="text-white/40 text-xs leading-relaxed">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-red-400 text-xs leading-relaxed font-medium">
+              Este produto não possui rentabilidade fixa. O capital investido pode ser perdido total ou parcialmente.
+            </p>
+          </div>
+        </div>
+        <p className="text-white/20 text-[10px] leading-relaxed">
+          Simulação meramente indicativa. Rentabilidade-alvo não representa garantia de retorno.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-4">
+      <h3 className="text-white font-semibold text-sm">Simulador</h3>
+
+      {/* Valor */}
+      <div className="space-y-1.5">
+        <label className="text-white/50 text-xs font-medium">Valor do investimento</label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm">R$</span>
+          <input type="text" inputMode="numeric" placeholder="Digite o valor"
+            value={fmtInput(amount)}
+            onChange={handleAmountChange}
+            className="w-full h-11 rounded-xl bg-white/5 border border-white/10 pl-9 pr-4 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#00BC6E]/50 focus:ring-1 focus:ring-[#00BC6E]/20 transition-all" />
+        </div>
+        <p className="text-white/25 text-[11px]">Mínimo: {fmt(product.minInvestment)}</p>
+      </div>
+
+      {/* Prazo */}
+      <div className="space-y-1.5">
+        <label className="text-white/50 text-xs font-medium">Horizonte de tempo</label>
+        <div className="flex gap-2">
+          {[1, 2, 3].map((y) => (
+            <button key={y} onClick={() => setYears(y)}
+              className={cn("flex-1 h-10 rounded-xl text-xs font-medium border transition-all",
+                years === y
+                  ? "bg-[#00BC6E]/15 text-[#00BC6E] border-[#00BC6E]/30"
+                  : "bg-white/5 text-white/50 border-white/10 hover:text-white/80")}>
+              {y} {y === 1 ? "ano" : "anos"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Resultado */}
+      {inv >= product.minInvestment ? (
+        <div className="rounded-xl bg-white/5 border border-white/8 divide-y divide-white/8">
+          <div className="px-4 py-4">
+            <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Valor estimado bruto</p>
+            <p className="text-[#00BC6E] text-2xl font-bold">{fmtFull(grossFinal)}</p>
+            <p className="text-white/30 text-xs mt-0.5">em {years} {years === 1 ? "ano" : "anos"}</p>
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-white/8">
+            <div className="px-4 py-3">
+              <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Ganho bruto</p>
+              <p className="text-white font-semibold">{fmtFull(grossReturn)}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Estimado líquido</p>
+              <p className="text-white font-semibold">{fmtFull(netFinal)}</p>
+              <p className="text-white/30 text-[10px]">IR {(irRate * 100).toFixed(1)}%</p>
+            </div>
+          </div>
+        </div>
+      ) : inv > 0 ? (
+        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+          <p className="text-amber-400 text-xs">Valor mínimo para simulação: {fmt(product.minInvestment)}</p>
+        </div>
+      ) : null}
+
+      <p className="text-white/20 text-[10px] leading-relaxed">
+        Simulação meramente indicativa. Rentabilidade-alvo não representa garantia de retorno. Cálculo baseado na rentabilidade-alvo anual de {product.returnRate}. IR pela tabela regressiva.
+      </p>
+    </div>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 
 interface ProductDetailProps {
   productId: string;
@@ -293,348 +599,236 @@ interface ProductDetailProps {
 
 export function ProductDetail({ productId }: ProductDetailProps) {
   const router = useRouter();
-  const resolvedId = idAliases[productId] ?? productId;
-  const product = productsData[resolvedId];
-
-  const [amount, setAmount] = useState(product?.minInvestment ?? 5000);
-  const [rawInput, setRawInput] = useState("");
-  const [inputFocused, setInputFocused] = useState(false);
+  const product = productsData[productId];
 
   if (!product) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-        <AlertTriangle className="h-12 w-12 text-amber-400 mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Produto não encontrado</h2>
-        <p className="text-white/60 mb-6 text-sm">
-          O produto solicitado não existe ou foi removido da prateleira.
-        </p>
-        <Button asChild className="bg-[#00BC6E] text-[#003F28] font-semibold">
-          <Link href="/investor/invest">Ver todos os produtos</Link>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
+        <div className="h-16 w-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+          <Info className="h-8 w-8 text-white/20" />
+        </div>
+        <p className="text-white/60 text-center">Produto não encontrado.</p>
+        <Button variant="outline" onClick={() => router.push("/investor/invest")}
+          className="border-white/20 text-white/70 bg-transparent hover:bg-white/10">
+          Ver todos os produtos
         </Button>
       </div>
     );
   }
 
-  const formatCurrency = (v: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      minimumFractionDigits: 2,
-    }).format(v);
-
-  const grossReturn = amount * Math.pow(1 + product.monthlyRate / 100, product.termMonths) - amount;
-  const netReturn = grossReturn * 0.85; // IR estimado de 15%
-  const grossTotal = amount + grossReturn;
-  const netTotal = amount + netReturn;
-
-  const status = statusConfig[product.status];
-  const risk = riskConfig[product.riskLevel];
-
-  const summaryCards = [
-    { icon: <TrendingUp className="h-4 w-4 text-[#00BC6E]" />, label: "Rentabilidade", value: product.returnRate },
-    { icon: <Calendar className="h-4 w-4 text-amber-400" />, label: "Prazo", value: product.term },
-    { icon: <Clock className="h-4 w-4 text-cyan-400" />, label: "Liquidez", value: product.liquidity },
-    { icon: <DollarSign className="h-4 w-4 text-violet-400" />, label: "Aplicação mínima", value: formatCurrency(product.minInvestment) },
-    { icon: <Shield className="h-4 w-4 text-orange-400" />, label: "Risco", value: `Nível ${product.riskNumber}` },
-    { icon: <BarChart3 className="h-4 w-4 text-white/50" />, label: "Indexador", value: product.indexador },
-  ];
+  const risk = RISK_COLORS[product.riskNumber];
+  const statusInfo = STATUS_MAP[product.status];
 
   return (
-    <div className="pb-32 md:pb-10">
-      {/* ── Topo ── */}
-      <div className="px-4 pt-4 pb-6 md:px-8 md:pt-6 bg-gradient-to-b from-[#003020] to-transparent">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors text-sm mb-5"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
+    <div className="flex flex-col min-h-screen pb-28">
+      {/* Header */}
+      <div className="px-4 pt-6 pb-4">
+        <button onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-white/50 hover:text-white text-sm mb-5 transition-colors">
+          <ArrowLeft className="h-4 w-4" /> Voltar
         </button>
-
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="text-xs text-white/40 font-medium uppercase tracking-wide">
-            {product.category}
-          </span>
-          <Badge className={cn("text-[11px] px-2 py-0.5", status.className)}>
-            {status.label}
-          </Badge>
-          {product.qualifiedOnly && (
-            <Badge className="bg-violet-500/20 text-violet-400 text-[11px] px-2 py-0.5">
-              <Lock className="h-2.5 w-2.5 mr-1" />
-              Qualificado
-            </Badge>
-          )}
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-white/40 text-xs">{product.category}</span>
+              <span className={cn("text-[10px] font-medium", statusInfo.color)}>
+                • {statusInfo.label}
+              </span>
+            </div>
+            <h1 className="text-white font-bold text-xl leading-snug">{product.name}</h1>
+          </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-white leading-tight mb-1 text-balance">
-          {product.name}
-        </h1>
-        <Badge className={cn("text-[11px] px-2 py-0.5 mt-1", risk.className)}>
-          {risk.label}
-        </Badge>
+        {/* Tags */}
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border", risk.bg, risk.border, risk.text)}>
+            <Shield className="h-2.5 w-2.5" /> {risk.label}
+          </span>
+          {product.tags.map((tag) => (
+            <span key={tag} className="px-2.5 py-1 rounded-full bg-white/8 text-white/50 text-[10px] border border-white/10">
+              {tag}
+            </span>
+          ))}
+          {product.qualifiedOnly && (
+            <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 text-[10px] border border-amber-500/20 flex items-center gap-1">
+              <AlertTriangle className="h-2.5 w-2.5" /> Qualificado obrigatório
+            </span>
+          )}
+          {product.cvm88 && (
+            <span className="px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-400 text-[10px] border border-purple-500/20">
+              CVM 88
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* ── Cards de resumo ── */}
-      <div className="px-4 md:px-8 mb-6">
-        <div className="grid grid-cols-3 gap-2">
-          {summaryCards.map((card, i) => (
-            <div
-              key={i}
-              className="flex flex-col gap-1.5 p-3 rounded-xl bg-white/5 border border-white/8"
-            >
-              <div className="flex items-center gap-1.5">
-                {card.icon}
-                <span className="text-[10px] text-white/40 leading-none">{card.label}</span>
+      {/* Grid de resumo */}
+      <div className="px-4 mb-6">
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { icon: <TrendingUp className="h-3.5 w-3.5" />, label: "Rentabilidade-alvo", value: product.returnRate },
+            { icon: <Clock className="h-3.5 w-3.5" />, label: "Prazo", value: product.term },
+            { icon: <Calendar className="h-3.5 w-3.5" />, label: "Liquidez", value: product.liquidity },
+            { icon: <DollarSign className="h-3.5 w-3.5" />, label: "Aplicação mínima", value: fmt(product.minInvestment) },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+              <div className="flex items-center gap-1.5 text-white/40 text-[10px] uppercase tracking-wider mb-1">
+                {item.icon} {item.label}
               </div>
-              <span className="text-sm font-semibold text-white leading-tight">{card.value}</span>
+              <p className="text-white font-semibold text-sm">{item.value}</p>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="px-4 md:px-8 space-y-8">
+      <div className="px-4 space-y-4">
+        {/* Sobre */}
+        <Section title="Sobre o produto" icon={<Info className="h-4 w-4" />}>
+          <p className="text-white/60 text-sm leading-relaxed">{product.about}</p>
+        </Section>
 
-        {/* ── 1. Sobre o produto ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-            <Info className="h-4 w-4 text-[#00BC6E]" />
-            Sobre o produto
-          </h2>
-          <p className="text-sm text-white/65 leading-relaxed">{product.about}</p>
-        </section>
+        {/* Objetivo */}
+        <Section title="Objetivo da operação" icon={<TrendingUp className="h-4 w-4" />}>
+          <p className="text-white/60 text-sm leading-relaxed">{product.objective}</p>
+          <div className="mt-3 rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+            <p className="text-white/30 text-[10px] uppercase tracking-wider mb-0.5">Emissor / Estrutura</p>
+            <p className="text-white/70 text-sm">{product.issuer}</p>
+          </div>
+        </Section>
 
-        {/* ── 2. Objetivo da operação ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-            <Layers className="h-4 w-4 text-cyan-400" />
-            Objetivo da operação
-          </h2>
-          <p className="text-sm text-white/65 leading-relaxed">{product.objective}</p>
-        </section>
-
-        {/* ── 3. Lastro e garantias ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-            <Shield className="h-4 w-4 text-violet-400" />
-            Lastro e garantias
-          </h2>
+        {/* Lastro e garantias */}
+        <Section title="Lastro e garantias" icon={<Shield className="h-4 w-4" />}>
           <div className="space-y-2">
-            {product.collateral.map((item, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/5">
-                <CheckCircle2 className="h-4 w-4 text-[#00BC6E] mt-0.5 shrink-0" />
-                <span className="text-sm text-white/70">{item}</span>
+            <p className="text-white/40 text-[10px] uppercase tracking-wider">Lastro</p>
+            {product.collateral.map((c, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[#00BC6E] shrink-0 mt-0.5" />
+                <p className="text-white/60 text-sm leading-snug">{c}</p>
               </div>
             ))}
           </div>
-        </section>
-
-        {/* ── 4. Fluxo de pagamento ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-amber-400" />
-            Fluxo de pagamento
-          </h2>
-          <div className="relative">
-            {/* linha vertical */}
-            <div className="absolute left-3.5 top-0 bottom-0 w-px bg-white/10" />
-            <div className="space-y-0">
-              {product.timeline.map((step, i) => (
-                <div key={i} className="relative flex items-start gap-4 pb-5 last:pb-0">
-                  <div className="relative z-10 flex items-center justify-center h-7 w-7 rounded-full bg-[#01223F] border border-[#00BC6E]/50 shrink-0">
-                    <span className="text-[10px] font-bold text-[#00BC6E]">{i + 1}</span>
-                  </div>
-                  <div className="pt-0.5">
-                    <span className="text-sm text-white/80">{step.label}</span>
-                  </div>
+          {product.guarantees.length > 0 && (
+            <div className="space-y-2 mt-4">
+              <p className="text-white/40 text-[10px] uppercase tracking-wider">Garantias</p>
+              {product.guarantees.map((g, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-white/60 text-sm leading-snug">{g}</p>
                 </div>
               ))}
             </div>
-          </div>
-        </section>
+          )}
+        </Section>
 
-        {/* ── 5. Riscos ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-            Riscos
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {product.risks.map((risk, i) => (
-              <div
-                key={i}
-                className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15"
-              >
-                <p className="text-xs font-semibold text-amber-400 mb-1">{risk.title}</p>
-                <p className="text-xs text-white/55 leading-relaxed">{risk.description}</p>
+        {/* Fluxo de pagamento */}
+        <Section title="Fluxo de pagamento" icon={<Calendar className="h-4 w-4" />}>
+          <div className="space-y-0">
+            {product.timeline.map((step, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="flex flex-col items-center">
+                  <div className="h-7 w-7 rounded-full bg-[#00BC6E]/15 border border-[#00BC6E]/30 flex items-center justify-center text-[#00BC6E] text-xs font-bold shrink-0">
+                    {i + 1}
+                  </div>
+                  {i < product.timeline.length - 1 && (
+                    <div className="w-px h-6 bg-white/10 my-0.5" />
+                  )}
+                </div>
+                <p className="text-white/60 text-sm pt-1.5">{step.label}</p>
               </div>
             ))}
           </div>
-        </section>
+        </Section>
 
-        {/* ── 6. Documentos ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-            <FileText className="h-4 w-4 text-white/50" />
-            Documentos
-          </h2>
-          <div className="space-y-2">
+        {/* Tributação */}
+        <Section title="Tributação" icon={<Percent className="h-4 w-4" />}>
+          <p className="text-white/60 text-sm leading-relaxed">{product.taxation}</p>
+        </Section>
+
+        {/* Riscos */}
+        <Section title="Riscos do produto" icon={<AlertTriangle className="h-4 w-4" />}>
+          <div className="grid grid-cols-1 gap-2">
+            {product.risks.map((r, i) => (
+              <div key={i} className="rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+                <p className="text-white/80 text-xs font-semibold mb-1">{r.title}</p>
+                <p className="text-white/40 text-xs leading-relaxed">{r.description}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Documentos */}
+        <Section title="Documentos" icon={<FileText className="h-4 w-4" />}>
+          <div className="space-y-1">
             {product.documents.map((doc, i) => (
-              <button
-                key={i}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/8 hover:bg-white/10 transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <FileText className="h-4 w-4 text-white/40 shrink-0" />
-                  <span className="text-sm text-white/80">{doc.name}</span>
+              <div key={i} className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-white/30" />
+                  <span className="text-white/60 text-sm">{doc.name}</span>
                 </div>
-                <ChevronRight className="h-4 w-4 text-white/30 shrink-0" />
-              </button>
+                <ChevronRight className="h-4 w-4 text-white/20" />
+              </div>
             ))}
           </div>
-        </section>
+        </Section>
 
-        {/* ── 7. Simulador ── */}
-        <section>
-          <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-[#00BC6E]" />
-            Simulador
-          </h2>
+        {/* Simulador */}
+        <ProductSimulator product={product} />
 
-          <div className="rounded-2xl border border-[#00BC6E]/20 bg-gradient-to-br from-[#00BC6E]/8 to-transparent p-5 space-y-5">
-            {/* Valor */}
-            <div>
-              <label className="text-xs text-white/40 block mb-2">Valor do investimento</label>
-              <Input
-                type="text"
-                value={inputFocused ? rawInput : formatCurrency(amount)}
-                onFocus={() => {
-                  setInputFocused(true);
-                  setRawInput(String(amount));
-                }}
-                onBlur={() => {
-                  setInputFocused(false);
-                  const parsed = parseFloat(rawInput.replace(",", "."));
-                  if (!isNaN(parsed) && parsed >= product.minInvestment) {
-                    setAmount(parsed);
-                  }
-                }}
-                onChange={(e) => setRawInput(e.target.value)}
-                className="bg-white/8 border-white/15 text-white font-bold text-lg h-12"
-              />
-              <p className="text-[11px] text-white/35 mt-1.5">
-                Mínimo: {formatCurrency(product.minInvestment)}
-              </p>
-            </div>
-
-            {/* Slider */}
-            <Slider
-              value={[amount]}
-              min={product.minInvestment}
-              max={product.maxInvestment ?? Math.max(500000, product.minInvestment * 100)}
-              step={500}
-              onValueChange={([v]) => { setAmount(v); setRawInput(String(v)); }}
-            />
-
-            {/* Campos de resultado */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-white/5">
-                <span className="text-[10px] text-white/40 block mb-1">Prazo</span>
-                <span className="text-sm font-semibold text-white">{product.term}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-white/5">
-                <span className="text-[10px] text-white/40 block mb-1">Rentabilidade indicativa</span>
-                <span className="text-sm font-semibold text-[#00BC6E]">{product.returnRate}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-white/5">
-                <span className="text-[10px] text-white/40 block mb-1">Liquidez</span>
-                <span className="text-sm font-semibold text-white">{product.liquidity}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-white/5">
-                <span className="text-[10px] text-white/40 block mb-1">Indexador</span>
-                <span className="text-sm font-semibold text-white">{product.indexador}</span>
-              </div>
-            </div>
-
-            {/* Resultados estimados */}
-            <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/8">
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-xs text-white/50">Resultado estimado bruto</span>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-[#00BC6E] block">
-                    {formatCurrency(grossTotal)}
-                  </span>
-                  <span className="text-[10px] text-[#00BC6E]/60">
-                    +{formatCurrency(grossReturn)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-xs text-white/50">Resultado estimado líquido</span>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-white block">
-                    {formatCurrency(netTotal)}
-                  </span>
-                  <span className="text-[10px] text-white/40">
-                    +{formatCurrency(netReturn)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Aviso simulador */}
-            <p className="text-[11px] text-white/35 leading-relaxed">
-              Simulação meramente indicativa. A rentabilidade pode variar conforme condições
-              da operação, prazo, custos, tributos e riscos envolvidos.
-            </p>
-          </div>
-        </section>
-
-      </div>{/* /px wrapper */}
-
-      {/* ── Botões fixos no rodapé mobile ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
-        <div className="bg-gradient-to-t from-[#01223F] via-[#01223F]/95 to-transparent pt-6 pb-6 px-4">
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1 h-12 border-white/20 text-white bg-white/5 hover:bg-white/10 font-semibold"
-              onClick={() => {
-                const el = document.getElementById("simulador-section");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
-            >
-              Simular
-            </Button>
-            <Button
-              className="flex-1 h-12 bg-[#00BC6E] hover:bg-[#00a85f] text-[#003F28] font-bold"
-              onClick={() =>
-                router.push(`/deposit?product=${product.id}&amount=${amount}`)
-              }
-            >
-              Reservar investimento
-            </Button>
-          </div>
+        {/* Compliance */}
+        <div className="rounded-xl bg-white/3 border border-white/8 px-4 py-4">
+          <p className="text-white/25 text-[10px] leading-relaxed">
+            Rentabilidade passada, projetada ou estimada não representa garantia de retorno futuro. Produtos sujeitos a risco de crédito, mercado, liquidez, operacional e regulatório. A disponibilidade depende do perfil do investidor, documentação aplicável e regras específicas de cada oferta. Alguns produtos não contam com garantia do FGC.
+          </p>
         </div>
       </div>
 
-      {/* Botão desktop */}
-      <div className="hidden md:flex gap-3 px-8 mt-10 max-w-2xl">
-        <Button
-          variant="outline"
-          className="flex-1 h-12 border-white/20 text-white bg-white/5 hover:bg-white/10 font-semibold"
-        >
-          Simular
+      {/* Botões fixos mobile */}
+      <div className="fixed bottom-16 left-0 right-0 z-40 px-4 py-3 bg-gradient-to-t from-[#01223F] to-transparent md:hidden">
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1 h-11 border-white/20 text-white bg-transparent hover:bg-white/10"
+            onClick={() => router.push(`/investor/invest`)}>
+            Simular
+          </Button>
+          <Button className="flex-1 h-11 bg-[#00BC6E] hover:bg-[#00a85f] text-white font-semibold"
+            onClick={() => {}}>
+            Reservar investimento
+          </Button>
+        </div>
+      </div>
+
+      {/* Botões desktop */}
+      <div className="hidden md:flex gap-3 px-4 mt-4 pb-8">
+        <Button variant="outline" className="h-11 border-white/20 text-white bg-transparent hover:bg-white/10"
+          onClick={() => router.push(`/investor/invest`)}>
+          Simular outro produto
         </Button>
-        <Button
-          className="flex-1 h-12 bg-[#00BC6E] hover:bg-[#00a85f] text-[#003F28] font-bold"
-          onClick={() =>
-            router.push(`/deposit?product=${product.id}&amount=${amount}`)
-          }
-        >
+        <Button className="h-11 bg-[#00BC6E] hover:bg-[#00a85f] text-white font-semibold px-8"
+          onClick={() => {}}>
           Reservar investimento
         </Button>
       </div>
+    </div>
+  );
+}
 
+// ─── Section helper ───────────────────────────────────────────────────────────
+
+function Section({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-3">
+      <div className="flex items-center gap-2 text-white/70 text-sm font-semibold">
+        <span className="text-[#00BC6E]">{icon}</span>
+        {title}
+      </div>
+      {children}
     </div>
   );
 }

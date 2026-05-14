@@ -48,14 +48,23 @@ interface PortfolioData {
   returnPercentage: number;
   investments: Investment[];
   allocation: {
-    senior: number;
-    subordinate: number;
+    creditoPrivado: number;
+    fundosCredito: number;
+    imobiliario: number;
+    agro: number;
+    alternativos: number;
+    equity: number;
+    caixa: number;
   };
 }
 
 const quotaTypeLabels: Record<string, string> = {
-  senior: "Cota Senior",
-  subordinate: "Cota Subordinada",
+  senior: "Crédito Privado",
+  subordinate: "Fundos de Crédito",
+  imobiliario: "Imobiliário",
+  agro: "Agro",
+  alternativo: "Alternativos",
+  equity: "Equity",
 };
 
 const liquidityLabels: Record<string, string> = {
@@ -74,7 +83,7 @@ export function PortfolioOverview() {
     totalReturn: 0,
     returnPercentage: 0,
     investments: [],
-    allocation: { senior: 0, subordinate: 0 },
+    allocation: { creditoPrivado: 0, fundosCredito: 0, imobiliario: 0, agro: 0, alternativos: 0, equity: 0, caixa: 0 },
   });
   const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false);
   const [isIndividualAdvisorInvestor, setIsIndividualAdvisorInvestor] = useState(false);
@@ -171,15 +180,22 @@ export function PortfolioOverview() {
         const investments: Investment[] = [];
         let totalInvested = 0;
         let totalCurrentValue = 0;
-        let seniorAllocation = 0;
-        let subordinateAllocation = 0;
+        const allocationBuckets: Record<string, number> = {
+          creditoPrivado: 0,
+          fundosCredito: 0,
+          imobiliario: 0,
+          agro: 0,
+          alternativos: 0,
+          equity: 0,
+          caixa: 0,
+        };
 
         (investmentsRaw || []).forEach((inv: any) => {
           const amount = Number(inv.amount) || 0;
           totalInvested += amount;
 
           const period = Number(inv.commitment_period) || 12;
-          const liquidity = inv.profitability_liquidity || "mensal";
+          const liquidity = inv.profitability_liquidity || "anual";
           const storedRate = inv.monthly_return_rate;
           const monthlyRate =
             storedRate != null
@@ -199,11 +215,14 @@ export function PortfolioOverview() {
 
           totalCurrentValue += currentValue;
 
-          if (inv.quota_type === "senior") {
-            seniorAllocation += currentValue;
-          } else {
-            subordinateAllocation += currentValue;
-          }
+          // Mapear quota_type para nova classificação de alocação
+          const qt = (inv.quota_type || "senior").toLowerCase();
+          if (qt === "imobiliario") allocationBuckets.imobiliario += currentValue;
+          else if (qt === "agro") allocationBuckets.agro += currentValue;
+          else if (qt === "alternativo") allocationBuckets.alternativos += currentValue;
+          else if (qt === "equity") allocationBuckets.equity += currentValue;
+          else if (qt === "subordinate") allocationBuckets.fundosCredito += currentValue;
+          else allocationBuckets.creditoPrivado += currentValue;
 
           investments.push({
             id: inv.id,
@@ -212,7 +231,7 @@ export function PortfolioOverview() {
             returnAmount,
             returnPercentage,
             quotaType: inv.quota_type || "senior",
-            profitabilityLiquidity: inv.profitability_liquidity || "mensal",
+            profitabilityLiquidity: inv.profitability_liquidity || "anual",
             commitmentPeriod: period,
             createdAt: inv.created_at,
             expiryDate: inv.expiry_date,
@@ -225,6 +244,8 @@ export function PortfolioOverview() {
         const returnPercentage =
           totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
 
+        const pct = (v: number) => totalCurrentValue > 0 ? (v / totalCurrentValue) * 100 : 0;
+
         setPortfolio({
           totalInvested,
           totalCurrentValue,
@@ -232,8 +253,13 @@ export function PortfolioOverview() {
           returnPercentage,
           investments,
           allocation: {
-            senior: totalCurrentValue > 0 ? (seniorAllocation / totalCurrentValue) * 100 : 0,
-            subordinate: totalCurrentValue > 0 ? (subordinateAllocation / totalCurrentValue) * 100 : 0,
+            creditoPrivado: pct(allocationBuckets.creditoPrivado),
+            fundosCredito: pct(allocationBuckets.fundosCredito),
+            imobiliario: pct(allocationBuckets.imobiliario),
+            agro: pct(allocationBuckets.agro),
+            alternativos: pct(allocationBuckets.alternativos),
+            equity: pct(allocationBuckets.equity),
+            caixa: pct(allocationBuckets.caixa),
           },
         });
       } catch (error) {
@@ -332,33 +358,28 @@ export function PortfolioOverview() {
         <div className="mt-6 pt-6 border-t border-white/10">
           <div className="flex items-center gap-2 mb-3">
             <PieChart className="h-4 w-4 text-white/50" />
-            <span className="text-xs text-white/50">Alocacao da Carteira</span>
+            <span className="text-xs text-white/50">Alocação por classe</span>
           </div>
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-white/70">Cota Senior</span>
-                <span className="text-[#00BC6E] font-medium">
-                  {portfolio.allocation.senior.toFixed(1)}%
-                </span>
+          <div className="space-y-2.5">
+            {[
+              { label: "Crédito Privado", value: portfolio.allocation.creditoPrivado, color: "[&>div]:bg-[#00BC6E]", textColor: "text-[#00BC6E]" },
+              { label: "Fundos de Crédito", value: portfolio.allocation.fundosCredito, color: "[&>div]:bg-blue-400", textColor: "text-blue-400" },
+              { label: "Imobiliário", value: portfolio.allocation.imobiliario, color: "[&>div]:bg-cyan-400", textColor: "text-cyan-400" },
+              { label: "Agro", value: portfolio.allocation.agro, color: "[&>div]:bg-emerald-400", textColor: "text-emerald-400" },
+              { label: "Alternativos", value: portfolio.allocation.alternativos, color: "[&>div]:bg-purple-400", textColor: "text-purple-400" },
+              { label: "Equity", value: portfolio.allocation.equity, color: "[&>div]:bg-amber-400", textColor: "text-amber-400" },
+              { label: "Caixa disponível", value: portfolio.allocation.caixa, color: "[&>div]:bg-white/40", textColor: "text-white/40" },
+            ].filter((item) => item.value > 0).map((item) => (
+              <div key={item.label}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-white/70">{item.label}</span>
+                  <span className={cn("font-medium", item.textColor)}>
+                    {item.value.toFixed(1)}%
+                  </span>
+                </div>
+                <Progress value={item.value} className={cn("h-1.5 bg-white/10", item.color)} />
               </div>
-              <Progress
-                value={portfolio.allocation.senior}
-                className="h-2 bg-white/10"
-              />
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-white/70">Cota Subordinada</span>
-                <span className="text-cyan-400 font-medium">
-                  {portfolio.allocation.subordinate.toFixed(1)}%
-                </span>
-              </div>
-              <Progress
-                value={portfolio.allocation.subordinate}
-                className="h-2 bg-white/10 [&>div]:bg-cyan-400"
-              />
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -438,7 +459,7 @@ export function PortfolioOverview() {
                   <div className="flex items-center gap-4 text-xs text-white/40">
                     <span className="flex items-center gap-1">
                       <TrendingUp className="h-3 w-3" />
-                      {investment.monthlyRate.toFixed(2)}% a.m.
+                      {(investment.monthlyRate * 12).toFixed(2)}% a.a.
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
