@@ -41,9 +41,7 @@ import {
   type NewCommissionCalculation,
   COMMISSION_RATES,
   getFifthBusinessDayOfMonth,
-  getInvestorMonthlyRate,
-  getInvestorMonthlyRateForExternalAdvisor,
-  getInvestorMonthlyRateForIndividualAdvisor,
+  resolveInvestorMonthlyRate,
   getLiquidityCycleMonths,
   type LiquidityOption,
 } from "@/lib/commission-calculator"
@@ -89,7 +87,7 @@ export function AdminCommissionsDetail() {
       // Buscar todos os investimentos ativos
       const { data: investments, error: investmentsError } = await supabase
         .from("investments")
-        .select("id, user_id, amount, payment_date, created_at, status, commitment_period, profitability_liquidity")
+        .select("id, user_id, amount, payment_date, created_at, status, commitment_period, profitability_liquidity, monthly_return_rate")
         .eq("status", "active")
 
       if (investmentsError) {
@@ -220,6 +218,7 @@ export function AdminCommissionsDetail() {
               payment_date: investmentPaymentDate,
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
+              monthly_return_rate: investment.monthly_return_rate,
               investorName: investor.full_name || "Investidor",
               advisorId: advisor.id,
               advisorName: advisor.full_name || "Assessor",
@@ -241,6 +240,7 @@ export function AdminCommissionsDetail() {
                 payment_date: investmentPaymentDate,
                 commitment_period: investment.commitment_period || 12,
                 liquidity: investment.profitability_liquidity,
+                monthly_return_rate: investment.monthly_return_rate,
                 investorName: investor.full_name || "Investidor",
                 officeId: office.id,
                 officeName: office.full_name || "Escritório",
@@ -265,6 +265,7 @@ export function AdminCommissionsDetail() {
               payment_date: investmentPaymentDate,
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
+              monthly_return_rate: investment.monthly_return_rate,
               investorName: investor.full_name || "Investidor",
               officeId: office.id,
               officeName: office.full_name || "Escritório",
@@ -285,6 +286,7 @@ export function AdminCommissionsDetail() {
               payment_date: investmentPaymentDate,
               commitment_period: investment.commitment_period || 12,
               liquidity: investment.profitability_liquidity,
+              monthly_return_rate: investment.monthly_return_rate,
               investorName: investor.full_name || "Investidor",
             })
 
@@ -526,7 +528,10 @@ export function AdminCommissionsDetail() {
     const officeRate = COMMISSION_RATES.escritorio
     const advisorBaseRate =
       commission.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor
-    const investorRate = COMMISSION_RATES.investidor
+    const investorRate =
+      commission.investorMonthlyRate > 0
+        ? commission.investorMonthlyRate
+        : COMMISSION_RATES.investidor
 
     return {
       officeAmount: commission.amount * officeRate,
@@ -678,8 +683,11 @@ export function AdminCommissionsDetail() {
           ? "assessor externo (2% ao mês)"
           : "assessor (3% ao mês)"
     } else {
-      rate = COMMISSION_RATES.investidor
-      label = "investidor (2% ao mês)"
+      rate =
+        commission.investorMonthlyRate > 0
+          ? commission.investorMonthlyRate
+          : COMMISSION_RATES.investidor
+      label = `investidor (${(rate * 100).toFixed(2)}% ao mês)`
     }
 
     const ratePct = (rate * 100).toFixed(2)
@@ -750,7 +758,10 @@ export function AdminCommissionsDetail() {
         commission.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor
     } else {
       amount = investorAmount
-      rate = COMMISSION_RATES.investidor
+      rate =
+        commission.investorMonthlyRate > 0
+          ? commission.investorMonthlyRate
+          : COMMISSION_RATES.investidor
     }
 
     if (!amount || amount <= 0 || !commission.amount || commission.amount <= 0 || rate <= 0) {
@@ -780,9 +791,13 @@ export function AdminCommissionsDetail() {
     } else if (kind === "advisor") {
       rate = commission.advisorRole === "assessor_externo" ? 0.02 : COMMISSION_RATES.assessor
     } else {
-      rate = COMMISSION_RATES.investidor
+      rate =
+        commission.investorMonthlyRate > 0
+          ? commission.investorMonthlyRate
+          : COMMISSION_RATES.investidor
     }
-    const pct = (rate * 100).toFixed(0)
+    const pct =
+      kind === "investor" ? (rate * 100).toFixed(2) : (rate * 100).toFixed(0)
 
     if (paymentIndex === 0) {
       const days = calculateProrataDays(kind, row)
@@ -849,11 +864,13 @@ export function AdminCommissionsDetail() {
     const cycleMonths = getLiquidityCycleMonths(liquidity)
     const commitmentPeriod = commission.commitmentPeriod ?? 12
     const monthlyRate =
-      commission.advisorRole === "assessor_individual"
-        ? getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidity)
-        : commission.advisorRole === "assessor_externo"
-          ? getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidity)
-          : getInvestorMonthlyRate(commitmentPeriod, liquidity)
+      commission.investorMonthlyRate > 0
+        ? commission.investorMonthlyRate
+        : resolveInvestorMonthlyRate({
+            commitment_period: commitmentPeriod,
+            liquidity,
+            advisorRole: commission.advisorRole ?? undefined,
+          })
     if (!monthlyRate || monthlyRate <= 0) return fallback
 
     const monthsSinceStart = Math.floor(

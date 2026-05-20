@@ -7,19 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Users, DollarSign, TrendingUp, Target, BarChart3, Shield, AlertCircle, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react"
-import { PromotionManager } from "../promotion-manager"
-import { BonificationManager } from "../bonification-manager"
+import { Users, DollarSign, Target, BarChart3, Shield, Filter, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react"
 import { UserManager } from "../user-manager"
-import { ReportsManager } from "../reports-manager"
 import { AdminSettings } from "../admin-settings"
-import { HierarchyManager } from "../hierarchy-manager"
-import { RecurrenceCalculator } from "../recurrence-calculator"
 import { NotificationSystem } from "../notification-system"
 import { ApproveInvestmentModal } from "../approve-investment-modal"
 import { AdminApproveInvestmentModal } from "../admin-approve-investment-modal"
 import { InvestmentsManager } from "../investments-manager"
-import AkintecManager from "../akintec-manager"
 import { AdminCommissionsDetail } from "../admin-commissions-detail"
 import { useAdminDashboard } from "./useAdminDashboard"
 import { AdminContractsManager } from "../admin-contracts-manager"
@@ -88,7 +82,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
@@ -112,28 +106,6 @@ export function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Valor total em investimentos ativos</p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receita Mensal</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.monthlyRevenue)}</div>
-            <p className="text-xs text-muted-foreground">Taxa de administração</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendências</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingApprovals}</div>
-            <p className="text-xs text-muted-foreground">Transações para aprovar</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Content */}
@@ -145,15 +117,9 @@ export function AdminDashboard() {
             <TabsTrigger value="clients-without-investments" className="text-xs sm:text-sm">Clientes sem Investimentos</TabsTrigger>
             <TabsTrigger value="contracts" className="text-xs sm:text-sm">Contratos</TabsTrigger>
             <TabsTrigger value="commissions" className="text-xs sm:text-sm">Comissões</TabsTrigger>
-            <TabsTrigger value="akintec" className="text-xs sm:text-sm">Akintec</TabsTrigger>
-            <TabsTrigger value="hierarchy" className="text-xs sm:text-sm">Hierarquia</TabsTrigger>
-            <TabsTrigger value="recurrence" className="text-xs sm:text-sm">Recorrência</TabsTrigger>
             <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notificações</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm">Configurações</TabsTrigger>
-            <TabsTrigger value="promotions" className="text-xs sm:text-sm">Promoções</TabsTrigger>
-            <TabsTrigger value="bonifications" className="text-xs sm:text-sm">Bonificações</TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm">Usuários</TabsTrigger>
-            <TabsTrigger value="reports" className="text-xs sm:text-sm">Relatórios</TabsTrigger>
           </TabsList>
         </div>
 
@@ -527,18 +493,6 @@ export function AdminDashboard() {
           <AdminContractsManager />
         </TabsContent>
 
-        <TabsContent value="akintec">
-          <AkintecManager />
-        </TabsContent>
-
-        <TabsContent value="hierarchy">
-          <HierarchyManager />
-        </TabsContent>
-
-        <TabsContent value="recurrence">
-          <RecurrenceCalculator />
-        </TabsContent>
-
         <TabsContent value="notifications">
           <NotificationSystem />
         </TabsContent>
@@ -547,24 +501,12 @@ export function AdminDashboard() {
           <AdminSettings />
         </TabsContent>
 
-        <TabsContent value="promotions">
-          <PromotionManager />
-        </TabsContent>
-
-        <TabsContent value="bonifications">
-          <BonificationManager />
-        </TabsContent>
-
         <TabsContent value="users">
           <UserManager />
         </TabsContent>
 
         <TabsContent value="commissions">
           <AdminCommissionsDetail />
-        </TabsContent>
-
-        <TabsContent value="reports">
-          <ReportsManager />
         </TabsContent>
       </Tabs>
 

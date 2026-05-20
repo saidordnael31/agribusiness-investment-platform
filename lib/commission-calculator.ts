@@ -234,6 +234,38 @@ export function getInvestorMonthlyRate(commitmentPeriod: number, liquidity: Liqu
   return 0;
 }
 
+/** Taxa mensal do investidor: prioriza `monthly_return_rate` do investimento (ex.: 0.0165 = 1,65% a.m.). */
+export function resolveInvestorMonthlyRate(investment: {
+  monthly_return_rate?: number | null;
+  commitment_period?: number;
+  liquidity?: LiquidityOption | string;
+  advisorRole?: string;
+}): number {
+  const stored = investment.monthly_return_rate;
+  if (typeof stored === "number" && Number.isFinite(stored) && stored > 0) {
+    return stored;
+  }
+
+  const commitmentPeriod = investment.commitment_period || 12;
+  let liquidityOption: LiquidityOption = "mensal";
+  if (investment.liquidity) {
+    const raw = String(investment.liquidity).toLowerCase();
+    if (raw.includes("semestral")) liquidityOption = "semestral";
+    else if (raw.includes("anual")) liquidityOption = "anual";
+    else if (raw.includes("bienal")) liquidityOption = "bienal";
+    else if (raw.includes("trienal")) liquidityOption = "trienal";
+    else liquidityOption = "mensal";
+  }
+
+  if (investment.advisorRole === "assessor_externo") {
+    return getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidityOption);
+  }
+  if (investment.advisorRole === "assessor_individual") {
+    return getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidityOption);
+  }
+  return getInvestorMonthlyRate(commitmentPeriod, liquidityOption) || COMMISSION_RATES.investidor;
+}
+
 export function getLiquidityCycleMonths(liquidity: LiquidityOption): number {
   switch (liquidity) {
     case "mensal":
@@ -646,6 +678,8 @@ export interface NewCommissionCalculation {
   advisorCommission: number;
   officeCommission: number;
   investorCommission: number;
+  /** Taxa mensal aplicada na comissão do investidor (ex.: 0.0165 = 1,65% a.m.) */
+  investorMonthlyRate: number;
   advisorId?: string;
   advisorName?: string;
   officeId?: string;
@@ -688,6 +722,8 @@ export function calculateNewCommissionLogic(
      * Usado para definir a faixa percentual aplicável (0,60% a 1,00% a.m.).
      */
     totalActivePortfolio?: number;
+    /** Taxa de retorno mensal contratada (ex.: 0.0165 = 1,65% a.m.) */
+    monthly_return_rate?: number | null;
   }
 ): NewCommissionCalculation {
   // Converter payment_date para Date, tratando diferentes formatos
@@ -761,13 +797,13 @@ export function calculateNewCommissionLogic(
   }
   const liquidityCycleMonths = getLiquidityCycleMonths(liquidityOption);
 
-  // Rentabilidade mensal base do investidor (depende do tipo de assessor e da liquidez)
-  let investorBaseRateMonthly = COMMISSION_RATES.investidor;
-  if (investment.advisorRole === "assessor_externo") {
-    investorBaseRateMonthly = getInvestorMonthlyRateForExternalAdvisor(commitmentPeriod, liquidityOption);
-  } else if (investment.advisorRole === "assessor_individual") {
-    investorBaseRateMonthly = getInvestorMonthlyRateForIndividualAdvisor(commitmentPeriod, liquidityOption);
-  }
+  // Rentabilidade mensal do investidor: prioriza monthly_return_rate do investimento
+  const investorBaseRateMonthly = resolveInvestorMonthlyRate({
+    monthly_return_rate: investment.monthly_return_rate,
+    commitment_period: commitmentPeriod,
+    liquidity: liquidityOption,
+    advisorRole: investment.advisorRole,
+  });
 
   // Taxa mensal base do assessor (depende do tipo de assessor)
   let advisorBaseRateMonthly = COMMISSION_RATES.assessor; // interno: 3% ao mês
@@ -1239,6 +1275,7 @@ export function calculateNewCommissionLogic(
     advisorCommission,
     officeCommission,
     investorCommission,
+    investorMonthlyRate: investorBaseRateMonthly,
     advisorId: investment.advisorId,
     advisorName: investment.advisorName,
     officeId: investment.officeId,

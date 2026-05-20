@@ -15,9 +15,7 @@ export interface PlatformStats {
   totalInvestors: number
   totalDistributors: number
   totalInvested: number
-  monthlyRevenue: number
   activePromotions: number
-  pendingApprovals: number
 }
 
 export interface RecentActivity {
@@ -63,9 +61,7 @@ export function useAdminDashboard() {
     totalInvestors: 0,
     totalDistributors: 0,
     totalInvested: 0,
-    monthlyRevenue: 0,
     activePromotions: 0,
-    pendingApprovals: 0,
   })
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
@@ -443,7 +439,6 @@ export function useAdminDashboard() {
       }
 
       const totalInvested = investments?.reduce((sum, inv) => sum + (inv.amount || 0), 0) || 0
-      const monthlyRevenue = totalInvested * 0.02
 
       const { data: campaigns, error: campaignsError } = await supabase
         .from("promotional_campaigns")
@@ -456,25 +451,12 @@ export function useAdminDashboard() {
 
       const activePromotions = campaigns?.length || 0
 
-      const { data: approvals, error: approvalsError } = await supabase
-        .from("transaction_approvals")
-        .select("id")
-        .eq("status", "pending")
-
-      if (approvalsError) {
-        console.error("Erro ao buscar aprovações:", approvalsError)
-      }
-
-      const pendingApprovals = approvals?.length || 0
-
       setStats({
         totalUsers,
         totalInvestors,
         totalDistributors,
         totalInvested,
-        monthlyRevenue,
         activePromotions,
-        pendingApprovals,
       })
     } catch (error) {
       console.error("Erro ao buscar estatísticas:", error)
