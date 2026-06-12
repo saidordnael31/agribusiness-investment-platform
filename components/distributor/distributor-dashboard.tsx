@@ -288,6 +288,7 @@ export function DistributorDashboard() {
     commitment_period?: number | null;
     profitability_liquidity?: string | null;
     liquidity?: string | null;
+    monthly_return_rate?: number | null;
   }): Date | null => {
     try {
       const paymentDateSource = investment.payment_date || investment.created_at;
@@ -300,6 +301,7 @@ export function DistributorDashboard() {
         payment_date: paymentDateSource,
         commitment_period: investment.commitment_period ?? 12,
         liquidity: investment.profitability_liquidity ?? investment.liquidity ?? "mensal",
+        monthly_return_rate: investment.monthly_return_rate,
         advisorName: undefined,
         advisorId: undefined,
         advisorRole: undefined,

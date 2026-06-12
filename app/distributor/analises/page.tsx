@@ -10,7 +10,10 @@ import { BarChart3, Loader2, TrendingUp, Users, UserPlus, DollarSign, ChevronLef
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts"
-import { calculateNewCommissionLogic } from "@/lib/commission-calculator"
+import {
+  calculateNewCommissionLogic,
+  isInvestmentEligibleForDistributorInvestorCommission,
+} from "@/lib/commission-calculator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { UserProfileView } from "@/components/admin/user-profile-view"
@@ -82,13 +85,20 @@ export default function AnalisesPage() {
   const [selectedProfileUserId, setSelectedProfileUserId] = useState<string | null>(null)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
+  const isDistribuidorProfile =
+    user?.role === "distribuidor" || user?.role === "distributor"
+
   useEffect(() => {
     const userStr = localStorage.getItem("user")
     if (userStr) {
       const userData = JSON.parse(userStr)
       setUser(userData)
-      if (userData?.id && viewMode === "geral") {
+      const isDistribuidor =
+        userData?.role === "distribuidor" || userData?.role === "distributor"
+      if (userData?.id && isDistribuidor && viewMode === "geral") {
         fetchEscritoriosData(userData.id)
+      } else if (!isDistribuidor) {
+        setLoading(false)
       }
     }
   }, [viewMode])
@@ -144,18 +154,33 @@ export default function AnalisesPage() {
 
       const investorIds = (investors || []).map((i) => i.id)
 
+      const { data: distribuidorProfile } = await supabase
+        .from("profiles")
+        .select("created_at")
+        .eq("id", distribuidorId)
+        .single()
+      const distribuidorCreatedAt = distribuidorProfile?.created_at ?? null
+
       // Buscar investimentos (incluindo payment_date para gráfico de linha)
       let investments: any[] = []
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("id, user_id, amount, status, payment_date, commitment_period, profitability_liquidity")
+          .select("id, user_id, amount, status, payment_date, created_at, commitment_period, profitability_liquidity")
           .eq("status", "active")
           .in("user_id", investorIds)
           .order("payment_date", { ascending: true })
 
         if (!investmentsError) {
-          investments = investmentsData || []
+          investments = (investmentsData || []).filter((investment) =>
+            isInvestmentEligibleForDistributorInvestorCommission(
+              {
+                created_at: investment.created_at,
+                payment_date: investment.payment_date,
+              },
+              distribuidorCreatedAt,
+            ),
+          )
         }
       }
 
@@ -188,20 +213,24 @@ export default function AnalisesPage() {
         investorsByEscritorio[id] = new Set()
       })
 
-      // Adicionar investidores diretamente vinculados ao escritório
+      // Adicionar investidores com aporte elegível vinculados ao escritório
       ;(investors || []).forEach((investor) => {
+        if ((investmentsByInvestor[investor.id] || 0) <= 0) return
         const escritorioId = investor.office_id
         if (escritorioId && escritorioIds.includes(escritorioId)) {
           investorsByEscritorio[escritorioId].add(investor.id)
         }
       })
 
-      // Adicionar investidores vinculados via assessores
+      // Adicionar investidores com aporte elegível vinculados via assessores
       ;(assessores || []).forEach((assessor) => {
         const escritorioId = assessor.office_id || assessor.parent_id
         if (escritorioId && escritorioIds.includes(escritorioId)) {
           ;(investors || []).forEach((investor) => {
-            if (investor.parent_id === assessor.id) {
+            if (
+              investor.parent_id === assessor.id &&
+              (investmentsByInvestor[investor.id] || 0) > 0
+            ) {
               investorsByEscritorio[escritorioId].add(investor.id)
             }
           })
@@ -498,18 +527,37 @@ export default function AnalisesPage() {
 
       const investorIds = (investors || []).map((i) => i.id)
 
+      const distribuidorId = user?.id
+      let distribuidorCreatedAt: string | null = null
+      if (distribuidorId) {
+        const { data: distribuidorProfile } = await supabase
+          .from("profiles")
+          .select("created_at")
+          .eq("id", distribuidorId)
+          .single()
+        distribuidorCreatedAt = distribuidorProfile?.created_at ?? null
+      }
+
       // Buscar investimentos
       let investments: any[] = []
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("id, user_id, amount, status, payment_date, commitment_period, profitability_liquidity")
+          .select("id, user_id, amount, status, payment_date, created_at, commitment_period, profitability_liquidity")
           .eq("status", "active")
           .in("user_id", investorIds)
           .order("payment_date", { ascending: true })
 
         if (!investmentsError) {
-          investments = investmentsData || []
+          investments = (investmentsData || []).filter((investment) =>
+            isInvestmentEligibleForDistributorInvestorCommission(
+              {
+                created_at: investment.created_at,
+                payment_date: investment.payment_date,
+              },
+              distribuidorCreatedAt,
+            ),
+          )
         }
       }
 
@@ -524,11 +572,12 @@ export default function AnalisesPage() {
         {}
       )
 
-      // Contar investidores por assessor
+      // Contar investidores por assessor (com aporte elegível)
       const investorsByAssessor: Record<string, number> = {}
       assessorIds.forEach((assessorId) => {
         const assessorInvestors = (investors || []).filter(
-          (inv) => inv.parent_id === assessorId
+          (inv) =>
+            inv.parent_id === assessorId && (investmentsByInvestor[inv.id] || 0) > 0,
         )
         investorsByAssessor[assessorId] = assessorInvestors.length
       })
@@ -736,7 +785,7 @@ export default function AnalisesPage() {
       // Buscar dados do assessor
       const { data: assessorData, error: assessorError } = await supabase
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, full_name, email, role")
         .eq("id", assessorId)
         .single()
 
@@ -758,18 +807,37 @@ export default function AnalisesPage() {
 
       const investorIds = (investors || []).map((i) => i.id)
 
+      const distribuidorId = user?.id
+      let distribuidorCreatedAt: string | null = null
+      if (distribuidorId) {
+        const { data: distribuidorProfile } = await supabase
+          .from("profiles")
+          .select("created_at")
+          .eq("id", distribuidorId)
+          .single()
+        distribuidorCreatedAt = distribuidorProfile?.created_at ?? null
+      }
+
       // Buscar investimentos
       let investments: any[] = []
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("id, user_id, amount, status, payment_date, commitment_period, profitability_liquidity")
+          .select("id, user_id, amount, status, payment_date, created_at, commitment_period, profitability_liquidity")
           .eq("status", "active")
           .in("user_id", investorIds)
           .order("payment_date", { ascending: true })
 
         if (!investmentsError) {
-          investments = investmentsData || []
+          investments = (investmentsData || []).filter((investment) =>
+            isInvestmentEligibleForDistributorInvestorCommission(
+              {
+                created_at: investment.created_at,
+                payment_date: investment.payment_date,
+              },
+              distribuidorCreatedAt,
+            ),
+          )
         }
       }
 
@@ -791,11 +859,16 @@ export default function AnalisesPage() {
         0
       )
 
+      const eligibleInvestorCount = investorIds.filter(
+        (investorId) => (investmentsByInvestor[investorId] || 0) > 0,
+      ).length
+
       const assessorDetailData: AssessorData = {
         id: assessorData.id,
         name: assessorData.full_name || assessorData.email.split("@")[0],
+        role: assessorData.role || "",
         totalInvested,
-        investorsCount: investorIds.length,
+        investorsCount: eligibleInvestorCount,
       }
 
       setAssessorDetail(assessorDetailData)
@@ -803,14 +876,16 @@ export default function AnalisesPage() {
       // Não atualizar allAssessores aqui - manter a lista completa para o select
 
       // Preparar dados dos investidores para o gráfico de pizza
-      const investorsDetail: InvestorData[] = (investors || []).map((investor) => {
-        const investorTotal = investmentsByInvestor[investor.id] || 0
-        return {
-          id: investor.id,
-          name: investor.full_name || investor.email.split("@")[0],
-          totalInvested: investorTotal,
-        }
-      })
+      const investorsDetail: InvestorData[] = (investors || [])
+        .map((investor) => {
+          const investorTotal = investmentsByInvestor[investor.id] || 0
+          return {
+            id: investor.id,
+            name: investor.full_name || investor.email.split("@")[0],
+            totalInvested: investorTotal,
+          }
+        })
+        .filter((investor) => investor.totalInvested > 0)
 
       setInvestorsData(investorsDetail)
 
@@ -1283,6 +1358,18 @@ export default function AnalisesPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-white" />
             </div>
+          </div>
+        </DistributorLayout>
+      </ProtectedRoute>
+    )
+  }
+
+  if (user && !isDistribuidorProfile) {
+    return (
+      <ProtectedRoute allowedTypes={["distributor"]}>
+        <DistributorLayout>
+          <div className="container mx-auto p-6">
+            <p className="text-white">Esta página é exclusiva para o perfil de distribuidor.</p>
           </div>
         </DistributorLayout>
       </ProtectedRoute>

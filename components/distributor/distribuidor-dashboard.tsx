@@ -35,6 +35,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
+import { isInvestmentEligibleForDistributorInvestorCommission } from "@/lib/commission-calculator";
+
+/** Taxa de comissão do perfil distribuidor (apenas neste dashboard). */
+const DISTRIBUIDOR_COMMISSION_RATE = 0.03;
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -138,11 +142,14 @@ export function DistribuidorDashboard() {
     }
   }, []);
 
+  const isDistribuidorProfile =
+    user?.role === "distribuidor" || user?.role === "distributor";
+
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && isDistribuidorProfile) {
       fetchMyEscritorios(user.id);
     }
-  }, [user]);
+  }, [user, isDistribuidorProfile]);
 
   useEffect(() => {
     const loadBanks = async () => {
@@ -263,12 +270,19 @@ export function DistribuidorDashboard() {
 
       const investorIds = (investors || []).map((i) => i.id);
 
+      const { data: distribuidorProfile } = await supabase
+        .from("profiles")
+        .select("created_at")
+        .eq("id", distribuidorId)
+        .single();
+      const distribuidorCreatedAt = distribuidorProfile?.created_at ?? null;
+
       // Buscar investimentos
       let investments: any[] = [];
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("user_id, amount, status")
+          .select("user_id, amount, status, created_at, payment_date")
           .eq("status", "active")
           .in("user_id", investorIds);
 
@@ -283,8 +297,18 @@ export function DistribuidorDashboard() {
         console.log(`[DISTRIBUIDOR] Nenhum investidor encontrado, não há investimentos para buscar`);
       }
 
-      // Calcular totais por escritório
-      const investmentsByInvestor = investments.reduce<Record<string, number>>(
+      const eligibleInvestments = investments.filter((investment) =>
+        isInvestmentEligibleForDistributorInvestorCommission(
+          {
+            created_at: investment.created_at,
+            payment_date: investment.payment_date,
+          },
+          distribuidorCreatedAt,
+        ),
+      );
+
+      // Calcular totais por escritório (apenas aportes após criação do distribuidor)
+      const investmentsByInvestor = eligibleInvestments.reduce<Record<string, number>>(
         (acc, investment) => {
           const amount = Number(investment.amount) || 0;
           const userId = investment.user_id;
@@ -317,21 +341,24 @@ export function DistribuidorDashboard() {
         investorsByEscritorio[id] = new Set();
       });
 
-      // Adicionar investidores diretamente vinculados ao escritório via office_id
+      // Adicionar investidores com aporte elegível vinculados ao escritório via office_id
       (investors || []).forEach((investor) => {
+        if ((investmentsByInvestor[investor.id] || 0) <= 0) return;
         const escritorioId = investor.office_id;
         if (escritorioId && escritorioIds.includes(escritorioId)) {
           investorsByEscritorio[escritorioId].add(investor.id);
         }
       });
 
-      // Adicionar investidores vinculados via assessores
+      // Adicionar investidores com aporte elegível vinculados via assessores
       (assessores || []).forEach((assessor) => {
         const escritorioId = assessor.office_id || assessor.parent_id;
         if (escritorioId && escritorioIds.includes(escritorioId)) {
-          // Buscar investidores deste assessor
           (investors || []).forEach((investor) => {
-            if (investor.parent_id === assessor.id) {
+            if (
+              investor.parent_id === assessor.id &&
+              (investmentsByInvestor[investor.id] || 0) > 0
+            ) {
               investorsByEscritorio[escritorioId].add(investor.id);
             }
           });
@@ -379,10 +406,12 @@ export function DistribuidorDashboard() {
 
         console.log(`[DISTRIBUIDOR] Escritório ${profile.full_name} - Total investido: R$ ${totalInvested}`);
 
-        // Comissão do distribuidor: 1% sobre o total investido
-        const totalCommission = totalInvested * 0.01;
-        
-        console.log(`[DISTRIBUIDOR] Escritório ${profile.full_name} - Comissão (1%): R$ ${totalCommission}`);
+        // Comissão do distribuidor sobre o total investido elegível
+        const totalCommission = totalInvested * DISTRIBUIDOR_COMMISSION_RATE;
+
+        console.log(
+          `[DISTRIBUIDOR] Escritório ${profile.full_name} - Comissão (${(DISTRIBUIDOR_COMMISSION_RATE * 100).toFixed(0)}%): R$ ${totalCommission}`,
+        );
 
         const cpfCnpjFromProfile = profile.cnpj || "";
 
@@ -1220,19 +1249,34 @@ export function DistribuidorDashboard() {
 
       const investorIds = uniqueInvestors.map((i) => i.id);
 
+      const { data: distribuidorProfile } = await supabase
+        .from("profiles")
+        .select("created_at")
+        .eq("id", distribuidorId)
+        .single();
+      const distribuidorCreatedAt = distribuidorProfile?.created_at ?? null;
+
       // Buscar investimentos ativos dos investidores
       let investments: any[] = [];
       if (investorIds.length > 0) {
         const { data: investmentsData, error: investmentsError } = await supabase
           .from("investments")
-          .select("user_id, amount, status")
+          .select("user_id, amount, status, created_at, payment_date")
           .eq("status", "active")
           .in("user_id", investorIds);
 
         if (investmentsError) {
           console.error("Erro ao buscar investimentos:", investmentsError);
         } else {
-          investments = investmentsData || [];
+          investments = (investmentsData || []).filter((investment) =>
+            isInvestmentEligibleForDistributorInvestorCommission(
+              {
+                created_at: investment.created_at,
+                payment_date: investment.payment_date,
+              },
+              distribuidorCreatedAt,
+            ),
+          );
         }
       }
 
@@ -1269,11 +1313,13 @@ export function DistribuidorDashboard() {
       const assessoresMap = new Map(assessores.map((a) => [a.id, a.full_name || a.email]));
 
       // Adicionar total investido e assessor aos investidores
-      const investorsComTotal = uniqueInvestors.map((investor) => ({
-        ...investor,
-        totalInvestido: investmentsByInvestor[investor.id] || 0,
-        assessorNome: investor.parent_id ? assessoresMap.get(investor.parent_id) || "-" : "-",
-      }));
+      const investorsComTotal = uniqueInvestors
+        .map((investor) => ({
+          ...investor,
+          totalInvestido: investmentsByInvestor[investor.id] || 0,
+          assessorNome: investor.parent_id ? assessoresMap.get(investor.parent_id) || "-" : "-",
+        }))
+        .filter((investor) => investor.totalInvestido > 0);
 
       setEscritorioAssessores(assessoresComTotal);
       setEscritorioInvestors(investorsComTotal);
@@ -1288,6 +1334,14 @@ export function DistribuidorDashboard() {
       setLoadingDetails(false);
     }
   };
+
+  if (user && !isDistribuidorProfile) {
+    return (
+      <div className="container mx-auto p-6">
+        <p className="text-white">Este painel é exclusivo para o perfil de distribuidor.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -1329,7 +1383,7 @@ export function DistribuidorDashboard() {
             <TrendingUp className="h-24 w-24" />
           </div>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-            <CardTitle className="text-sm font-medium text-white">Comissão Total (1%)</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">Comissão Total (3%)</CardTitle>
           </CardHeader>
           <CardContent className="relative z-10">
             <div className="text-2xl font-bold text-[#00BC6E]">{formatCurrency(totalStats.totalCommission)}</div>
@@ -1388,7 +1442,7 @@ export function DistribuidorDashboard() {
                   <TableHead>Escritório</TableHead>
                   <TableHead>CPF/CNPJ</TableHead>
                   <TableHead>Total Investido</TableHead>
-                  <TableHead>Comissão (1%)</TableHead>
+                  <TableHead>Comissão (3%)</TableHead>
                   <TableHead>Assessores</TableHead>
                   <TableHead>Investidores</TableHead>
                   <TableHead>Status</TableHead>

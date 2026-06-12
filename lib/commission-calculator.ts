@@ -266,6 +266,46 @@ export function resolveInvestorMonthlyRate(investment: {
   return getInvestorMonthlyRate(commitmentPeriod, liquidityOption) || COMMISSION_RATES.investidor;
 }
 
+/** Normaliza data para meia-noite UTC (comparação por dia civil). */
+export function toUtcDateOnly(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const dateOnly = value.split("T")[0];
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  }
+
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+  }
+
+  return null;
+}
+
+/**
+ * Investimento elegível para comissão do investidor no acesso do distribuidor:
+ * criado e pago após a data de criação do distribuidor.
+ */
+export function isInvestmentEligibleForDistributorInvestorCommission(
+  investment: {
+    created_at?: Date | string | null;
+    payment_date?: Date | string | null;
+  },
+  distributorCreatedAt: Date | string | null | undefined,
+): boolean {
+  if (!distributorCreatedAt) return true;
+
+  const distributorDay = toUtcDateOnly(distributorCreatedAt);
+  const createdDay = toUtcDateOnly(investment.created_at);
+  const paidDay = toUtcDateOnly(investment.payment_date || investment.created_at);
+
+  if (!distributorDay || !createdDay || !paidDay) return false;
+
+  return createdDay.getTime() > distributorDay.getTime() && paidDay.getTime() > distributorDay.getTime();
+}
+
 export function getLiquidityCycleMonths(liquidity: LiquidityOption): number {
   switch (liquidity) {
     case "mensal":
@@ -724,6 +764,13 @@ export function calculateNewCommissionLogic(
     totalActivePortfolio?: number;
     /** Taxa de retorno mensal contratada (ex.: 0.0165 = 1,65% a.m.) */
     monthly_return_rate?: number | null;
+    /** Data de criação do investimento no banco */
+    created_at?: Date | string | null;
+    /**
+     * Data de criação do distribuidor da rede.
+     * Quando informada, zera a comissão do investidor para aportes anteriores.
+     */
+    distributor_created_at?: Date | string | null;
   }
 ): NewCommissionCalculation {
   // Converter payment_date para Date, tratando diferentes formatos
@@ -1263,6 +1310,23 @@ export function calculateNewCommissionLogic(
       `Pagamento mensal no 5º dia útil de cada mês durante ${commitmentPeriod} meses.`;
   }
   
+  if (
+    investment.distributor_created_at &&
+    !isInvestmentEligibleForDistributorInvestorCommission(
+      {
+        created_at: investment.created_at,
+        payment_date: investment.payment_date,
+      },
+      investment.distributor_created_at,
+    )
+  ) {
+    investorCommission = 0;
+    monthlyBreakdown = monthlyBreakdown.map((month) => ({
+      ...month,
+      investorCommission: 0,
+    }));
+  }
+
   return {
     investmentId: investment.id,
     investorId: investment.user_id,
