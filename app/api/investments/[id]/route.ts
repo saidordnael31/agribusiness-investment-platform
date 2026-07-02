@@ -100,6 +100,13 @@ export async function PATCH(
     }
 
     if (updateData.payment_date !== undefined) {
+      if (existingInvestment.payment_date) {
+        return NextResponse.json(
+          { success: false, error: "Data de pagamento não pode ser alterada após definida" },
+          { status: 400 }
+        )
+      }
+
       if (updateData.payment_date === null || updateData.payment_date === '') {
         allowedFields.payment_date = null
       } else {

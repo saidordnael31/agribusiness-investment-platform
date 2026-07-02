@@ -30,3 +30,7 @@ next-env.d.ts
 .otp-codes.json
 .email-verification-codes.json
 /emails/
+
+/test
+.commissions.json
+.montly_return.json

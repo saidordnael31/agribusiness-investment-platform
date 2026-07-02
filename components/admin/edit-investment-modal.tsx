@@ -194,10 +194,12 @@ export function EditInvestmentModal({
         updateData.profitability_liquidity = formData.profitability_liquidity
       }
 
-      if (formData.payment_date) {
-        updateData.payment_date = formData.payment_date
-      } else {
-        updateData.payment_date = null
+      if (!investment.payment_date) {
+        if (formData.payment_date) {
+          updateData.payment_date = formData.payment_date
+        } else {
+          updateData.payment_date = null
+        }
       }
 
       if (formData.status) {
@@ -345,9 +347,12 @@ export function EditInvestmentModal({
                 type="date"
                 value={formData.payment_date}
                 onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                disabled={!!investment.payment_date}
               />
               <p className="text-xs text-muted-foreground">
-                Deixe em branco para remover a data de pagamento.
+                {investment.payment_date
+                  ? "A data de pagamento não pode ser alterada após definida."
+                  : "Defina a data de pagamento na aprovação do investimento."}
               </p>
             </div>
 

@@ -1,23 +1,22 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Users,
   Search,
@@ -33,22 +32,43 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCheck,
-  Mail,
-  MapPin,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+  AdminSectionCard,
+  AdminPrimaryButton,
+  AdminSecondaryButton,
+  AdminGhostButton,
+  AdminStatusBadge,
+  AdminDataTable,
+  AdminTable,
+  AdminTableHeader,
+  AdminTableHead,
+  AdminTableBody,
+  AdminTableRow,
+  AdminTableCell,
+  AdminMoney,
+  FintechMetricCard,
+  FintechMetricGrid,
+  adminTokens,
+} from "@/components/admin/ui";
 import { AdminRegisterForm } from "./admin-register-form";
 import { UserProfileView } from "../user-profile-view";
 import { UserProfileEdit } from "../user-profile-edit";
 import { useUserManager } from "./useUserManager";
+
+function statusTone(status: string) {
+  switch (status) {
+    case "active":
+      return "success" as const;
+    case "inactive":
+      return "muted" as const;
+    case "pending":
+      return "warning" as const;
+    default:
+      return "neutral" as const;
+  }
+}
 
 export function UserManager() {
   const {
@@ -85,58 +105,65 @@ export function UserManager() {
     handleProfileEditClose,
     handleEditFromView,
     formatCurrency,
-    getStatusColor,
     getStatusLabel,
     getTypeLabel,
   } = useUserManager();
 
+  const distributorCount = users.filter((u) =>
+    ["distributor", "assessor", "gestor", "escritorio"].includes(u.type),
+  ).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="w-6 h-6" />
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-[#F3F5F4]">
+            <Users className="h-5 w-5 text-[#22C55E]" />
             Gerenciamento de Usuários
           </h2>
-          <p className="text-muted-foreground">
+          <p className="mt-0.5 text-sm text-[#A5B3AC]">
             Gerencie investidores e distribuidores da plataforma
           </p>
         </div>
-        <Dialog open={showCreateUserModal} onOpenChange={setShowCreateUserModal}>
-          <DialogTrigger asChild>
-            <Button className="flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              Cadastrar Usuário
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Cadastrar Novo Usuário</DialogTitle>
-              <DialogDescription>
-                Cadastre um novo usuário na plataforma.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto pr-2">
-              {showCreateUserModal && (
-                <AdminRegisterForm 
-                  closeModal={() => setShowCreateUserModal(false)} 
-                />
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <AdminPrimaryButton
+          className="h-10"
+          onClick={() => setShowCreateUserModal(true)}
+        >
+          <UserPlus className="mr-2 h-4 w-4" />
+          Cadastrar Usuário
+        </AdminPrimaryButton>
       </div>
 
-      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showCreateUserModal} onOpenChange={setShowCreateUserModal}>
+        <DialogContent
+          className={cn(
+            adminTokens.dialog,
+            "flex max-h-[90vh] flex-col overflow-hidden sm:max-w-6xl",
+          )}
+        >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <QrCode className="w-5 h-5" />
+            <DialogTitle className="text-[#F3F5F4]">Cadastrar Novo Usuário</DialogTitle>
+            <DialogDescription className="text-[#A5B3AC]">
+              Cadastre um novo usuário na plataforma.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto pr-2">
+            {showCreateUserModal && (
+              <AdminRegisterForm closeModal={() => setShowCreateUserModal(false)} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+        <DialogContent className={cn(adminTokens.dialog, "sm:max-w-md")}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#F3F5F4]">
+              <QrCode className="h-5 w-5 text-[#22C55E]" />
               QR Code PIX Gerado
             </DialogTitle>
-            <DialogDescription>
-              Use o QR Code abaixo ou copie o código PIX para realizar o
-              pagamento.
+            <DialogDescription className="text-[#A5B3AC]">
+              Use o QR Code abaixo ou copie o código PIX para realizar o pagamento.
             </DialogDescription>
           </DialogHeader>
 
@@ -146,316 +173,291 @@ export function UserManager() {
                 <img
                   src={qrCodeData.qrCode || "/placeholder.svg"}
                   alt="QR Code PIX"
-                  className="w-64 h-64 border rounded-lg"
+                  className="h-64 w-64 rounded-xl border border-white/[0.08]"
                 />
               </div>
 
               {qrCodeData.paymentString && (
                 <div className="space-y-2">
-                  <Label>Código PIX (Copia e Cola)</Label>
+                  <Label className={adminTokens.label}>Código PIX (Copia e Cola)</Label>
                   <div className="flex gap-2">
                     <Input
                       value={qrCodeData.paymentString}
                       readOnly
-                      className="font-mono text-xs"
+                      className={cn(adminTokens.input, "font-mono text-xs")}
                     />
-                    <Button
-                      variant="outline"
+                    <AdminSecondaryButton
                       size="sm"
                       onClick={copyPixCode}
-                      className="shrink-0 bg-transparent"
+                      className="h-9 shrink-0 px-3"
                     >
-                      <Copy className="w-4 h-4" />
-                    </Button>
+                      <Copy className="h-4 w-4" />
+                    </AdminSecondaryButton>
                   </div>
                 </div>
               )}
 
               <div className="flex justify-end">
-                <Button onClick={() => setShowQRModal(false)}>Fechar</Button>
+                <AdminSecondaryButton onClick={() => setShowQRModal(false)}>
+                  Fechar
+                </AdminSecondaryButton>
               </div>
             </div>
           )}
 
           {generatingQR && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin" />
+            <div className="flex items-center justify-center py-8 text-[#A5B3AC]">
+              <Loader2 className="h-8 w-8 animate-spin text-[#22C55E]" />
               <span className="ml-2">Gerando QR Code...</span>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Filtros
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium">Buscar</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Nome ou email..."
-                  value={searchTerm}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Tipo de Usuário</label>
-              <select
-                value={filterType}
-                onChange={(e) => handleTypeFilterChange(e.target.value)}
-                className="w-full mt-1 px-3 py-2 border rounded-lg"
-              >
-                <option value="all">Todos</option>
-                <option value="investor">Investidores</option>
-                <option value="distributor">Distribuidores</option>
-                <option value="assessor">Assessores</option>
-                <option value="gestor">Gestores</option>
-                <option value="escritorio">Escritórios</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Status</label>
-              <select
-                value={filterStatus}
-                onChange={(e) => handleStatusFilterChange(e.target.value)}
-                className="w-full mt-1 px-3 py-2 border rounded-lg"
-              >
-                <option value="all">Todos</option>
-                <option value="active">Ativo</option>
-                <option value="inactive">Inativo</option>
-                <option value="pending">Pendente</option>
-              </select>
+      <AdminSectionCard title="Filtros" variant="muted">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Buscar</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7C74]" />
+              <Input
+                placeholder="Nome ou email..."
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className={cn(adminTokens.input, "pl-10")}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Tipo de Usuário</label>
+            <Select value={filterType} onValueChange={handleTypeFilterChange}>
+              <SelectTrigger className={adminTokens.input}>
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent className={adminTokens.selectContent}>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="investor">Investidores</SelectItem>
+                <SelectItem value="distributor">Distribuidores</SelectItem>
+                <SelectItem value="assessor">Assessores</SelectItem>
+                <SelectItem value="gestor">Gestores</SelectItem>
+                <SelectItem value="escritorio">Escritórios</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Status</label>
+            <Select value={filterStatus} onValueChange={handleStatusFilterChange}>
+              <SelectTrigger className={adminTokens.input}>
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent className={adminTokens.selectContent}>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="active">Ativo</SelectItem>
+                <SelectItem value="inactive">Inativo</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </AdminSectionCard>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total de Usuários
-                </p>
-                <p className="text-2xl font-bold">{totalUsers}</p>
-              </div>
-              <Users className="w-8 h-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Investidores
-                </p>
-                <p className="text-2xl font-bold">
-                  {users.filter((u) => u.type === "investor").length}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Distribuidores
-                </p>
-                <p className="text-2xl font-bold">
-                  {
-                    users.filter((u) =>
-                      [
-                        "distributor",
-                        "assessor",
-                        "gestor",
-                        "escritorio",
-                      ].includes(u.type)
-                    ).length
-                  }
-                </p>
-              </div>
-              <UserCheck className="w-8 h-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Pendentes
-                </p>
-                <p className="text-2xl font-bold">
-                  {users.filter((u) => u.status === "pending").length}
-                </p>
-              </div>
-              <UserX className="w-8 h-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <FintechMetricGrid>
+        <FintechMetricCard
+          label="Total de Usuários"
+          value={String(totalUsers)}
+          icon={Users}
+          tone="forest"
+          surface="featured"
+        />
+        <FintechMetricCard
+          label="Investidores"
+          value={String(users.filter((u) => u.type === "investor").length)}
+          icon={DollarSign}
+          tone="emerald"
+          surface="soft"
+        />
+        <FintechMetricCard
+          label="Distribuidores"
+          value={String(distributorCount)}
+          icon={UserCheck}
+          tone="sky"
+          surface="card"
+        />
+        <FintechMetricCard
+          label="Pendentes"
+          value={String(users.filter((u) => u.status === "pending").length)}
+          icon={UserX}
+          tone="amber"
+          surface="soft"
+          badge={
+            users.filter((u) => u.status === "pending").length > 0
+              ? "Ação"
+              : undefined
+          }
+        />
+      </FintechMetricGrid>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lista de Usuários</CardTitle>
-          <CardDescription>
-            Todos os usuários registrados na plataforma
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Carregando usuários...</p>
-            </div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-8">
-              <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Nenhum usuário encontrado</p>
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Cadastro</TableHead>
-                    <TableHead>Última Atividade</TableHead>
-                    <TableHead>Ações</TableHead>
+      <AdminSectionCard
+        title="Lista de Usuários"
+        description="Todos os usuários registrados na plataforma"
+        variant="card"
+        noPadding
+      >
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="mb-3 h-8 w-8 animate-spin text-[#22C55E]" />
+            <p className="text-sm text-[#6B7C74]">Carregando usuários...</p>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Users className="mb-3 h-10 w-10 text-[#6B7C74]" />
+            <p className="text-sm text-[#6B7C74]">Nenhum usuário encontrado</p>
+          </div>
+        ) : (
+          <>
+            <AdminDataTable embedded maxHeight={false}>
+              <AdminTable>
+                <AdminTableHeader>
+                  <TableRow className="border-white/[0.04] hover:bg-transparent">
+                    <AdminTableHead>Nome</AdminTableHead>
+                    <AdminTableHead>Email</AdminTableHead>
+                    <AdminTableHead>Tipo</AdminTableHead>
+                    <AdminTableHead>Status</AdminTableHead>
+                    <AdminTableHead align="right">Valor</AdminTableHead>
+                    <AdminTableHead>Cadastro</AdminTableHead>
+                    <AdminTableHead>Última Atividade</AdminTableHead>
+                    <AdminTableHead align="right">Ações</AdminTableHead>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
+                </AdminTableHeader>
+                <AdminTableBody>
                   {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{getTypeLabel(user.type)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusColor(user.status) as any}>
+                    <AdminTableRow key={user.id}>
+                      <AdminTableCell>
+                        <span className="font-medium text-[#F3F5F4]">{user.name}</span>
+                      </AdminTableCell>
+                      <AdminTableCell secondary>{user.email}</AdminTableCell>
+                      <AdminTableCell>
+                        <AdminStatusBadge tone="info">
+                          {getTypeLabel(user.type)}
+                        </AdminStatusBadge>
+                      </AdminTableCell>
+                      <AdminTableCell>
+                        <AdminStatusBadge tone={statusTone(user.status)}>
                           {getStatusLabel(user.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {user.totalInvested &&
-                          user.totalInvested > 0 &&
-                          formatCurrency(user.totalInvested)}
-                        {user.totalCaptured &&
-                          user.totalCaptured > 0 &&
-                          formatCurrency(user.totalCaptured)}
-                        {(!user.totalInvested || user.totalInvested === 0) &&
-                          (!user.totalCaptured || user.totalCaptured === 0) &&
-                          "-"}
-                      </TableCell>
-                      <TableCell>
+                        </AdminStatusBadge>
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <AdminMoney
+                          value={
+                            user.totalInvested && user.totalInvested > 0
+                              ? formatCurrency(user.totalInvested)
+                              : user.totalCaptured && user.totalCaptured > 0
+                                ? formatCurrency(user.totalCaptured)
+                                : "—"
+                          }
+                          emphasis={
+                            !!(user.totalInvested && user.totalInvested > 0) ||
+                            !!(user.totalCaptured && user.totalCaptured > 0)
+                          }
+                          className={
+                            user.totalInvested || user.totalCaptured
+                              ? "text-[#22C55E]"
+                              : undefined
+                          }
+                        />
+                      </AdminTableCell>
+                      <AdminTableCell secondary>
                         {new Date(user.joinedAt).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell>
+                      </AdminTableCell>
+                      <AdminTableCell secondary>
                         {new Date(user.lastActivity).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="ghost"
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <div className="flex justify-end gap-1">
+                          <AdminGhostButton
                             size="sm"
+                            className="h-8 w-8 p-0"
                             onClick={() => handleViewProfile(user.id)}
                             title="Ver Perfil"
                           >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
+                            <Eye className="h-4 w-4" />
+                          </AdminGhostButton>
+                          <AdminGhostButton
                             size="sm"
+                            className="h-8 w-8 p-0"
                             onClick={() => handleEditProfile(user.id)}
                             title="Alterar Perfil"
                           >
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                            <Edit className="h-4 w-4" />
+                          </AdminGhostButton>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                      </AdminTableCell>
+                    </AdminTableRow>
                   ))}
-                </TableBody>
-              </Table>
+                </AdminTableBody>
+              </AdminTable>
+            </AdminDataTable>
 
-              {/* Controles de Paginação */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Página {currentPage} de {totalPages} ({totalUsers} usuários)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      Anterior
-                    </Button>
-                    
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i
-                        if (pageNum > totalPages) return null
-                        
-                        return (
-                          <Button
-                            key={pageNum}
-                            variant={pageNum === currentPage ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => handlePageChange(pageNum)}
-                            className="w-8 h-8 p-0"
-                          >
-                            {pageNum}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                    >
-                      Próxima
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </div>
+            {totalPages > 1 && (
+              <div className="flex flex-col gap-3 border-t border-white/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs text-[#6B7C74]">
+                  Página {currentPage} de {totalPages} ({totalUsers} usuários)
+                </span>
+                <div className="flex items-center gap-1">
+                  <AdminSecondaryButton
+                    size="sm"
+                    className="h-8"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="mr-1 h-4 w-4" />
+                    Anterior
+                  </AdminSecondaryButton>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const pageNum =
+                      Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                    if (pageNum > totalPages) return null;
+                    return (
+                      <AdminSecondaryButton
+                        key={pageNum}
+                        size="sm"
+                        className={cn(
+                          "h-8 w-8 p-0",
+                          pageNum === currentPage &&
+                            "border-emerald-500/30 bg-emerald-500/10 text-[#22C55E]",
+                        )}
+                        onClick={() => handlePageChange(pageNum)}
+                      >
+                        {pageNum}
+                      </AdminSecondaryButton>
+                    );
+                  })}
+                  <AdminSecondaryButton
+                    size="sm"
+                    className="h-8"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próxima
+                    <ChevronRight className="ml-1 h-4 w-4" />
+                  </AdminSecondaryButton>
                 </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </>
+        )}
+      </AdminSectionCard>
 
-      {/* Modal para visualizar perfil */}
       <Dialog open={showProfileViewModal} onOpenChange={setShowProfileViewModal}>
-        <DialogContent className="!max-w-[98vw] !w-[98vw] !max-h-[95vh] !h-[95vh] overflow-y-auto p-6 sm:!max-w-[98vw]">
+        <DialogContent
+          className={cn(
+            adminTokens.dialog,
+            "!max-h-[95vh] !h-[95vh] !max-w-[98vw] !w-[98vw] overflow-y-auto p-6",
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>Perfil do Usuário</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-[#F3F5F4]">Perfil do Usuário</DialogTitle>
+            <DialogDescription className="text-[#A5B3AC]">
               Visualizando informações detalhadas do usuário
             </DialogDescription>
           </DialogHeader>
@@ -469,22 +471,24 @@ export function UserManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para editar perfil */}
       <Dialog open={showProfileEditModal} onOpenChange={setShowProfileEditModal}>
-        <DialogContent className="!max-w-[98vw] !w-[98vw] !max-h-[95vh] !h-[95vh] overflow-y-auto p-6 sm:!max-w-[98vw]">
+        <DialogContent
+          className={cn(
+            adminTokens.dialog,
+            "!max-h-[95vh] !h-[95vh] !max-w-[98vw] !w-[98vw] overflow-y-auto p-6",
+          )}
+        >
           <DialogHeader>
-            <DialogTitle>Editar Perfil do Usuário</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-[#F3F5F4]">Editar Perfil do Usuário</DialogTitle>
+            <DialogDescription className="text-[#A5B3AC]">
               Alterando informações do usuário
             </DialogDescription>
           </DialogHeader>
-          {selectedUserId && (
-            loadingUserData ? (
+          {selectedUserId &&
+            (loadingUserData ? (
               <div className="flex items-center justify-center p-8">
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-                  <p className="text-muted-foreground">Carregando dados do usuário...</p>
-                </div>
+                <Loader2 className="h-8 w-8 animate-spin text-[#22C55E]" />
+                <span className="ml-2 text-[#A5B3AC]">Carregando dados...</span>
               </div>
             ) : selectedUserData ? (
               <UserProfileEdit
@@ -494,18 +498,18 @@ export function UserManager() {
                 onCancel={handleProfileEditClose}
               />
             ) : (
-              <div className="text-center p-8">
-                <p className="text-muted-foreground">Erro ao carregar dados do usuário</p>
-                <Button onClick={handleProfileEditClose} variant="outline" className="mt-4">
+              <div className="p-8 text-center">
+                <p className="text-[#6B7C74]">Erro ao carregar dados do usuário</p>
+                <AdminSecondaryButton
+                  onClick={handleProfileEditClose}
+                  className="mt-4"
+                >
                   Fechar
-                </Button>
+                </AdminSecondaryButton>
               </div>
-            )
-          )}
+            ))}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
-
-

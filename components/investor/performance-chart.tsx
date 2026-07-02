@@ -1,359 +1,372 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts"
-import { createBrowserClient } from "@supabase/ssr"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { useState, useEffect, useMemo } from "react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { createBrowserClient } from "@supabase/ssr";
+import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 
-interface PerformanceDataPoint {
-  month: string
-  year: number
-  value: number
-  monthNumber: number
-  invested: number
-  returns: number
-  growth: number
+interface InvestmentRow {
+  id: string;
+  amount: number;
+  payment_date: string | null;
 }
 
-interface Investment {
-  id: string
-  amount: number
-  monthly_return_rate: number
-  created_at: string
-  payment_date?: string | null
-  profitability_liquidity?: string | null
-  commitment_period?: number | null
-  status: string
+interface MonthlyReturnRow {
+  investment_id: string;
+  period_end: string;
+  return_amount: number;
+  return_rate: number | string;
+}
+
+interface InvestmentSeries {
+  id: string;
+  dataKey: string;
+  label: string;
+  amount: number;
+  color: string;
+}
+
+type ChartRow = {
+  month: string;
+  [dataKey: string]: string | number;
+};
+
+const MONTH_LABELS = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
+const SERIES_COLORS = [
+  "#60a5fa",
+  "#34d399",
+  "#fbbf24",
+  "#f472b6",
+  "#a78bfa",
+  "#fb923c",
+  "#2dd4bf",
+  "#f87171",
+];
+
+function parsePeriodEnd(periodEnd: string) {
+  const [year, month] = periodEnd.split("-").map(Number);
+  return { year, month: month - 1 };
+}
+
+function monthKey(year: number, monthIndex: number) {
+  return `${MONTH_LABELS[monthIndex]}/${year}`;
+}
+
+function formatInvestmentLabel(investment: InvestmentRow): string {
+  const amountLabel = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    notation: "compact",
+  }).format(investment.amount);
+
+  if (!investment.payment_date) {
+    return amountLabel;
+  }
+
+  const [year, month] = investment.payment_date.split("-").map(Number);
+  const dateLabel = `${String(month).padStart(2, "0")}/${year}`;
+
+  return `${amountLabel} · ${dateLabel}`;
+}
+
+function buildInvestmentSeries(investments: InvestmentRow[]): InvestmentSeries[] {
+  return investments.map((investment, index) => ({
+    id: investment.id,
+    dataKey: `inv_${index}`,
+    label: formatInvestmentLabel(investment),
+    amount: investment.amount,
+    color: SERIES_COLORS[index % SERIES_COLORS.length],
+  }));
+}
+
+function formatReturnRate(rate: number | string): number {
+  return Math.round(Number(rate) * 10000) / 100;
+}
+
+function buildChartByInvestment(
+  monthlyReturns: MonthlyReturnRow[],
+  series: InvestmentSeries[],
+): ChartRow[] {
+  if (monthlyReturns.length === 0 || series.length === 0) {
+    return [];
+  }
+
+  const seriesByInvestmentId = new Map(
+    series.map((item) => [item.id, item.dataKey]),
+  );
+
+  const returnsBySeriesMonth = new Map<string, number>();
+  const ratesBySeriesMonth = new Map<string, number>();
+  const amountsBySeriesMonth = new Map<string, number>();
+
+  for (const row of monthlyReturns) {
+    const dataKey = seriesByInvestmentId.get(row.investment_id);
+    if (!dataKey) continue;
+
+    const { year, month } = parsePeriodEnd(row.period_end);
+    const key = `${dataKey}|${monthKey(year, month)}`;
+    const amount = Number(row.return_amount);
+
+    returnsBySeriesMonth.set(
+      key,
+      (returnsBySeriesMonth.get(key) || 0) + amount,
+    );
+    amountsBySeriesMonth.set(key, amount);
+    ratesBySeriesMonth.set(key, formatReturnRate(row.return_rate));
+  }
+
+  const monthKeys = [
+    ...new Set(
+      [...returnsBySeriesMonth.keys()].map((key) => key.split("|")[1]),
+    ),
+  ].sort((a, b) => {
+    const [monthA, yearA] = a.split("/");
+    const [monthB, yearB] = b.split("/");
+    const dateA = new Date(Number(yearA), MONTH_LABELS.indexOf(monthA), 1);
+    const dateB = new Date(Number(yearB), MONTH_LABELS.indexOf(monthB), 1);
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  return monthKeys.map((month) => {
+    const row: ChartRow = { month };
+
+    for (const item of series) {
+      const mapKey = `${item.dataKey}|${month}`;
+      const rate = ratesBySeriesMonth.get(mapKey);
+      const amount = amountsBySeriesMonth.get(mapKey) || 0;
+
+      if (rate != null) {
+        row[item.dataKey] = rate;
+        row[`${item.dataKey}_amount`] = Math.round(amount * 100) / 100;
+      }
+    }
+
+    return row;
+  });
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  series,
+  chartRow,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string; value?: number; color?: string }>;
+  label?: string;
+  series: InvestmentSeries[];
+  chartRow?: ChartRow;
+}) {
+  if (!active || !payload?.length) return null;
+
+  const seriesByKey = new Map(series.map((item) => [item.dataKey, item]));
+
+  return (
+    <div
+      className="rounded-lg border border-white/20 bg-black/80 p-3 shadow-lg"
+      style={{ color: "white" }}
+    >
+      <p className="mb-2 text-sm font-semibold">{label}</p>
+      <div className="space-y-1">
+        {payload
+          .filter((entry) => Number(entry.value) > 0)
+          .map((entry) => {
+            const meta = seriesByKey.get(String(entry.dataKey));
+            if (!meta) return null;
+
+            const amount = chartRow?.[`${entry.dataKey}_amount`];
+
+            return (
+              <div key={entry.dataKey} className="space-y-0.5">
+                <div className="flex items-center gap-2 text-xs">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <span>{meta.label}</span>
+                </div>
+                <div className="pl-4 text-xs font-medium text-green-300">
+                  {Number(entry.value).toFixed(2)}% a.m.
+                </div>
+                {amount != null && (
+                  <div className="pl-4 text-xs text-white/70">
+                    {new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(Number(amount))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
 }
 
 export function PerformanceChart() {
-  const [performanceData, setPerformanceData] = useState<PerformanceDataPoint[]>([])
-  const [loading, setLoading] = useState(true)
-  const [totalInvested, setTotalInvested] = useState(0)
-  const [totalReturns, setTotalReturns] = useState(0)
-  const [growthRate, setGrowthRate] = useState(0)
-  const [hasOnlySimpleInterest, setHasOnlySimpleInterest] = useState(false)
-  const [isExternalAdvisorInvestor, setIsExternalAdvisorInvestor] = useState(false)
+  const [chartData, setChartData] = useState<ChartRow[]>([]);
+  const [series, setSeries] = useState<InvestmentSeries[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalInvested, setTotalInvested] = useState(0);
+  const [totalReturns, setTotalReturns] = useState(0);
+  const [growthRate, setGrowthRate] = useState(0);
+  const [hasMonthlyReturns, setHasMonthlyReturns] = useState(false);
 
-  // Função para obter a taxa correta baseada nas tabelas dinâmicas
-  const getRateByPeriodAndLiquidity = (period: number, liquidity: string, isExternalAdvisor: boolean = false): number => {
-    // Tabela padrão de rentabilidade (investidores em geral)
-    const defaultRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.018 }, // 1,8%
-      6: { Mensal: 0.019, Semestral: 0.02 }, // 1,9% | 2,0%
-      12: { Mensal: 0.021, Semestral: 0.022, Anual: 0.025 }, // 2,1% | 2,2% | 2,5%
-      24: { Mensal: 0.023, Semestral: 0.025, Anual: 0.027, Bienal: 0.03 }, // 2,3% | 2,5% | 2,7% | 3,0%
-      36: {
-        Mensal: 0.024,
-        Semestral: 0.026,
-        Anual: 0.03,
-        Bienal: 0.032,
-        Trienal: 0.035,
-      }, // 2,4% | 2,6% | 3,0% | 3,2% | 3,5%
-    };
-
-    // Tabela para investidores cadastrados por assessores externos (teto 2% a.m.)
-    const externalAdvisorRates: Record<number, Record<string, number>> = {
-      3: { Mensal: 0.0135 }, // 1,35%
-      6: { Mensal: 0.014, Semestral: 0.0145 }, // 1,40% | 1,45%
-      12: { Mensal: 0.015, Semestral: 0.0155, Anual: 0.016 }, // 1,50% | 1,55% | 1,60%
-      24: {
-        Mensal: 0.0165,
-        Semestral: 0.017,
-        Anual: 0.0175,
-        Bienal: 0.018,
-      }, // 1,65% | 1,70% | 1,75% | 1,80%
-      36: {
-        Mensal: 0.0185,
-        Semestral: 0.019,
-        Bienal: 0.0195,
-        Trienal: 0.02,
-      }, // 1,85% | 1,90% | 1,95% | 2,00%
-    };
-
-    const table = isExternalAdvisor ? externalAdvisorRates : defaultRates;
-    return table[period]?.[liquidity] || 0;
-  };
-
-  const generatePerformanceData = (investments: Investment[], withdrawals: any[] = []): PerformanceDataPoint[] => {
-    const months = [
-      "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-      "Jul", "Ago", "Set", "Out", "Nov", "Dez"
-    ]
-    
-    const currentDate = new Date()
-    const data: PerformanceDataPoint[] = []
-    
-    // Calcular total investido
-    const totalInvestedAmount = investments.reduce((sum, inv) => sum + Number(inv.amount), 0)
-    setTotalInvested(totalInvestedAmount)
-    
-    // Verificar se todos os investimentos são de liquidez mensal (juros simples)
-    const allMensal = investments.length > 0 && investments.every(inv => 
-      (inv.profitability_liquidity || "Mensal") === "Mensal"
-    )
-    setHasOnlySimpleInterest(allMensal)
-    
-    // Encontrar o mês mais antigo dos investimentos (usando payment_date quando disponível)
-    // Sempre começar do mês de depósito mais antigo, sem limite mínimo
-    const firstInvestmentDate = new Date(investments[0]?.payment_date || investments[0]?.created_at || new Date())
-    const oldestInvestment = investments.reduce((oldest, inv) => {
-      const invDate = new Date(inv.payment_date || inv.created_at)
-      // Normalizar para o primeiro dia do mês para comparação correta
-      const invMonthStart = new Date(invDate.getFullYear(), invDate.getMonth(), 1)
-      const oldestMonthStart = new Date(oldest.getFullYear(), oldest.getMonth(), 1)
-      return invMonthStart < oldestMonthStart ? invMonthStart : oldestMonthStart
-    }, new Date(firstInvestmentDate.getFullYear(), firstInvestmentDate.getMonth(), 1))
-    
-    // Calcular quantos meses atrás começar (sempre do mês de depósito mais antigo até o mês atual)
-    const monthsBack = Math.max(1,
-      (currentDate.getFullYear() - oldestInvestment.getFullYear()) * 12 + 
-      (currentDate.getMonth() - oldestInvestment.getMonth()) + 1
-    )
-    
-    // Debug: Log para verificar os dados
-    console.log('Investments data:', investments.map(inv => ({
-      id: inv.id,
-      amount: inv.amount,
-      created_at: inv.created_at,
-      payment_date: inv.payment_date,
-      date: new Date(inv.payment_date || inv.created_at).toLocaleDateString('pt-BR')
-    })))
-    console.log('Withdrawals data:', withdrawals.map(w => ({
-      investment_id: w.investment_id,
-      amount: w.amount,
-      created_at: w.created_at
-    })))
-    console.log('Oldest investment:', oldestInvestment.toLocaleDateString('pt-BR'))
-    console.log('Months back:', monthsBack)
-    
-    // Gerar dados a partir do mês de depósito mais antigo até o mês atual
-    // Começar do mês mais antigo encontrado
-    const startMonth = oldestInvestment.getMonth()
-    const startYear = oldestInvestment.getFullYear()
-    
-    for (let i = 0; i < monthsBack; i++) {
-      // Calcular o mês atual do loop
-      const targetDate = new Date(startYear, startMonth + i, 1)
-      // Ajustar para o final do mês para incluir investimentos feitos em qualquer dia do mês
-      const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
-      const monthKey = `${months[targetDate.getMonth()]}/${targetDate.getFullYear()}`
-      const monthNumber = targetDate.getMonth()
-      const year = targetDate.getFullYear()
-      
-      let totalValue = 0
-      let totalInvestedInPeriod = 0
-      let totalReturnsInPeriod = 0
-      
-      // Calcular valor acumulado até este mês para cada investimento
-      investments.forEach((investment) => {
-        // Usar payment_date quando disponível, caso contrário usar created_at
-        const investmentDate = new Date(investment.payment_date || investment.created_at)
-        // Normalizar para o primeiro dia do mês de investimento
-        const investmentMonthStart = new Date(investmentDate.getFullYear(), investmentDate.getMonth(), 1)
-        
-        // Se o investimento foi feito antes ou durante este mês
-        if (investmentMonthStart <= endOfMonth) {
-          const amount = Number(investment.amount)
-          const liquidity = investment.profitability_liquidity || "Mensal"
-          const commitmentPeriod = investment.commitment_period || 12
-          const rate = getRateByPeriodAndLiquidity(
-            commitmentPeriod,
-            liquidity,
-            isExternalAdvisorInvestor
-          ) || Number(investment.monthly_return_rate) || 0.02
-          
-          // Calcular meses completos decorridos desde o mês de investimento até o mês atual
-          // Para juros simples mensal, conta desde o mês de depósito (inclusive)
-          let monthsElapsed = (endOfMonth.getFullYear() - investmentMonthStart.getFullYear()) * 12 + 
-                              (endOfMonth.getMonth() - investmentMonthStart.getMonth())
-          
-          // Garantir que não seja negativo
-          if (monthsElapsed < 0) monthsElapsed = 0
-          
-          // Para juros simples mensal, sempre considerar pelo menos 1 mês se estamos no mesmo mês ou depois
-          // O retorno mensal é pago no final de cada mês, então conta desde o mês de depósito (inclusive)
-          if (liquidity === "Mensal") {
-            // Sempre adicionar 1 para incluir o mês atual no cálculo acumulativo
-            // Exemplo: depósito em Jan, estamos em Abr = 3 meses de diferença + 1 = 4 meses de retorno acumulado
-            monthsElapsed = monthsElapsed + 1
-          }
-          
-          // Para juros simples mensal, o retorno é calculado sobre o valor ORIGINAL (antes de resgates)
-          // pois os retornos são pagos separadamente e não são afetados por resgates posteriores
-          let currentValue: number
-          let returns: number
-          
-          // Para liquidez "Mensal": juros simples (retorno mensal fixo sobre o valor inicial)
-          // Para outras liquidezes: juros compostos
-          if (liquidity === "Mensal") {
-            // JUROS SIMPLES: 
-            // - Valor Atual = Principal disponível (valor original - resgates)
-            // - Retornos = Valor ORIGINAL × taxa × meses completos (acumulados desde o depósito, independente de resgates)
-            const monthlyReturn = amount * rate // Retorno mensal baseado no valor ORIGINAL
-            const totalWithdrawn = withdrawals
-              .filter(w => w.investment_id === investment.id && new Date(w.created_at) <= endOfMonth)
-              .reduce((sum, w) => sum + Number(w.amount), 0)
-            
-            currentValue = Math.max(0, amount - totalWithdrawn) // Valor atual = principal - resgates
-            returns = monthlyReturn * monthsElapsed // Retornos acumulados desde o depósito
-          } else {
-            // JUROS COMPOSTOS: 
-            // - Valor Atual = Principal × (1 + taxa)^tempo (acumula com juros)
-            // - Retornos = Valor Atual - Principal
-            const totalWithdrawn = withdrawals
-              .filter(w => w.investment_id === investment.id && new Date(w.created_at) <= endOfMonth)
-              .reduce((sum, w) => sum + Number(w.amount), 0)
-            
-            const availableAmount = Math.max(0, amount - totalWithdrawn)
-            currentValue = availableAmount * Math.pow(1 + rate, monthsElapsed)
-            returns = currentValue - availableAmount
-          }
-          
-          totalValue += currentValue
-          totalInvestedInPeriod += amount // Sempre usar o valor original investido
-          totalReturnsInPeriod += returns
-        }
-      })
-      
-      // Calcular crescimento percentual
-      const growth = totalInvestedInPeriod > 0 ? ((totalValue - totalInvestedInPeriod) / totalInvestedInPeriod) * 100 : 0
-      
-      data.push({
-        month: monthKey,
-        year,
-        value: totalValue,
-        monthNumber,
-        invested: totalInvestedInPeriod,
-        returns: totalReturnsInPeriod,
-        growth: growth
-      })
-    }
-    
-    // Calcular métricas finais
-    const finalData = data[data.length - 1]
-    if (finalData) {
-      setTotalReturns(finalData.returns)
-      setGrowthRate(finalData.growth)
-    }
-    
-    return data
-  }
+  const monthCount = chartData.length;
 
   const fetchInvestmentData = async () => {
     try {
-      setLoading(true)
-      
-      // Obter usuário do localStorage
-      const userStr = localStorage.getItem("user")
+      setLoading(true);
+
+      const userStr = localStorage.getItem("user");
       if (!userStr) {
-        setPerformanceData([])
-        return
+        setChartData([]);
+        setSeries([]);
+        return;
       }
-      
-      const user = JSON.parse(userStr)
+
+      const user = JSON.parse(userStr);
       if (!user.id) {
-        setPerformanceData([])
-        return
+        setChartData([]);
+        setSeries([]);
+        return;
       }
 
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
 
-      // Verificar se é investidor de assessor externo
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, parent_id")
-        .eq("id", user.id)
-        .maybeSingle()
+      const [{ data: investments, error: investmentsError }, { data: monthlyReturns, error: returnsError }] =
+        await Promise.all([
+          supabase
+            .from("investments")
+            .select("id, amount, payment_date")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .order("payment_date", { ascending: true }),
+          supabase
+            .from("monthly_returns")
+            .select("investment_id, period_end, return_amount, return_rate")
+            .eq("investor_id", user.id)
+            .order("period_end", { ascending: true })
+            .order("current_return_period", { ascending: true }),
+        ]);
 
-      if (profile) {
-        const advisorId = (profile as any).parent_id
-        if (advisorId) {
-          const { data: advisorProfile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", advisorId)
-            .maybeSingle()
-
-          if (advisorProfile && advisorProfile.role === "assessor_externo") {
-            setIsExternalAdvisorInvestor(true)
-          } else {
-            setIsExternalAdvisorInvestor(false)
-          }
-        }
+      if (investmentsError || returnsError) {
+        console.error(
+          "Erro ao buscar dados de performance:",
+          investmentsError || returnsError,
+        );
+        setChartData([]);
+        setSeries([]);
+        return;
       }
 
-      // Buscar investimentos ativos do usuário
-      const { data: investments, error } = await supabase
-        .from("investments")
-        .select("id, amount, monthly_return_rate, created_at, payment_date, profitability_liquidity, commitment_period, status")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const activeInvestments = (investments || []).map((inv) => ({
+        id: inv.id,
+        amount: Number(inv.amount),
+        payment_date: inv.payment_date,
+      }));
 
-      // Buscar resgates aprovados para calcular valor atual correto
-      const { data: withdrawals, error: withdrawalsError } = await supabase
-        .from("transactions")
-        .select("investment_id, amount, created_at")
-        .eq("user_id", user.id)
-        .eq("type", "withdrawal")
-        .eq("status", "completed")
+      const investedTotal = activeInvestments.reduce(
+        (sum, inv) => sum + inv.amount,
+        0,
+      );
 
-      if (error || withdrawalsError) {
-        console.error("Erro ao buscar dados:", error || withdrawalsError)
-        setPerformanceData([])
-        return
+      setTotalInvested(investedTotal);
+
+      if (activeInvestments.length === 0) {
+        setChartData([]);
+        setSeries([]);
+        setTotalReturns(0);
+        setGrowthRate(0);
+        setHasMonthlyReturns(false);
+        return;
       }
 
-      if (!investments || investments.length === 0) {
-        // Se não há investimentos, mostrar dados zerados
-        const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"]
-        const currentYear = new Date().getFullYear()
-        const emptyData = months.map((month, index) => ({
-          month: `${month}/${currentYear}`,
-          year: currentYear,
-          value: 0,
-          monthNumber: index,
-          invested: 0,
-          returns: 0,
-          growth: 0
-        }))
-        setPerformanceData(emptyData)
-        setTotalInvested(0)
-        setTotalReturns(0)
-        setGrowthRate(0)
-        return
-      }
+      const investmentIds = new Set(activeInvestments.map((inv) => inv.id));
+      const returns = (monthlyReturns || []).filter((row) =>
+        investmentIds.has(row.investment_id),
+      );
 
-      // Gerar dados de performance baseados nos investimentos reais e resgates
-      const performanceData = generatePerformanceData(investments, withdrawals || [])
-      setPerformanceData(performanceData)
-      
+      setHasMonthlyReturns(returns.length > 0);
+
+      const investmentSeries = buildInvestmentSeries(activeInvestments);
+      setSeries(investmentSeries);
+      setChartData(buildChartByInvestment(returns, investmentSeries));
+
+      const returnsTotal =
+        returns.reduce((sum, row) => sum + Number(row.return_amount), 0) || 0;
+
+      setTotalReturns(Math.round(returnsTotal * 100) / 100);
+      setGrowthRate(
+        investedTotal > 0 ? (returnsTotal / investedTotal) * 100 : 0,
+      );
     } catch (error) {
-      console.error("Erro ao carregar dados de performance:", error)
-      setPerformanceData([])
+      console.error("Erro ao carregar dados de performance:", error);
+      setChartData([]);
+      setSeries([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchInvestmentData()
-  }, [])
+    fetchInvestmentData();
+  }, []);
+
+  const tooltipContent = useMemo(
+    () =>
+      function TooltipContent(props: {
+        active?: boolean;
+        payload?: Array<{ dataKey?: string; value?: number; color?: string }>;
+        label?: string;
+      }) {
+        const chartRow = chartData.find((row) => row.month === props.label);
+        return (
+          <ChartTooltip {...props} series={series} chartRow={chartRow} />
+        );
+      },
+    [series, chartData],
+  );
 
   const getGrowthIcon = () => {
-    if (growthRate > 0) return <TrendingUp className="h-4 w-4 text-green-500" />
-    if (growthRate < 0) return <TrendingDown className="h-4 w-4 text-red-500" />
-    return <Minus className="h-4 w-4 text-muted-foreground" />
-  }
+    if (growthRate > 0) return <TrendingUp className="h-4 w-4 text-green-500" />;
+    if (growthRate < 0) return <TrendingDown className="h-4 w-4 text-red-500" />;
+    return <Minus className="h-4 w-4 text-muted-foreground" />;
+  };
 
   const getGrowthColor = () => {
-    if (growthRate > 0) return "text-green-500"
-    if (growthRate < 0) return "text-red-500"
-    return "text-muted-foreground"
-  }
+    if (growthRate > 0) return "text-green-500";
+    if (growthRate < 0) return "text-red-500";
+    return "text-muted-foreground";
+  };
 
   if (loading) {
     return (
@@ -363,10 +376,9 @@ export function PerformanceChart() {
           <p className="text-sm text-white/80">Carregando performance...</p>
         </div>
       </div>
-    )
+    );
   }
 
-  // Estado vazio quando não há investimentos
   if (totalInvested === 0) {
     return (
       <div className="h-[300px] w-full text-center">
@@ -377,17 +389,51 @@ export function PerformanceChart() {
           <p className="text-[#D9D9D9] font-ibm-plex-sans font-normal text-lg leading-[35px] text-center">
             Faça seu primeiro investimento para acompanhar a performance aqui
           </p>
-          <p className="text-[#D9D9D9] font-ibm-plex-sans font-normal text-lg leading-[35px] text-center">
-            Performance será calculada com base em juros compostos
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasMonthlyReturns) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="space-y-1">
+            <p className="text-xs text-white/70">Total Investido</p>
+            <p className="text-sm font-semibold text-white">
+              {new Intl.NumberFormat("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+                notation: "compact",
+              }).format(totalInvested)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-white/70">Retornos</p>
+            <p className="text-sm font-semibold text-green-300">+R$ 0</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-white/70">Crescimento</p>
+            <div className="flex items-center justify-center gap-1">
+              <Minus className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-semibold text-muted-foreground">
+                0.0%
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="h-[200px] w-full flex items-center justify-center">
+          <p className="text-[#D9D9D9] font-ibm-plex-sans text-base text-center px-4">
+            Os rendimentos mensais aparecerão aqui após o primeiro fechamento
+            (dia 20).
           </p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-4">
-      {/* Métricas de Performance */}
       <div className="grid grid-cols-3 gap-4 text-center">
         <div className="space-y-1">
           <p className="text-xs text-white/70">Total Investido</p>
@@ -402,7 +448,8 @@ export function PerformanceChart() {
         <div className="space-y-1">
           <p className="text-xs text-white/70">Retornos</p>
           <p className="text-sm font-semibold text-green-300">
-            +{new Intl.NumberFormat("pt-BR", {
+            +
+            {new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
               notation: "compact",
@@ -420,100 +467,48 @@ export function PerformanceChart() {
         </div>
       </div>
 
-      {/* Gráfico */}
-      <div className="h-[250px] w-full">
+      <div className="h-[280px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={performanceData}>
-            <defs>
-              <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.05}/>
-              </linearGradient>
-            </defs>
+          <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-white/20" />
-            <XAxis 
-              dataKey="month" 
-              className="text-xs text-white/70"
+            <XAxis
+              dataKey="month"
               tick={{ fontSize: 11, fill: "rgba(255, 255, 255, 0.7)" }}
               angle={-45}
               textAnchor="end"
               height={60}
             />
             <YAxis
-              className="text-xs text-white/70"
               tick={{ fontSize: 12, fill: "rgba(255, 255, 255, 0.7)" }}
-              tickFormatter={(value) =>
-                new Intl.NumberFormat("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                  notation: "compact",
-                }).format(value)
-              }
+              tickFormatter={(value) => `${Number(value).toFixed(2)}%`}
             />
-            <Tooltip
-              formatter={(value: number, name: string, props: any) => {
-                // Usar o payload diretamente do tooltip ao invés de buscar no array
-                const payload = props?.payload
-                const data = payload || performanceData.find(d => d.value === value)
-                if (!data) return [value, name]
-                
-                return [
-                  <div key="tooltip" className="space-y-1">
-                    <div className="font-semibold text-white">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(data.value)}
-                    </div>
-                    <div className="text-xs text-white/70">
-                      Investido: {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(data.invested)}
-                    </div>
-                    <div className="text-xs text-green-300">
-                      Retornos: +{new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(data.returns)}
-                    </div>
-                    <div className="text-xs text-white">
-                      Crescimento: {data.growth.toFixed(1)}%
-                    </div>
-                  </div>,
-                  "Valor Atual"
-                ]
-              }}
-              labelFormatter={(label) => {
-                return label || ""
-              }}
-              labelStyle={{ color: "white" }}
-              contentStyle={{
-                backgroundColor: "rgba(0, 0, 0, 0.8)",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
-                borderRadius: "8px",
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3)",
-              }}
+            <Tooltip content={tooltipContent} />
+            <Legend
+              wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}
             />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="#60a5fa"
-              strokeWidth={3}
-              fill="url(#colorValue)"
-              dot={{ fill: "#60a5fa", strokeWidth: 2, r: 4 }}
-              activeDot={{ r: 6, stroke: "#60a5fa", strokeWidth: 2 }}
-            />
-          </AreaChart>
+            {series.map((item) => (
+              <Line
+                key={item.id}
+                type="monotone"
+                dataKey={item.dataKey}
+                name={item.label}
+                stroke={item.color}
+                strokeWidth={2}
+                dot={{ fill: item.color, strokeWidth: 2, r: 3 }}
+                activeDot={{ r: 5 }}
+                connectNulls={false}
+              />
+            ))}
+          </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Informações adicionais */}
       <div className="text-xs text-white/70 text-center">
         <p>
-          Performance baseada em {hasOnlySimpleInterest ? "juros simples" : "juros simples e compostos"} • Período: {performanceData.length} meses
+          Uma linha por investimento • rentabilidade efetiva do mês (%) •{" "}
+          {monthCount} {monthCount === 1 ? "mês" : "meses"}
         </p>
       </div>
     </div>
-  )
+  );
 }

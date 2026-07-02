@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Save, User } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import {
+  AdminSectionCard,
+  AdminPrimaryButton,
+  adminTokens,
+} from '@/components/admin/ui'
 
 interface ProfileData {
   id: string
@@ -33,6 +39,7 @@ interface ProfileData {
 interface ProfileFormProps {
   initialData?: ProfileData
   onSave?: (data: ProfileData) => void
+  variant?: 'default' | 'admin'
 }
 
 const MARITAL_STATUS_OPTIONS = [
@@ -48,7 +55,8 @@ const NATIONALITY_OPTIONS = [
   { value: 'estrangeira', label: 'Estrangeira' },
 ]
 
-export function ProfileForm({ initialData, onSave }: ProfileFormProps) {
+export function ProfileForm({ initialData, onSave, variant = 'default' }: ProfileFormProps) {
+  const isAdmin = variant === 'admin'
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -301,315 +309,338 @@ export function ProfileForm({ initialData, onSave }: ProfileFormProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
+      <div className={cn('flex items-center justify-center p-8', isAdmin && 'text-[#A5B3AC]')}>
         <Loader2 className="h-8 w-8 animate-spin" />
         <span className="ml-2">Carregando perfil...</span>
       </div>
     )
   }
 
+  const labelClass = isAdmin ? adminTokens.label : undefined
+  const inputClass = (hasError?: boolean) =>
+    cn(
+      isAdmin && adminTokens.input,
+      hasError && 'border-destructive',
+      !isAdmin && hasError && 'border-destructive',
+    )
+  const hintClass = cn('text-xs', isAdmin ? 'text-[#6B7C74]' : 'text-muted-foreground')
+  const errorClass = cn('text-sm', isAdmin ? 'text-red-400' : 'text-destructive')
+
+  const Section = ({
+    title,
+    children,
+  }: {
+    title: string
+    children: React.ReactNode
+  }) => {
+    if (isAdmin) {
+      return <AdminSectionCard title={title}>{children}</AdminSectionCard>
+    }
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
+    )
+  }
+
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <User className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Meu Perfil</h1>
-          <p className="text-muted-foreground">Gerencie suas informações pessoais</p>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Informações Pessoais</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="full_name">Nome Completo *</Label>
-              <Input
-                id="full_name"
-                value={formData.full_name || ''}
-                onChange={(e) => handleInputChange('full_name', e.target.value)}
-                placeholder="Digite seu nome completo"
-                className={errors.full_name ? 'border-destructive' : ''}
-              />
-              {errors.full_name && (
-                <p className="text-sm text-destructive">{errors.full_name}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                value={initialData?.email || ''}
-                disabled
-                className="bg-muted"
-              />
-              <p className="text-xs text-muted-foreground">
-                O e-mail não pode ser alterado
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telefone</Label>
-              <Input
-                id="phone"
-                value={formData.phone || ''}
-                onChange={(e) => handleInputChange('phone', formatPhone(e.target.value))}
-                placeholder="(11) 99999-9999"
-                maxLength={15}
-                className={errors.phone ? 'border-destructive' : ''}
-              />
-              {errors.phone && (
-                <p className="text-sm text-destructive">{errors.phone}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="profession">Profissão</Label>
-              <Input
-                id="profession"
-                value={formData.profession || ''}
-                onChange={(e) => handleInputChange('profession', e.target.value)}
-                placeholder="Digite sua profissão"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="marital_status">Estado Civil</Label>
-              <Select
-                value={formData.marital_status || ''}
-                onValueChange={(value) => handleInputChange('marital_status', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione seu estado civil" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MARITAL_STATUS_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nationality">Nacionalidade</Label>
-              <Select
-                value={formData.nationality || ''}
-                onValueChange={(value) => handleInputChange('nationality', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione sua nacionalidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  {NATIONALITY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className={cn(isAdmin ? 'mx-auto max-w-5xl space-y-4' : 'mx-auto max-w-5xl space-y-6 p-6')}>
+      {!isAdmin && (
+        <div className="mb-6 flex items-center gap-3">
+          <div className="rounded-lg bg-primary/10 p-2">
+            <User className="h-6 w-6 text-primary" />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Documentos e Acesso</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="cnpj">CPF / CNPJ</Label>
-              <Input
-                id="cnpj"
-                value={formData.cnpj || ''}
-                onChange={(e) => handleInputChange('cnpj', e.target.value)}
-                onBlur={(e) => {
-                  const raw = e.target.value.replace(/\D/g, '')
-                  if (raw.length === 11) {
-                    handleInputChange('cnpj', formatCPF(raw))
-                  } else if (raw.length === 14) {
-                    handleInputChange('cnpj', formatCNPJ(raw))
-                  } else {
-                    handleInputChange('cnpj', e.target.value)
-                  }
-                }}
-                placeholder="Digite seu CPF ou CNPJ"
-                maxLength={18}
-                className={errors.cnpj ? 'border-destructive' : ''}
-              />
-              <p className="text-xs text-muted-foreground">
-                Informe apenas números ou utilize a máscara padrão.
-              </p>
-              {errors.cnpj && <p className="text-sm text-destructive">{errors.cnpj}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rg">RG</Label>
-              <Input
-                id="rg"
-                value={formData.rg || ''}
-                onChange={(e) => handleInputChange('rg', e.target.value)}
-                placeholder="Digite seu RG"
-                className={errors.rg ? 'border-destructive' : ''}
-              />
-              <p className="text-xs text-muted-foreground">
-                Utilize somente números e letras.
-              </p>
-              {errors.rg && <p className="text-sm text-destructive">{errors.rg}</p>}
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold">Meu Perfil</h1>
+            <p className="text-muted-foreground">Gerencie suas informações pessoais</p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Endereço e Contato</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="address">Endereço</Label>
+      <Section title="Informações Pessoais">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="full_name" className={labelClass}>Nome Completo *</Label>
+            <Input
+              id="full_name"
+              value={formData.full_name || ''}
+              onChange={(e) => handleInputChange('full_name', e.target.value)}
+              placeholder="Digite seu nome completo"
+              className={inputClass(!!errors.full_name)}
+            />
+            {errors.full_name && <p className={errorClass}>{errors.full_name}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className={labelClass}>E-mail</Label>
+            <Input
+              id="email"
+              value={initialData?.email || ''}
+              disabled
+              className={cn(inputClass(), isAdmin ? 'opacity-60' : 'bg-muted')}
+            />
+            <p className={hintClass}>O e-mail não pode ser alterado</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="phone" className={labelClass}>Telefone</Label>
+            <Input
+              id="phone"
+              value={formData.phone || ''}
+              onChange={(e) => handleInputChange('phone', formatPhone(e.target.value))}
+              placeholder="(11) 99999-9999"
+              maxLength={15}
+              className={inputClass(!!errors.phone)}
+            />
+            {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="profession" className={labelClass}>Profissão</Label>
+            <Input
+              id="profession"
+              value={formData.profession || ''}
+              onChange={(e) => handleInputChange('profession', e.target.value)}
+              placeholder="Digite sua profissão"
+              className={inputClass()}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="marital_status" className={labelClass}>Estado Civil</Label>
+            <Select
+              value={formData.marital_status || ''}
+              onValueChange={(value) => handleInputChange('marital_status', value)}
+            >
+              <SelectTrigger className={inputClass()}>
+                <SelectValue placeholder="Selecione seu estado civil" />
+              </SelectTrigger>
+              <SelectContent className={isAdmin ? adminTokens.selectContent : undefined}>
+                {MARITAL_STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="nationality" className={labelClass}>Nacionalidade</Label>
+            <Select
+              value={formData.nationality || ''}
+              onValueChange={(value) => handleInputChange('nationality', value)}
+            >
+              <SelectTrigger className={inputClass()}>
+                <SelectValue placeholder="Selecione sua nacionalidade" />
+              </SelectTrigger>
+              <SelectContent className={isAdmin ? adminTokens.selectContent : undefined}>
+                {NATIONALITY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Documentos e Acesso">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="cnpj" className={labelClass}>CPF / CNPJ</Label>
+            <Input
+              id="cnpj"
+              value={formData.cnpj || ''}
+              onChange={(e) => handleInputChange('cnpj', e.target.value)}
+              onBlur={(e) => {
+                const raw = e.target.value.replace(/\D/g, '')
+                if (raw.length === 11) {
+                  handleInputChange('cnpj', formatCPF(raw))
+                } else if (raw.length === 14) {
+                  handleInputChange('cnpj', formatCNPJ(raw))
+                } else {
+                  handleInputChange('cnpj', e.target.value)
+                }
+              }}
+              placeholder="Digite seu CPF ou CNPJ"
+              maxLength={18}
+              className={inputClass(!!errors.cnpj)}
+            />
+            <p className={hintClass}>Informe apenas números ou utilize a máscara padrão.</p>
+            {errors.cnpj && <p className={errorClass}>{errors.cnpj}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rg" className={labelClass}>RG</Label>
+            <Input
+              id="rg"
+              value={formData.rg || ''}
+              onChange={(e) => handleInputChange('rg', e.target.value)}
+              placeholder="Digite seu RG"
+              className={inputClass(!!errors.rg)}
+            />
+            <p className={hintClass}>Utilize somente números e letras.</p>
+            {errors.rg && <p className={errorClass}>{errors.rg}</p>}
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Endereço e Contato">
+        <div className="space-y-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="address" className={labelClass}>Endereço</Label>
             <Input
               id="address"
               value={formData.address || ''}
               onChange={(e) => handleInputChange('address', e.target.value)}
               placeholder="Digite seu endereço completo"
+              className={inputClass()}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="pix_usdt_key">Chave PIX / USDT</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="pix_usdt_key" className={labelClass}>Chave PIX / USDT</Label>
             <Input
               id="pix_usdt_key"
               value={formData.pix_usdt_key || ''}
               onChange={(e) => handleInputChange('pix_usdt_key', e.target.value)}
               placeholder="Digite sua chave PIX ou USDT"
-              className={errors.pix_usdt_key ? 'border-destructive' : ''}
+              className={inputClass(!!errors.pix_usdt_key)}
             />
-            {errors.pix_usdt_key && (
-              <p className="text-sm text-destructive">{errors.pix_usdt_key}</p>
+            {errors.pix_usdt_key && <p className={errorClass}>{errors.pix_usdt_key}</p>}
+            <p className={hintClass}>Use esta chave para receber pagamentos e resgates</p>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Informações Bancárias">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="bank_name" className={labelClass}>Banco</Label>
+            <div className="relative">
+              <Input
+                id="bank_name"
+                value={bankSearchTerm}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setBankSearchTerm(value)
+                  setFormData((prev) => ({ ...prev, bank_name: value }))
+                  setIsBankListOpen(true)
+                }}
+                onFocus={() => setIsBankListOpen(true)}
+                onBlur={() => setTimeout(() => setIsBankListOpen(false), 150)}
+                placeholder={isLoadingBanks ? 'Carregando bancos...' : 'Digite nome ou código do banco'}
+                disabled={isLoadingBanks}
+                className={inputClass()}
+              />
+              {isBankListOpen && (
+                <div
+                  className={cn(
+                    'absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border shadow-md',
+                    isAdmin
+                      ? 'border-white/[0.08] bg-[#161F1B] shadow-[0_8px_32px_rgba(0,0,0,0.5)]'
+                      : 'border bg-background',
+                  )}
+                >
+                  {isLoadingBanks ? (
+                    <div className={cn('p-3 text-sm', hintClass)}>Carregando bancos...</div>
+                  ) : (() => {
+                    const filteredBanks = banks.filter((bank) =>
+                      `${bank.code} ${bank.name}`.toLowerCase().includes(bankSearchTerm.toLowerCase()),
+                    )
+                    if (filteredBanks.length === 0) {
+                      return <div className={cn('p-3 text-sm', hintClass)}>Nenhum banco encontrado.</div>
+                    }
+                    return filteredBanks.map((bank) => (
+                      <button
+                        key={bank.code}
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center justify-start gap-2 px-3 py-2 text-left text-sm',
+                          isAdmin
+                            ? 'text-[#A5B3AC] hover:bg-[#202C26]'
+                            : 'hover:bg-accent',
+                          formData.bank_name === `${bank.code} - ${bank.name}` &&
+                            (isAdmin ? 'bg-[#202C26]' : 'bg-accent/60'),
+                        )}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          const displayName = `${bank.code} - ${bank.name}`
+                          setBankSearchTerm(displayName)
+                          setFormData((prev) => ({ ...prev, bank_name: displayName }))
+                          setIsBankListOpen(false)
+                        }}
+                      >
+                        <span className="font-medium">{bank.code}</span>
+                        <span className={hintClass}>{bank.name}</span>
+                      </button>
+                    ))
+                  })()}
+                </div>
+              )}
+            </div>
+            <p className={hintClass}>Digite parte do nome ou código para localizar seu banco.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bank_branch" className={labelClass}>Agência</Label>
+            <Input
+              id="bank_branch"
+              value={formData.bank_branch || ''}
+              onChange={(e) => handleInputChange('bank_branch', e.target.value)}
+              placeholder="0001"
+              className={inputClass()}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bank_account" className={labelClass}>Conta</Label>
+            <Input
+              id="bank_account"
+              value={formData.bank_account || ''}
+              onChange={(e) => handleInputChange('bank_account', e.target.value)}
+              placeholder="000000-0"
+              className={inputClass()}
+            />
+          </div>
+        </div>
+      </Section>
+
+      <div className={cn('flex justify-end', isAdmin ? 'pt-2' : 'pt-6')}>
+        {isAdmin ? (
+          <AdminPrimaryButton onClick={handleSave} disabled={isSaving} className="h-10 px-5">
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Salvar Alterações
+              </>
             )}
-            <p className="text-xs text-muted-foreground">
-              Use esta chave para receber pagamentos e resgates
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Informações Bancárias</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="bank_name">Banco</Label>
-              <div className="relative">
-                <Input
-                  id="bank_name"
-                  value={bankSearchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setBankSearchTerm(value)
-                    setFormData((prev) => ({
-                      ...prev,
-                      bank_name: value,
-                    }))
-                    setIsBankListOpen(true)
-                  }}
-                  onFocus={() => setIsBankListOpen(true)}
-                  onBlur={() => {
-                    setTimeout(() => setIsBankListOpen(false), 150)
-                  }}
-                  placeholder={isLoadingBanks ? 'Carregando bancos...' : 'Digite nome ou código do banco'}
-                  disabled={isLoadingBanks}
-                />
-                {isBankListOpen && (
-                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-background shadow-md">
-                    {isLoadingBanks ? (
-                      <div className="p-3 text-sm text-muted-foreground">Carregando bancos...</div>
-                    ) : (() => {
-                      const filteredBanks = banks.filter((bank) =>
-                        `${bank.code} ${bank.name}`.toLowerCase().includes(bankSearchTerm.toLowerCase())
-                      )
-                      if (filteredBanks.length === 0) {
-                        return <div className="p-3 text-sm text-muted-foreground">Nenhum banco encontrado.</div>
-                      }
-                      return filteredBanks.map((bank) => (
-                        <button
-                          key={bank.code}
-                          type="button"
-                          className={`flex w-full items-center justify-start gap-2 px-3 py-2 text-left text-sm hover:bg-accent ${
-                            formData.bank_name === `${bank.code} - ${bank.name}` ? 'bg-accent/60' : ''
-                          }`}
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            const displayName = `${bank.code} - ${bank.name}`
-                            setBankSearchTerm(displayName)
-                            setFormData((prev) => ({
-                              ...prev,
-                              bank_name: displayName,
-                            }))
-                            setIsBankListOpen(false)
-                          }}
-                        >
-                          <span className="font-medium">{bank.code}</span>
-                          <span className="text-muted-foreground">{bank.name}</span>
-                        </button>
-                      ))
-                    })()}
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Digite parte do nome ou código para localizar seu banco.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="bank_branch">Agência</Label>
-              <Input
-                id="bank_branch"
-                value={formData.bank_branch || ''}
-                onChange={(e) => handleInputChange('bank_branch', e.target.value)}
-                placeholder="0001"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="bank_account">Conta</Label>
-              <Input
-                id="bank_account"
-                value={formData.bank_account || ''}
-                onChange={(e) => handleInputChange('bank_account', e.target.value)}
-                placeholder="000000-0"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end pt-6">
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Salvando...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Salvar Alterações
-            </>
-          )}
-        </Button>
+          </AdminPrimaryButton>
+        ) : (
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Salvar Alterações
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   )

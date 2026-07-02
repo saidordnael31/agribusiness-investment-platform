@@ -2,24 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { TableRow } from "@/components/ui/table"
 import {
   Select,
   SelectContent,
@@ -46,6 +31,25 @@ import {
   type LiquidityOption,
 } from "@/lib/commission-calculator"
 import { useToast } from "@/hooks/use-toast"
+import {
+  AdminStatCard,
+  AdminStatGrid,
+  AdminSectionCard,
+  AdminSecondaryButton,
+  AdminStatusBadge,
+  AdminDataTable,
+  AdminTable,
+  AdminTableHeader,
+  AdminTableHead,
+  AdminTableBody,
+  AdminTableRow,
+  AdminTableCell,
+  AdminTableEmpty,
+  AdminInvestorCell,
+  AdminMoney,
+  adminTokens,
+} from "@/components/admin/ui"
+import { cn } from "@/lib/utils"
 
 interface AdminCommissionDetail extends NewCommissionCalculation {
   investorEmail?: string
@@ -63,6 +67,19 @@ interface AdminCommissionDetail extends NewCommissionCalculation {
 
 type PeriodFilter = "all" | "this_month" | "next_month" | "next_6_months"
 
+type LiquidityFilter = "all" | LiquidityOption
+
+/** Normaliza string de liquidez para LiquidityOption (filtro e cálculo). */
+function toLiquidityOption(liquidity?: string): LiquidityOption {
+  if (!liquidity) return "mensal"
+  const raw = String(liquidity).toLowerCase()
+  if (raw.includes("trienal")) return "trienal"
+  if (raw.includes("bienal")) return "bienal"
+  if (raw.includes("anual")) return "anual"
+  if (raw.includes("semestral")) return "semestral"
+  return "mensal"
+}
+
 export function AdminCommissionsDetail() {
   const { toast } = useToast()
   const [commissions, setCommissions] = useState<AdminCommissionDetail[]>([])
@@ -71,6 +88,7 @@ export function AdminCommissionsDetail() {
   const [roleFilter, setRoleFilter] = useState<"all" | "office" | "advisor" | "advisor_externo" | "investor">("all")
   const [selectedAdvisorFilter, setSelectedAdvisorFilter] = useState<string>("all")
   const [selectedOfficeFilter, setSelectedOfficeFilter] = useState<string>("all")
+  const [liquidityFilter, setLiquidityFilter] = useState<LiquidityFilter>("all")
   /** "" seria "próximo"; Radix Select não permite value="", então usamos "__next__". */
   const [selectedPaymentDateKey, setSelectedPaymentDateKey] = useState<string>("__next__")
 
@@ -642,8 +660,14 @@ export function AdminCommissionsDetail() {
       list = list.filter(({ commission: c }) => c.officeId === selectedOfficeFilter)
     }
 
+    if (liquidityFilter !== "all") {
+      list = list.filter(
+        ({ commission: c }) => toLiquidityOption(c.liquidity) === liquidityFilter,
+      )
+    }
+
     return list
-  }, [rowsForSelectedDate, searchTerm, roleFilter, selectedAdvisorFilter, selectedOfficeFilter])
+  }, [rowsForSelectedDate, searchTerm, roleFilter, selectedAdvisorFilter, selectedOfficeFilter, liquidityFilter])
 
   const totalOffice = filteredRows.reduce((sum, r) => sum + r.officeAmount, 0)
   const totalAdvisor = filteredRows.reduce((sum, r) => sum + r.advisorAmount, 0)
@@ -815,17 +839,6 @@ export function AdminCommissionsDetail() {
     if (raw.includes("anual")) return "Anual"
     if (raw.includes("semestral")) return "Semestral"
     return "Mensal"
-  }
-
-  /** Normaliza string de liquidez para LiquidityOption (cálculo). */
-  const toLiquidityOption = (liquidity?: string): LiquidityOption => {
-    if (!liquidity) return "mensal"
-    const raw = String(liquidity).toLowerCase()
-    if (raw.includes("trienal")) return "trienal"
-    if (raw.includes("bienal")) return "bienal"
-    if (raw.includes("anual")) return "anual"
-    if (raw.includes("semestral")) return "semestral"
-    return "mensal"
   }
 
   /**
@@ -1200,332 +1213,306 @@ export function AdminCommissionsDetail() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Carregando comissões...</p>
-        </CardContent>
-      </Card>
+      <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-slate-200/70 bg-white">
+        <div className="flex items-center gap-3 text-[#0B3D2E]">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#0B3D2E]/20 border-t-[#0B3D2E]" />
+          <p className="text-sm font-medium">Carregando comissões...</p>
+        </div>
+      </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Data de Pagamento
-                </CardTitle>
-                <CardDescription>
-                  Escolha uma data (5º dia útil do mês) para ver quanto e para quem pagar.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Select
-                  value={selectedPaymentDateKey}
-                  onValueChange={setSelectedPaymentDateKey}
-                >
-                  <SelectTrigger className="w-[280px]">
-                    <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <SelectValue placeholder="Selecione a data de pagamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {nextPaymentDate && (
-                      <SelectItem value="__next__">
-                        Próximo pagamento ({formatDate(nextPaymentDate)})
-                      </SelectItem>
-                    )}
-                    {availablePaymentDates.map(({ key, date }) => (
-                      <SelectItem key={key} value={key}>
-                        {formatPaymentDateLabel(date)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={exportToExcel}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar Excel
-                </Button>
-              </div>
-            </div>
-            {displayPaymentDate ? (
-              <p className="text-sm text-muted-foreground">
-                {selectedPaymentDateKey === "__next__" ? "Próximo pagamento em " : "Pagamento em "}
-                <span className="font-medium">
-                  {formatPaymentDateLabel(displayPaymentDate)}
-                </span>
-                {filteredRows.length > 0 && ` • ${filteredRows.length} lançamento(s)`}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Não há datas de pagamento disponíveis para os investimentos atuais.
-              </p>
-            )}
+    <div className="space-y-6">
+      <AdminSectionCard
+        title="Data de Pagamento"
+        description="Escolha uma data (5º dia útil do mês) para ver quanto e para quem pagar."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={selectedPaymentDateKey}
+              onValueChange={setSelectedPaymentDateKey}
+            >
+              <SelectTrigger className={cn(adminTokens.input, "h-11 w-[280px]")}>
+                <Calendar className="mr-2 h-4 w-4 text-slate-400" />
+                <SelectValue placeholder="Selecione a data de pagamento" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {nextPaymentDate && (
+                  <SelectItem value="__next__">
+                    Próximo pagamento ({formatDate(nextPaymentDate)})
+                  </SelectItem>
+                )}
+                {availablePaymentDates.map(({ key, date }) => (
+                  <SelectItem key={key} value={key}>
+                    {formatPaymentDateLabel(date)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <AdminSecondaryButton onClick={exportToExcel}>
+              <Download className="mr-2 h-4 w-4" />
+              Exportar Excel
+            </AdminSecondaryButton>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="p-4 bg-primary/5 rounded-lg border">
-              <p className="text-sm text-muted-foreground mb-1">Total Escritórios (próxima data)</p>
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-primary" />
-                <p className="text-2xl font-bold text-primary">
-                  {formatCurrency(totalOffice)}
-                </p>
-              </div>
-            </div>
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <p className="text-sm text-muted-foreground mb-1">
-                Total Assessores (internos e externos) – próxima data
-              </p>
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-green-600" />
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(totalAdvisor)}
-                </p>
-              </div>
-            </div>
-            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <p className="text-sm text-muted-foreground mb-1">Total Investidores – próxima data</p>
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-purple-600" />
-                <p className="text-2xl font-bold text-purple-600">
-                  {formatCurrency(totalInvestor)}
-                </p>
-              </div>
-            </div>
-          </div>
+        }
+      >
+        {displayPaymentDate ? (
+          <p className="mb-6 text-sm text-slate-500">
+            {selectedPaymentDateKey === "__next__" ? "Próximo pagamento em " : "Pagamento em "}
+            <span className="font-medium text-slate-800">
+              {formatPaymentDateLabel(displayPaymentDate)}
+            </span>
+            {filteredRows.length > 0 && ` · ${filteredRows.length} lançamento(s)`}
+          </p>
+        ) : (
+          <p className="mb-6 text-sm text-slate-500">
+            Não há datas de pagamento disponíveis para os investimentos atuais.
+          </p>
+        )}
 
-          <div className="flex flex-col md:flex-row gap-4 mb-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por escritório, assessor, investidor, email ou ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
+        <AdminStatGrid className="mb-6 sm:grid-cols-2 xl:grid-cols-3">
+          <AdminStatCard
+            title="Total Escritórios"
+            value={formatCurrency(totalOffice)}
+            description="Comissões de escritório na data selecionada"
+            icon={Building2}
+            tone="forest"
+          />
+          <AdminStatCard
+            title="Total Assessores"
+            value={formatCurrency(totalAdvisor)}
+            description="Internos e externos na data selecionada"
+            icon={Users}
+            tone="emerald"
+          />
+          <AdminStatCard
+            title="Total Investidores"
+            value={formatCurrency(totalInvestor)}
+            description="Rendimentos ao investidor na data selecionada"
+            icon={DollarSign}
+            tone="sky"
+          />
+        </AdminStatGrid>
+
+        <div className="mb-6 flex flex-col gap-3 xl:flex-row xl:flex-wrap">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Buscar por escritório, assessor, investidor, email ou ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={cn(adminTokens.input, "pl-11")}
+            />
+          </div>
+          <Select
+            value={roleFilter}
+            onValueChange={(value: any) => setRoleFilter(value)}
+          >
+            <SelectTrigger className={cn(adminTokens.input, "h-11 w-full xl:w-[200px]")}>
+              <SelectValue placeholder="Tipo de usuário" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              <SelectItem value="all">Todos os Papéis</SelectItem>
+              <SelectItem value="office">Escritórios</SelectItem>
+              <SelectItem value="advisor">Assessores Internos</SelectItem>
+              <SelectItem value="advisor_externo">Assessores Externos</SelectItem>
+              <SelectItem value="investor">Investidores</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedAdvisorFilter}
+            onValueChange={(value: any) => setSelectedAdvisorFilter(value)}
+          >
+            <SelectTrigger className={cn(adminTokens.input, "h-11 w-full xl:w-[200px]")}>
+              <SelectValue placeholder="Todos os Assessores" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              <SelectItem value="all">Todos os Assessores</SelectItem>
+              {advisorOptions.map((advisor) => (
+                <SelectItem key={advisor.id} value={advisor.id}>
+                  {advisor.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedOfficeFilter}
+            onValueChange={(value: any) => setSelectedOfficeFilter(value)}
+          >
+            <SelectTrigger className={cn(adminTokens.input, "h-11 w-full xl:w-[200px]")}>
+              <SelectValue placeholder="Todos os Escritórios" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              <SelectItem value="all">Todos os Escritórios</SelectItem>
+              {officeOptions.map((office) => (
+                <SelectItem key={office.id} value={office.id}>
+                  {office.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={liquidityFilter}
+            onValueChange={(value: LiquidityFilter) => setLiquidityFilter(value)}
+          >
+            <SelectTrigger className={cn(adminTokens.input, "h-11 w-full xl:w-[200px]")}>
+              <SelectValue placeholder="Liquidez" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              <SelectItem value="all">Todas as Liquidezes</SelectItem>
+              <SelectItem value="mensal">Mensal</SelectItem>
+              <SelectItem value="semestral">Semestral</SelectItem>
+              <SelectItem value="anual">Anual</SelectItem>
+              <SelectItem value="bienal">Bienal</SelectItem>
+              <SelectItem value="trienal">Trienal</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <AdminDataTable>
+          <AdminTable>
+            <AdminTableHeader>
+              <TableRow className="hover:bg-transparent">
+                <AdminTableHead>Assessor / Escritório</AdminTableHead>
+                <AdminTableHead className="max-w-[220px]">Investidor</AdminTableHead>
+                <AdminTableHead align="right">Valor / Entrada</AdminTableHead>
+                <AdminTableHead align="right">Valor atual</AdminTableHead>
+                <AdminTableHead>Período</AdminTableHead>
+                <AdminTableHead align="right">Com. Escritório</AdminTableHead>
+                <AdminTableHead align="right">Com. Assessor</AdminTableHead>
+                <AdminTableHead align="right">Com. Investidor</AdminTableHead>
+              </TableRow>
+            </AdminTableHeader>
+            <AdminTableBody>
+              {filteredRows.length === 0 ? (
+                <AdminTableEmpty
+                  colSpan={8}
+                  message="Nenhuma comissão encontrada para a data de pagamento selecionada com os filtros atuais."
                 />
-              </div>
-            </div>
-            <Select
-              value={roleFilter}
-              onValueChange={(value: any) => setRoleFilter(value)}
-            >
-              <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Tipo de usuário" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Papéis</SelectItem>
-                <SelectItem value="office">Escritórios</SelectItem>
-                <SelectItem value="advisor">Assessores Internos</SelectItem>
-                <SelectItem value="advisor_externo">Assessores Externos</SelectItem>
-                <SelectItem value="investor">Investidores</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={selectedAdvisorFilter}
-              onValueChange={(value: any) => setSelectedAdvisorFilter(value)}
-            >
-              <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Todos os Assessores" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Assessores</SelectItem>
-                {advisorOptions.map((advisor) => (
-                  <SelectItem key={advisor.id} value={advisor.id}>
-                    {advisor.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={selectedOfficeFilter}
-              onValueChange={(value: any) => setSelectedOfficeFilter(value)}
-            >
-              <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Todos os Escritórios" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Escritórios</SelectItem>
-                {officeOptions.map((office) => (
-                  <SelectItem key={office.id} value={office.id}>
-                    {office.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Assessor / Escritório (tipo)</TableHead>
-                  <TableHead className="max-w-[220px] w-max">Investidor</TableHead>
-                  <TableHead>Valor / Entrada</TableHead>
-                  <TableHead>Valor atual</TableHead>
-                  <TableHead>Período</TableHead>
-                  <TableHead>Com. Escritório</TableHead>
-                  <TableHead>Com. Assessor</TableHead>
-                  <TableHead>Com. Investidor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
-                      Nenhuma comissão encontrada para a data de pagamento selecionada com os filtros atuais.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRows.map((row) => {
-                    const { commission, officeAmount, advisorAmount, investorAmount, paymentIndex } = row
-                    return (
-                    <TableRow key={`${commission.investmentId}-${paymentIndex}`}>
-                      <TableCell>
+              ) : (
+                filteredRows.map((row) => {
+                  const { commission, officeAmount, advisorAmount, investorAmount, paymentIndex } = row
+                  return (
+                    <AdminTableRow key={`${commission.investmentId}-${paymentIndex}`}>
+                      <AdminTableCell>
                         <div className="space-y-1">
-                          <p className="font-medium text-primary">
+                          <p className="font-medium text-[#0B3D2E]">
                             {commission.advisorName || "N/A"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-slate-500">
                             {commission.officeName || "N/A"}
                           </p>
-                          <Badge variant="outline" className="text-xs">
+                          <AdminStatusBadge tone="muted" className="text-[10px]">
                             {commission.advisorRole === "assessor_externo"
                               ? "Assessor Externo"
                               : commission.advisorRole === "assessor"
                                 ? "Assessor Interno"
                                 : "—"}
-                          </Badge>
+                          </AdminStatusBadge>
                         </div>
-                      </TableCell>
-                      <TableCell className="max-w-[220px] w-max">
-                        <div className="min-w-0 overflow-hidden">
-                          <p className="font-medium truncate" title={commission.investorName}>
-                            {commission.investorName}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate" title={commission.investorEmail}>
-                            {commission.investorEmail}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-medium">{formatCurrency(commission.amount)}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(commission.paymentDate)}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-medium">
-                            {formatCurrency(getCurrentValue(commission, displayPaymentDate ?? null))}
-                          </p>
-                          {(() => {
-                            const d = getCurrentValueDetails(commission, displayPaymentDate ?? null)
-                            return (
-                              <>
-                                <p className="text-xs text-muted-foreground">
-                                  {d.monthsInCycle > 0
-                                    ? `${d.monthsInCycle} ${d.monthsInCycle === 1 ? "mês" : "meses"}`
-                                    : "—"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(d.totalRendimento)}
-                                </p>
-                                <Badge variant="secondary" className="text-xs font-normal">
-                                  {getLiquidityLabel(commission.liquidity)}
-                                </Badge>
-                              </>
-                            )
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
+                      </AdminTableCell>
+                      <AdminTableCell className="max-w-[220px]">
+                        <AdminInvestorCell
+                          name={commission.investorName}
+                          email={commission.investorEmail}
+                        />
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <AdminMoney value={formatCurrency(commission.amount)} emphasis />
+                        <p className="mt-0.5 text-xs text-slate-500">{formatDate(commission.paymentDate)}</p>
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <AdminMoney
+                          value={formatCurrency(getCurrentValue(commission, displayPaymentDate ?? null))}
+                          emphasis
+                        />
+                        {(() => {
+                          const d = getCurrentValueDetails(commission, displayPaymentDate ?? null)
+                          return (
+                            <>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                {d.monthsInCycle > 0
+                                  ? `${d.monthsInCycle} ${d.monthsInCycle === 1 ? "mês" : "meses"}`
+                                  : "—"}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {formatCurrency(d.totalRendimento)}
+                              </p>
+                              <AdminStatusBadge tone="muted" className="mt-1 text-[10px]">
+                                {getLiquidityLabel(commission.liquidity)}
+                              </AdminStatusBadge>
+                            </>
+                          )
+                        })()}
+                      </AdminTableCell>
+                      <AdminTableCell>
+                        <AdminStatusBadge tone="info">
                           {nextCutoffDate ? formatDate(nextCutoffDate) : "N/A"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <span
-                            className="font-semibold text-primary"
-                            title={getCommissionTooltip("office", commission, paymentIndex, officeAmount)}
-                          >
-                            {formatCurrency(officeAmount)}
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
-                          </p>
-                          {(() => {
-                            const label = getCommissionRateAndProrataLabel(
-                              "office",
-                              commission,
-                              paymentIndex,
-                              row,
-                            )
-                            return (
-                              <p className="text-xs text-muted-foreground">
-                                {label}
-                              </p>
-                            )
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <span
-                            className="font-semibold text-green-600"
-                            title={getCommissionTooltip("advisor", commission, paymentIndex, advisorAmount)}
-                          >
-                            {formatCurrency(advisorAmount)}
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
-                          </p>
-                          {(() => {
-                            const label = getCommissionRateAndProrataLabel(
-                              "advisor",
-                              commission,
-                              paymentIndex,
-                              row,
-                            )
-                            return (
-                              <p className="text-xs text-muted-foreground">
-                                {label}
-                              </p>
-                            )
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <span
-                            className="font-semibold text-purple-600"
-                            title={getCommissionTooltip("investor", commission, paymentIndex, investorAmount)}
-                          >
-                            {formatCurrency(investorAmount)}
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {getCommissionRateAndProrataLabel("investor", commission, paymentIndex, row)}
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                        </AdminStatusBadge>
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <AdminMoney
+                          value={formatCurrency(officeAmount)}
+                          emphasis
+                          className="text-[#0B3D2E]"
+                          title={getCommissionTooltip("office", commission, paymentIndex, officeAmount)}
+                        />
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
+                        </p>
+                        {(() => {
+                          const label = getCommissionRateAndProrataLabel(
+                            "office",
+                            commission,
+                            paymentIndex,
+                            row,
+                          )
+                          return <p className="text-xs text-slate-500">{label}</p>
+                        })()}
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <AdminMoney
+                          value={formatCurrency(advisorAmount)}
+                          emphasis
+                          className="text-emerald-700"
+                          title={getCommissionTooltip("advisor", commission, paymentIndex, advisorAmount)}
+                        />
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
+                        </p>
+                        {(() => {
+                          const label = getCommissionRateAndProrataLabel(
+                            "advisor",
+                            commission,
+                            paymentIndex,
+                            row,
+                          )
+                          return <p className="text-xs text-slate-500">{label}</p>
+                        })()}
+                      </AdminTableCell>
+                      <AdminTableCell align="right">
+                        <AdminMoney
+                          value={formatCurrency(investorAmount)}
+                          emphasis
+                          className="text-sky-700"
+                          title={getCommissionTooltip("investor", commission, paymentIndex, investorAmount)}
+                        />
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {displayPaymentDate ? formatDate(displayPaymentDate) : "N/A"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {getCommissionRateAndProrataLabel("investor", commission, paymentIndex, row)}
+                        </p>
+                      </AdminTableCell>
+                    </AdminTableRow>
                     )
                   })
                 )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+            </AdminTableBody>
+          </AdminTable>
+        </AdminDataTable>
+      </AdminSectionCard>
     </div>
   )
 }

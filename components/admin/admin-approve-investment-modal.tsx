@@ -304,6 +304,8 @@ export function AdminApproveInvestmentModal({
     }
   }
 
+  const currentReceipt = receipts[currentReceiptIndex]
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
@@ -386,7 +388,7 @@ export function AdminApproveInvestmentModal({
               </div>
 
               {/* Informações do comprovante */}
-              {receipt && (
+              {currentReceipt && (
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <FileText className="w-4 h-4" />
@@ -396,10 +398,10 @@ export function AdminApproveInvestmentModal({
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium truncate">{receipt.file_name}</span>
+                        <span className="text-sm font-medium truncate">{currentReceipt.file_name}</span>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {receipt.status === "approved" ? "Aprovado" : receipt.status === "pending" ? "Pendente" : "Rejeitado"}
+                        {currentReceipt.status === "approved" ? "Aprovado" : currentReceipt.status === "pending" ? "Pendente" : "Rejeitado"}
                       </span>
                     </div>
                   </div>

@@ -23,6 +23,86 @@ interface Investment {
   profitability_liquidity: "Mensal" | "Semestral" | "Anual" | "Bienal" | "Trienal";
   created_at: string;
   status: string;
+  availableDividends?: number;
+  latestMonthlyReturn?: number;
+}
+
+interface CommissionRow {
+  investment_id: string;
+  commission_amount: number;
+  status: string;
+  paid_at: string | null;
+  to_be_pay_at: string | null;
+  period_end: string;
+}
+
+interface MonthlyReturnRow {
+  investment_id: string;
+  return_amount: number;
+  paid_at: string | null;
+  to_be_pay_at: string | null;
+  period_end: string;
+}
+
+function mapMonthlyReturnRow(row: MonthlyReturnRow): CommissionRow {
+  return {
+    investment_id: row.investment_id,
+    commission_amount: Number(row.return_amount),
+    status: row.paid_at ? "paid" : "pending",
+    paid_at: row.paid_at,
+    to_be_pay_at: row.to_be_pay_at,
+    period_end: row.period_end,
+  };
+}
+
+function parseDateOnly(dateStr: string): Date {
+  const dateOnly = dateStr.split("T")[0];
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function isCommissionAvailable(
+  commission: CommissionRow,
+  referenceDate = new Date(),
+): boolean {
+  if (commission.status !== "pending" || commission.paid_at != null) {
+    return false;
+  }
+  if (!commission.to_be_pay_at) {
+    return false;
+  }
+
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+  return parseDateOnly(commission.to_be_pay_at) <= today;
+}
+
+function sumAvailableDividends(
+  commissions: CommissionRow[],
+  investmentId: string,
+): number {
+  const total = commissions
+    .filter(
+      (row) =>
+        row.investment_id === investmentId && isCommissionAvailable(row),
+    )
+    .reduce((sum, row) => sum + Number(row.commission_amount), 0);
+
+  return Math.round(total * 100) / 100;
+}
+
+function latestAvailableMonthlyReturn(
+  commissions: CommissionRow[],
+  investmentId: string,
+): number {
+  const latest = commissions
+    .filter(
+      (row) =>
+        row.investment_id === investmentId && isCommissionAvailable(row),
+    )
+    .sort((a, b) => b.period_end.localeCompare(a.period_end))[0];
+
+  return latest ? Math.round(Number(latest.commission_amount) * 100) / 100 : 0;
 }
 
 interface UserInvestmentSummary {
@@ -60,103 +140,11 @@ export function WithdrawFlow() {
       setUser(JSON.parse(user));
     }
   }, []);
-  const calculateDividendsByPeriod = (investment: Investment) => {
-    try {
-      // Verifica se os dados necessários existem
-      if (!investment.created_at || !investment.amount || !investment.monthly_return_rate || !investment.profitability_liquidity) {
-        console.warn('Dados incompletos do investimento:', {
-          created_at: investment.created_at,
-          amount: investment.amount,
-          monthly_return_rate: investment.monthly_return_rate,
-          profitability_liquidity: investment.profitability_liquidity
-        });
-        return 0;
-      }
+  const getAvailableDividends = (investment: Investment) =>
+    investment.availableDividends ?? 0;
 
-      const createdDate = new Date(investment.created_at);
-      const currentDate = new Date();
-      
-      // Verifica se as datas são válidas
-      if (isNaN(createdDate.getTime()) || isNaN(currentDate.getTime())) {
-        console.warn('Data inválida:', { created_at: investment.created_at });
-        return 0;
-      }
-      
-      const amount = Number(investment.amount);
-      const rate = Number(investment.monthly_return_rate);
-      
-      if (isNaN(amount) || isNaN(rate)) {
-        console.warn('Valores inválidos:', { amount: investment.amount, rate: investment.monthly_return_rate });
-        return 0;
-      }
-
-      // Calcula o período em meses baseado no tipo de dividendo
-      let periodInMonths = 1;
-      switch (investment.profitability_liquidity) {
-        case "Mensal":
-          periodInMonths = 1;
-          break;
-        case "Semestral":
-          periodInMonths = 6;
-          break;
-        case "Anual":
-          periodInMonths = 12;
-          break;
-        case "Bienal":
-          periodInMonths = 24;
-          break;
-        case "Trienal":
-          periodInMonths = 36;
-          break;
-      }
-      
-      // Calcula quantos períodos completos se passaram desde a criação
-      const monthsElapsed = (currentDate.getFullYear() - createdDate.getFullYear()) * 12 + 
-                           (currentDate.getMonth() - createdDate.getMonth());
-      
-      const periodsCompleted = Math.floor(monthsElapsed / periodInMonths);
-      
-      // Se ainda não completou um período, retorna 0
-      if (periodsCompleted < 1) {
-        return 0;
-      }
-      
-      // Calcula os dividendos acumulados baseado nos períodos completos
-      const monthlyReturn = amount * rate;
-      const dividendsByPeriod = monthlyReturn * periodInMonths * periodsCompleted;
-      
-      return dividendsByPeriod;
-    } catch (error) {
-      console.error('Erro ao calcular dividendos por período:', error, investment);
-      return 0;
-    }
-  };
-
-  const calculateCurrentMonthlyReturn = (investment: Investment) => {
-    try {
-      // Verifica se os dados necessários existem
-      if (!investment.amount || !investment.monthly_return_rate) {
-        console.warn('Dados incompletos do investimento:', investment);
-        return 0;
-      }
-
-      const amount = Number(investment.amount);
-      const rate = Number(investment.monthly_return_rate);
-      
-      if (isNaN(amount) || isNaN(rate)) {
-        console.warn('Valores inválidos:', { amount: investment.amount, rate: investment.monthly_return_rate });
-        return 0;
-      }
-      
-      // Retorna apenas o retorno mensal atual (não acumulado)
-      const monthlyReturn = amount * rate;
-      
-      return monthlyReturn;
-    } catch (error) {
-      console.error('Erro ao calcular retorno mensal atual:', error, investment);
-      return 0;
-    }
-  };
+  const getLatestMonthlyReturn = (investment: Investment) =>
+    investment.latestMonthlyReturn ?? 0;
 
 
   // Verifica se o usuário pode resgatar dividendos por período (após data final de resgate)
@@ -266,7 +254,7 @@ export function WithdrawFlow() {
   // Verifica se há dividendos por período disponíveis para resgate
   const hasDividendsByPeriod = (investment: Investment) => {
     if (!investment) return false;
-    return calculateDividendsByPeriod(investment) > 0;
+    return getAvailableDividends(investment) > 0;
   };
 
   // Calcula quando o usuário poderá fazer resgate dos dividendos por período
@@ -307,7 +295,7 @@ export function WithdrawFlow() {
   // Verifica se há retorno mensal atual disponível para resgate
   const hasCurrentMonthlyReturn = (investment: Investment) => {
     if (!investment) return false;
-    return calculateCurrentMonthlyReturn(investment) > 0;
+    return getLatestMonthlyReturn(investment) > 0;
   };
 
   // Valida se o valor de resgate parcial é válido
@@ -375,8 +363,47 @@ export function WithdrawFlow() {
         .eq("status", "completed");
 
       if (withdrawalsError) {
-        console.error("Erro ao buscar resgates:", withdrawalsError);
-        return;
+        console.warn("Erro ao buscar resgates (continuando sem resgates):", withdrawalsError);
+      }
+
+      const investmentIds = (data || []).map((inv) => inv.id);
+      let commissionRows: CommissionRow[] = [];
+
+      if (investmentIds.length > 0) {
+        const { data: commissions, error: commissionsError } = await supabase
+          .from("commissions")
+          .select(
+            "investment_id, commission_amount, status, paid_at, to_be_pay_at, period_end",
+          )
+          .eq("investor_id", user.id)
+          .in("investment_id", investmentIds);
+
+        if (commissionsError) {
+          console.warn(
+            "Erro ao buscar comissões, tentando monthly_returns:",
+            commissionsError,
+          );
+
+          const { data: monthlyReturns, error: monthlyReturnsError } =
+            await supabase
+              .from("monthly_returns")
+              .select(
+                "investment_id, return_amount, paid_at, to_be_pay_at, period_end",
+              )
+              .eq("investor_id", user.id)
+              .in("investment_id", investmentIds);
+
+          if (monthlyReturnsError) {
+            console.warn(
+              "Erro ao buscar monthly_returns (dividendos serão 0):",
+              monthlyReturnsError,
+            );
+          } else {
+            commissionRows = (monthlyReturns || []).map(mapMonthlyReturnRow);
+          }
+        } else {
+          commissionRows = (commissions || []) as CommissionRow[];
+        }
       }
 
       if (!data || data.length === 0) {
@@ -402,10 +429,19 @@ export function WithdrawFlow() {
 
       // Adicionar resgates a cada investimento
       const investmentsWithWithdrawals = data.map((inv) => {
-        const investmentWithdrawals = withdrawals?.filter(w => w.investment_id === inv.id) || [];
+        const investmentWithdrawals =
+          withdrawals?.filter((w) => w.investment_id === inv.id) || [];
+        const availableDividends = sumAvailableDividends(commissionRows, inv.id);
+        const latestMonthlyReturn = latestAvailableMonthlyReturn(
+          commissionRows,
+          inv.id,
+        );
+
         return {
           ...inv,
-          withdrawals: investmentWithdrawals
+          withdrawals: investmentWithdrawals,
+          availableDividends,
+          latestMonthlyReturn,
         };
       });
 
@@ -428,10 +464,7 @@ export function WithdrawFlow() {
         
         totalInvested += availableAmount;
         totalMonthlyReturn += availableAmount * rate;
-        
-        // Calcular dividendos baseado no valor disponível
-        const dividends = calculateDividendsByPeriod({ ...inv, amount: availableAmount });
-        totalDividendsByPeriod += dividends;
+        totalDividendsByPeriod += inv.availableDividends ?? 0;
       });
 
       totalValue = totalInvested + totalDividendsByPeriod;
@@ -494,10 +527,10 @@ export function WithdrawFlow() {
       if (!investment) return 0;
       
       if (withdrawType === "dividends_by_period") {
-        return calculateDividendsByPeriod(investment);
+        return getAvailableDividends(investment);
       }
       if (withdrawType === "monthly_return") {
-        return calculateCurrentMonthlyReturn(investment);
+        return getLatestMonthlyReturn(investment);
       }
       if (withdrawType === "total") {
         // Para resgate total, calcular valor disponível considerando resgates anteriores
@@ -802,12 +835,12 @@ export function WithdrawFlow() {
                       <span>{formatCurrency(Number(selectedInvestment.amount) || 0)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Dividendos por Período:</span>
-                      <span>{formatCurrency(calculateDividendsByPeriod(selectedInvestment))}</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Dividendos Disponíveis:</span>
+                      <span>{formatCurrency(getAvailableDividends(selectedInvestment))}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Retorno Mensal:</span>
-                      <span>{formatCurrency(calculateCurrentMonthlyReturn(selectedInvestment))}</span>
+                      <span className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px]">Último Retorno Disponível:</span>
+                      <span>{formatCurrency(getLatestMonthlyReturn(selectedInvestment))}</span>
                     </div>
                   </>
                 )}
@@ -946,13 +979,13 @@ export function WithdrawFlow() {
               </div>
               <div className="bg-[#D9D9D9] p-6 rounded-lg">
                 <h3 className="text-[#003F28] font-ibm-plex-sans font-normal text-lg mb-2">
-                  Dividendos por Período
+                  Dividendos Disponíveis
                 </h3>
                 <p className="text-[#003F28] font-ibm-plex-sans font-bold text-2xl">
                   {formatCurrency(userSummary.totalDividendsByPeriod)}
                 </p>
                 <p className="text-[#4A4D4C] font-ibm-plex-sans font-normal text-sm mt-1">
-                  Baseado no período contratado (mensal, semestral, anual, bienal ou trienal)
+                  Rendimentos liberados para resgate conforme data de pagamento
                 </p>
               </div>
               <div className="bg-[#D9D9D9] p-6 rounded-lg">
@@ -1028,10 +1061,7 @@ export function WithdrawFlow() {
                           <div>
                             <span className="font-medium">Dividendos Disponíveis:</span>
                             <p className="text-[#003F28] font-ibm-plex-sans font-normal text-[20px] leading-[28px] text-green-600">
-                              {formatCurrency(calculateDividendsByPeriod({ 
-                                ...investment, 
-                                amount: Math.max(0, (Number(investment.amount) || 0) - (investment.withdrawals?.reduce((sum: number, w: any) => sum + Number(w.amount), 0) || 0))
-                              }))}
+                              {formatCurrency(investment.availableDividends ?? 0)}
                             </p>
                           </div>
                         </div>

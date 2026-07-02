@@ -197,6 +197,16 @@ export function Navbar() {
     }
   };
 
+  // Admin usa navbar fintech própria integrada ao shell
+  if (pathname?.startsWith("/admin") && pathname !== "/admin/login") {
+    return null;
+  }
+
+  // Perfil de admin usa o shell fintech próprio
+  if (pathname === "/profile" && user?.user_type === "admin") {
+    return null;
+  }
+
   // Detectar se está nas páginas de redefinir senha
   const isPasswordResetPage = pathname === '/resetPassword' || pathname === '/newPassword';
   

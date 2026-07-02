@@ -1,48 +1,78 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { UploadReceiptModal } from "../upload-receipt-modal"
-import { ReceiptViewer } from "../receipt-viewer"
-import { EditInvestmentModal } from "../edit-investment-modal"
-import { 
-  Search, 
-  Filter, 
-  Download, 
-  RefreshCw, 
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { UploadReceiptModal } from "../upload-receipt-modal";
+import { ReceiptViewer } from "../receipt-viewer";
+import { EditInvestmentModal } from "../edit-investment-modal";
+import {
+  Search,
+  Download,
+  RefreshCw,
   Upload,
   Eye,
-  Edit
-} from "lucide-react"
-import { useInvestmentsManager } from "./useInvestmentsManager"
+  Edit,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  AdminSectionCard,
+  AdminPrimaryButton,
+  AdminSecondaryButton,
+  AdminActionButton,
+  AdminStatusBadge,
+  AdminDataTable,
+  AdminTable,
+  AdminTableHeader,
+  AdminTableHead,
+  AdminTableBody,
+  AdminTableRow,
+  AdminTableCell,
+  AdminInvestorCell,
+  AdminMoney,
+  adminTokens,
+} from "@/components/admin/ui";
+import { useInvestmentsManager } from "./useInvestmentsManager";
 
-// Função auxiliar para formatar data corretamente, evitando problemas de timezone
 const formatDateSafe = (dateString: string | null | undefined): string => {
-  if (!dateString) return "N/A"
-  
-  // Se for string no formato YYYY-MM-DD, extrair diretamente sem conversão de timezone
-  if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
-    const [datePart] = dateString.split('T')
-    const [year, month, day] = datePart.split('-').map(Number)
-    // Formatar diretamente sem passar por Date para evitar problemas de timezone
-    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+  if (!dateString) return "N/A";
+  if (typeof dateString === "string" && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+    const [datePart] = dateString.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
   }
-  
-  // Fallback: tentar parsear como Date e usar UTC
-  const date = new Date(dateString)
+  const date = new Date(dateString);
   if (!isNaN(date.getTime())) {
-    const year = date.getUTCFullYear()
-    const month = date.getUTCMonth() + 1
-    const day = date.getUTCDate()
-    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+    return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}/${date.getUTCFullYear()}`;
   }
-  
-  return "N/A"
+  return "N/A";
+};
+
+function investmentStatusTone(status: string) {
+  switch (status) {
+    case "active":
+      return "success" as const;
+    case "pending":
+      return "warning" as const;
+    case "cancelled":
+      return "danger" as const;
+    default:
+      return "muted" as const;
+  }
 }
 
 export function InvestmentsManager() {
@@ -81,276 +111,253 @@ export function InvestmentsManager() {
     closeUploadModal,
     closeReceiptViewer,
     fetchInvestments,
-  } = useInvestmentsManager()
+  } = useInvestmentsManager();
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Investimentos</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-lg font-semibold text-[#F3F5F4]">Investimentos</h2>
+          <p className="mt-0.5 text-sm text-[#A5B3AC]">
             Gerencie todos os investimentos da plataforma
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportInvestments}>
-            <Download className="w-4 h-4 mr-2" />
+          <AdminSecondaryButton onClick={exportInvestments}>
+            <Download className="mr-2 h-4 w-4" />
             Exportar
-          </Button>
-          <Button variant="outline" onClick={() => fetchInvestments(currentPage, filters)}>
-            <RefreshCw className="w-4 h-4 mr-2" />
+          </AdminSecondaryButton>
+          <AdminSecondaryButton
+            onClick={() => fetchInvestments(currentPage, filters)}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
             Atualizar
-          </Button>
+          </AdminSecondaryButton>
         </div>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Filtros
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Status</label>
-              <Select value={filters.status} onValueChange={(value) => handleFilterChange({ status: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="active">Ativo</SelectItem>
-                  <SelectItem value="withdrawn">Resgatado</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Tipo de Quota</label>
-              <Select value={filters.quotaType} onValueChange={(value) => handleFilterChange({ quotaType: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os tipos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="senior">Senior</SelectItem>
-                  <SelectItem value="subordinate">Subordinada</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Buscar</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Nome ou email..."
-                  value={filters.search}
-                  onChange={(e) => handleFilterChange({ search: e.target.value })}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Data Inicial</label>
+      <AdminSectionCard title="Filtros" variant="muted">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Status</label>
+            <Select
+              value={filters.status}
+              onValueChange={(value) => handleFilterChange({ status: value })}
+            >
+              <SelectTrigger className={adminTokens.input}>
+                <SelectValue placeholder="Todos os status" />
+              </SelectTrigger>
+              <SelectContent className={adminTokens.selectContent}>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="active">Ativo</SelectItem>
+                <SelectItem value="withdrawn">Resgatado</SelectItem>
+                <SelectItem value="cancelled">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Tipo de Quota</label>
+            <Select
+              value={filters.quotaType}
+              onValueChange={(value) => handleFilterChange({ quotaType: value })}
+            >
+              <SelectTrigger className={adminTokens.input}>
+                <SelectValue placeholder="Todos os tipos" />
+              </SelectTrigger>
+              <SelectContent className={adminTokens.selectContent}>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="senior">Senior</SelectItem>
+                <SelectItem value="subordinate">Subordinada</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Buscar</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7C74]" />
               <Input
-                type="date"
-                value={filters.dateFrom}
-                onChange={(e) => handleFilterChange({ dateFrom: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Data Final</label>
-              <Input
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) => handleFilterChange({ dateTo: e.target.value })}
+                placeholder="Nome ou email..."
+                value={filters.search}
+                onChange={(e) => handleFilterChange({ search: e.target.value })}
+                className={cn(adminTokens.input, "pl-10")}
               />
             </div>
           </div>
-
-          <div className="flex justify-end mt-4">
-            <Button variant="outline" onClick={clearFilters}>
-              Limpar Filtros
-            </Button>
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Data Inicial</label>
+            <Input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => handleFilterChange({ dateFrom: e.target.value })}
+              className={adminTokens.input}
+            />
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Lista de Investimentos */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Lista de Investimentos</CardTitle>
-              <CardDescription>
-                {totalInvestments} investimento(s) encontrado(s)
-              </CardDescription>
-            </div>
+          <div className="space-y-1.5">
+            <label className={adminTokens.label}>Data Final</label>
+            <Input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => handleFilterChange({ dateTo: e.target.value })}
+              className={adminTokens.input}
+            />
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-              Carregando investimentos...
-            </div>
-          ) : investments.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum investimento encontrado com os filtros aplicados.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Investidor</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Comprovantes</TableHead>
-                    <TableHead>Taxa Mensal</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Ações</TableHead>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <AdminSecondaryButton size="sm" onClick={clearFilters}>
+            Limpar Filtros
+          </AdminSecondaryButton>
+        </div>
+      </AdminSectionCard>
+
+      <AdminSectionCard
+        title="Lista de Investimentos"
+        description={`${totalInvestments} investimento(s) encontrado(s)`}
+        variant="card"
+        noPadding
+      >
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-[#A5B3AC]">
+            <RefreshCw className="h-5 w-5 animate-spin text-[#22C55E]" />
+            Carregando investimentos...
+          </div>
+        ) : investments.length === 0 ? (
+          <p className="py-12 text-center text-sm text-[#6B7C74]">
+            Nenhum investimento encontrado com os filtros aplicados.
+          </p>
+        ) : (
+          <>
+            <AdminDataTable embedded maxHeight={false}>
+              <AdminTable>
+                <AdminTableHeader>
+                  <TableRow className="border-white/[0.04] hover:bg-transparent">
+                    <AdminTableHead>Investidor</AdminTableHead>
+                    <AdminTableHead align="right">Valor</AdminTableHead>
+                    <AdminTableHead>Tipo</AdminTableHead>
+                    <AdminTableHead>Status</AdminTableHead>
+                    <AdminTableHead>Comprovantes</AdminTableHead>
+                    <AdminTableHead align="right">Taxa</AdminTableHead>
+                    <AdminTableHead>Prazo</AdminTableHead>
+                    <AdminTableHead>Data</AdminTableHead>
+                    <AdminTableHead align="right">Ações</AdminTableHead>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
+                </AdminTableHeader>
+                <AdminTableBody>
                   {investments.map((investment) => {
-                    const statusBadge = getStatusBadge(investment.status)
-                    const quotaBadge = getQuotaTypeBadge(investment.quota_type)
-                    
+                    const statusBadge = getStatusBadge(investment.status);
+                    const quotaBadge = getQuotaTypeBadge(investment.quota_type);
+
                     return (
-                      <TableRow key={investment.id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">
-                              {investment.profiles?.full_name || 'N/A'}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {investment.profiles?.email || 'N/A'}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">
-                            {formatCurrency(investment.amount)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={quotaBadge.variant} className={quotaBadge.className}>
+                      <AdminTableRow key={investment.id}>
+                        <AdminTableCell>
+                          <AdminInvestorCell
+                            name={investment.profiles?.full_name || "N/A"}
+                            email={investment.profiles?.email || "N/A"}
+                          />
+                        </AdminTableCell>
+                        <AdminTableCell align="right">
+                          <AdminMoney
+                            value={formatCurrency(investment.amount)}
+                            emphasis
+                            className="text-[#22C55E]"
+                          />
+                        </AdminTableCell>
+                        <AdminTableCell>
+                          <AdminStatusBadge tone="info">
                             {quotaBadge.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusBadge.variant} className={statusBadge.className}>
+                          </AdminStatusBadge>
+                        </AdminTableCell>
+                        <AdminTableCell>
+                          <AdminStatusBadge
+                            tone={investmentStatusTone(investment.status)}
+                          >
                             {statusBadge.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
+                          </AdminStatusBadge>
+                        </AdminTableCell>
+                        <AdminTableCell>
                           {investment.receipts && investment.receipts.length > 0 ? (
-                            <div className="space-y-1">
+                            <div className="flex flex-wrap gap-1">
                               {investment.receipts.map((receipt) => (
-                                <div key={receipt.id} className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleViewReceipt(receipt)}
-                                    className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
-                                  >
-                                    <Eye className="w-3 h-3 mr-1" />
-                                    Visualizar
-                                  </Button>
-                                </div>
+                                <AdminActionButton
+                                  key={receipt.id}
+                                  size="sm"
+                                  tone="success"
+                                  onClick={() => handleViewReceipt(receipt)}
+                                >
+                                  <Eye className="mr-1 h-3 w-3" />
+                                  Ver
+                                </AdminActionButton>
                               ))}
                             </div>
                           ) : (
-                            <Button
+                            <AdminActionButton
                               size="sm"
-                              variant="outline"
+                              tone="neutral"
                               onClick={() => handleUploadReceipt(investment)}
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
                             >
-                              <Upload className="w-3 h-3 mr-1" />
+                              <Upload className="mr-1 h-3 w-3" />
                               Upload
-                            </Button>
+                            </AdminActionButton>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-green-600 font-medium">
+                        </AdminTableCell>
+                        <AdminTableCell align="right">
+                          <span className="text-[13px] font-medium tabular-nums text-[#22C55E]">
                             {(investment.monthly_return_rate * 100).toFixed(2)}% a.m.
-                          </div>
-                        </TableCell>
-                        <TableCell>
+                          </span>
+                        </AdminTableCell>
+                        <AdminTableCell secondary>
                           {investment.commitment_period} meses
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {investment.payment_date 
-                              ? formatDateSafe(investment.payment_date)
-                              : <span className="text-muted-foreground">Não depositado</span>
-                            }
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditInvestment(investment)}
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                            >
-                              <Edit className="w-3 h-3 mr-1" />
-                              Editar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
+                        </AdminTableCell>
+                        <AdminTableCell secondary>
+                          {investment.payment_date
+                            ? formatDateSafe(investment.payment_date)
+                            : "Não depositado"}
+                        </AdminTableCell>
+                        <AdminTableCell align="right">
+                          <AdminActionButton
+                            size="sm"
+                            tone="neutral"
+                            onClick={() => handleEditInvestment(investment)}
+                          >
+                            <Edit className="mr-1 h-3 w-3" />
+                            Editar
+                          </AdminActionButton>
+                        </AdminTableCell>
+                      </AdminTableRow>
+                    );
                   })}
-                </TableBody>
-              </Table>
+                </AdminTableBody>
+              </AdminTable>
+            </AdminDataTable>
 
-              {/* Paginação */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Página {currentPage} de {totalPages} ({totalInvestments} investimentos)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      Anterior
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                    >
-                      Próxima
-                    </Button>
-                  </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-3">
+                <span className="text-xs text-[#6B7C74]">
+                  Página {currentPage} de {totalPages} ({totalInvestments}{" "}
+                  investimentos)
+                </span>
+                <div className="flex gap-2">
+                  <AdminSecondaryButton
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </AdminSecondaryButton>
+                  <AdminSecondaryButton
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próxima
+                  </AdminSecondaryButton>
                 </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </>
+        )}
+      </AdminSectionCard>
 
-      {/* Modal de Upload de Comprovante */}
       {selectedInvestmentForUpload && (
         <UploadReceiptModal
           isOpen={uploadModalOpen}
@@ -362,116 +369,110 @@ export function InvestmentsManager() {
         />
       )}
 
-      {/* Modal de Exportação */}
       <Dialog open={exportModalOpen} onOpenChange={setExportModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={cn(adminTokens.dialog, "max-w-md")}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Download className="w-5 h-5 text-blue-600" />
+            <DialogTitle className="flex items-center gap-2 text-[#F3F5F4]">
+              <Download className="h-5 w-5 text-[#22C55E]" />
               Exportar Investimentos
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-[#A5B3AC]">
               Escolha quais dados incluir no arquivo de exportação
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="includePersonalData"
-                  checked={exportOptions.includePersonalData}
-                  onChange={(e) => setExportOptions(prev => ({ ...prev, includePersonalData: e.target.checked }))}
-                  className="rounded"
-                />
-                <label htmlFor="includePersonalData" className="text-sm font-medium">
-                  Incluir dados pessoais (nome e email)
+          <div className="space-y-4 text-sm text-[#A5B3AC]">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={exportOptions.includePersonalData}
+                onChange={(e) =>
+                  setExportOptions((prev) => ({
+                    ...prev,
+                    includePersonalData: e.target.checked,
+                  }))
+                }
+                className="rounded border-white/20 bg-[#161F1B]"
+              />
+              Incluir dados pessoais (nome e email)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={exportOptions.includeReceipts}
+                onChange={(e) =>
+                  setExportOptions((prev) => ({
+                    ...prev,
+                    includeReceipts: e.target.checked,
+                  }))
+                }
+                className="rounded border-white/20 bg-[#161F1B]"
+              />
+              Incluir dados de comprovantes
+            </label>
+            <div className="space-y-2">
+              <p className={adminTokens.label}>Formato do arquivo</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="format"
+                    value="csv"
+                    checked={exportOptions.format === "csv"}
+                    onChange={() =>
+                      setExportOptions((prev) => ({ ...prev, format: "csv" }))
+                    }
+                  />
+                  CSV
                 </label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="includeReceipts"
-                  checked={exportOptions.includeReceipts}
-                  onChange={(e) => setExportOptions(prev => ({ ...prev, includeReceipts: e.target.checked }))}
-                  className="rounded"
-                />
-                <label htmlFor="includeReceipts" className="text-sm font-medium">
-                  Incluir dados de comprovantes
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="format"
+                    value="excel"
+                    checked={exportOptions.format === "excel"}
+                    onChange={() =>
+                      setExportOptions((prev) => ({ ...prev, format: "excel" }))
+                    }
+                  />
+                  Excel
                 </label>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Formato do arquivo:</label>
-                <div className="flex space-x-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="format-csv"
-                      name="format"
-                      value="csv"
-                      checked={exportOptions.format === 'csv'}
-                      onChange={(e) => setExportOptions(prev => ({ ...prev, format: e.target.value as 'csv' | 'excel' }))}
-                    />
-                    <label htmlFor="format-csv" className="text-sm">CSV</label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="format-excel"
-                      name="format"
-                      value="excel"
-                      checked={exportOptions.format === 'excel'}
-                      onChange={(e) => setExportOptions(prev => ({ ...prev, format: e.target.value as 'csv' | 'excel' }))}
-                    />
-                    <label htmlFor="format-excel" className="text-sm">Excel</label>
-                  </div>
-                </div>
               </div>
             </div>
-
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>Total de investimentos:</strong> {totalInvestments}
+            <div className={adminTokens.dialogPanel}>
+              <p className="text-[#F3F5F4]">
+                <strong>Total:</strong> {totalInvestments} investimentos
               </p>
-              <p className="text-xs text-blue-600 mt-1">
-                Todos os investimentos (incluindo de outras páginas) serão exportados.
+              <p className="mt-1 text-xs text-[#6B7C74]">
+                Todos os investimentos serão exportados, incluindo outras páginas.
               </p>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button 
-              variant="outline" 
+          <DialogFooter className="gap-2">
+            <AdminSecondaryButton
               onClick={() => setExportModalOpen(false)}
               disabled={isExporting}
             >
               Cancelar
-            </Button>
-            <Button 
-              onClick={handleExport} 
-              className="bg-blue-600 hover:bg-blue-700"
-              disabled={isExporting}
-            >
+            </AdminSecondaryButton>
+            <AdminPrimaryButton onClick={handleExport} disabled={isExporting}>
               {isExporting ? (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   Exportando...
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4 mr-2" />
+                  <Download className="mr-2 h-4 w-4" />
                   Exportar
                 </>
               )}
-            </Button>
+            </AdminPrimaryButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de visualização de comprovante */}
       {selectedReceipt && (
         <ReceiptViewer
           receipt={selectedReceipt}
@@ -480,7 +481,6 @@ export function InvestmentsManager() {
         />
       )}
 
-      {/* Modal de edição de investimento */}
       <EditInvestmentModal
         isOpen={editModalOpen}
         onClose={closeEditModal}
@@ -488,7 +488,5 @@ export function InvestmentsManager() {
         onSuccess={handleEditSuccess}
       />
     </div>
-  )
+  );
 }
-
-

@@ -57,6 +57,17 @@ function normalizeHistoryStatus(status: string): string {
   return String(status || "").toLowerCase();
 }
 
+/** Evita shift de timezone em strings `YYYY-MM-DD`. */
+function parseDateOnly(dateStr: string): Date {
+  const dateOnly = dateStr.split("T")[0];
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function formatDateOnlyPtBr(dateStr: string): string {
+  return parseDateOnly(dateStr).toLocaleDateString("pt-BR");
+}
+
 function getTransactionHistoryStatusLabel(status: string): string {
   switch (normalizeHistoryStatus(status)) {
     case "active":
@@ -793,7 +804,7 @@ export function InvestorDashboard() {
                             normalizeHistoryStatus(item.status) ===
                               "withdrawn") &&
                           item.payment_date
-                            ? new Date(item.payment_date).toLocaleDateString("pt-BR")
+                            ? formatDateOnlyPtBr(item.payment_date)
                             : new Date(item.created_at).toLocaleDateString("pt-BR")}
                         </span>
                       </div>
@@ -828,7 +839,7 @@ export function InvestorDashboard() {
                             
                             return displayRate ? (
                               <div className="flex flex-row justify-between">
-                                <span>Porcentagem de rentabilidade:</span>
+                                <span>Rentabilidade de até:</span>
                                 <span className="font-semibold">
                                   {(Number(displayRate) * 100).toFixed(2)}% a.m.
                                 </span>
@@ -841,11 +852,15 @@ export function InvestorDashboard() {
                               <span>Data de vencimento:</span>
                               <span className="font-semibold">
                                 {(() => {
-                                  const startDate = new Date(item.payment_date);
+                                  const startDate = parseDateOnly(item.payment_date);
                                   const maturityDate = new Date(startDate);
-                                  maturityDate.setMonth(maturityDate.getMonth() + item.commitment_period);
-                                  // Formatar apenas mês e ano (MM/AAAA)
-                                  const month = String(maturityDate.getMonth() + 1).padStart(2, '0');
+                                  maturityDate.setMonth(
+                                    maturityDate.getMonth() +
+                                      item.commitment_period,
+                                  );
+                                  const month = String(
+                                    maturityDate.getMonth() + 1,
+                                  ).padStart(2, "0");
                                   const year = maturityDate.getFullYear();
                                   return `${month}/${year}`;
                                 })()}
